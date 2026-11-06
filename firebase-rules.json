@@ -1,0 +1,33 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rope8": { ".read": true, ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'" },
+    "dodge": { ".read": true, ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'" },
+    "solo":  { ".read": true, ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'" },
+    "matchum": {
+      ".read": "auth != null",
+      ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'",
+      "gens": { ".read": true },
+      "students": {
+        "$k": {
+          ".write": "auth != null && auth.token.email.beginsWith('s' + $k + '-') && newData.child('uid').val() === auth.uid && (!data.exists() || !data.child('uid').exists() || data.child('uid').val() === auth.uid)"
+        }
+      },
+      "logs": {
+        "$k": {
+          "$id": {
+            ".write": "auth != null && !data.exists() && auth.token.email.beginsWith('s' + $k + '-') && root.child('matchum/students/' + $k + '/uid').val() === auth.uid"
+          }
+        }
+      },
+      "purchases": {
+        "$k": {
+          "$id": {
+            ".write": "auth != null && !data.exists() && newData.child('used').val() === false && auth.token.email.beginsWith('s' + $k + '-') && root.child('matchum/students/' + $k + '/uid').val() === auth.uid"
+          }
+        }
+      }
+    }
+  }
+}
