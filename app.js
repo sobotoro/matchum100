@@ -845,8 +845,9 @@ function renderTeacher(){
   <article class="card">
     <h3>학생 (${studs.length}명)</h3>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>학번</th><th>이름</th><th>지갑</th><th>은행</th><th>주식</th><th>퀴즈</th><th>오늘</th><th></th></tr></thead><tbody>
-    ${studs.map(([k,s])=>`<tr><td>${esc(k)}</td><td>${esc(s.name)}</td><td>${fmt(s.wallet)}</td><td>${fmt(s.bank)}</td><td>${fmt(valueOf(s))}</td><td>${+s.qCount||0}회</td><td>${s.quiz&&s.quiz.date===today()?(s.quiz.state==="완료"?`${s.quiz.right}/${s.quiz.total}`:"푸는 중"):"-"}</td><td><button type="button" class="link" data-reset="${esc(k)}">비밀번호 초기화</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">아직 들어온 학생이 없어요.</td></tr>`}
+    ${studs.map(([k,s])=>`<tr class="${k===selKey?"picked":""}"><td>${esc(k)}</td><td>${esc(s.name)}</td><td>${fmt(s.wallet)}</td><td>${fmt(s.bank)}</td><td>${fmt(valueOf(s))}</td><td>${+s.qCount||0}회</td><td>${s.quiz&&s.quiz.date===today()?(s.quiz.state==="완료"?`${s.quiz.right}/${s.quiz.total}`:"푸는 중"):"-"}</td><td><button type="button" class="ghost" data-pick="${esc(k)}">${k===selKey?"선택됨":"수정·리셋"}</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">아직 들어온 학생이 없어요.</td></tr>`}
     </tbody></table></div>
+    ${selKey&&STUDENTS[selKey]?editHtml(selKey,STUDENTS[selKey]):""}
     <div class="t-sec"><h3>코인 직접 주기·빼기</h3>
       <div class="row2">
         <label class="t-field" for="gWho">학생${sel("gWho",studs.map(([k,s])=>[k,`${k} ${s.name}`]),"")}</label>
@@ -856,7 +857,6 @@ function renderTeacher(){
       <div class="actions"><button type="button" class="primary" id="gGo" ${studs.length?"":"disabled"}>지갑에 반영</button></div>
       <p class="msg" id="gMsg" role="status"></p>
     </div>
-    <p class="t-help">비밀번호 초기화를 누르면 그 학생은 다음에 들어올 때 새 비밀번호를 정해요. 코인 기록은 그대로 남아요.</p>
   </article>
   <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. GitHub가 평일 장중 10분마다, 장 마감 뒤 한 번 더 네이버 시세를 가져와요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
   tMsgTxt="";
@@ -872,16 +872,106 @@ function renderTeacher(){
   $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach(it=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true});
     act($("#tShopSave"),$("#tShopMsg"),async()=>{await R("shop").set(obj);TSHOP=null}).then(ok=>{if(ok){renderTeacher();$("#tShopMsg").textContent="상점을 저장했어요."}})};
   document.querySelectorAll("[data-give]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.give.split("|");act(b,null,()=>R(`purchases/${k}/${id}/used`).set(true))});
-  document.querySelectorAll("[data-reset]").forEach(b=>b.onclick=()=>{
-    const k=b.dataset.reset;
-    if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="한 번 더 누르면 초기화";return}
-    act(b,null,async()=>{const g=(await db.ref("matchum/gens/"+k).once("value")).val()||0;await db.ref("matchum/gens/"+k).set(g+1);await R(`students/${k}/uid`).remove()}).then(ok=>{if(ok)b.textContent="초기화했어요"});
+  document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.pick;selKey=selKey===k?null:k;editMsg="";renderTeacher();
+    if(selKey){const c=$("#editCard");if(c)c.scrollIntoView({block:"nearest"})}
   });
+  if(selKey&&$("#editCard"))bindEdit(selKey);
   $("#gGo").onclick=()=>{const k=$("#gWho").value,a=r2(+$("#gAmt").value||0),why=$("#gWhy").value.trim()||"선생님";
     if(!k||!a)return $("#gMsg").textContent="학생과 코인을 정해 주세요.";
     act($("#gGo"),$("#gMsg"),async()=>{const cur=(await R(`students/${k}/wallet`).once("value")).val()||0;
       await R(`students/${k}/wallet`).set(r2(Math.max(0,cur+a)));await R("logs/"+k).push({t:SV.TIMESTAMP,text:`선생님: ${why}`,amount:a});
       tMsgTxt="";}).then(ok=>{if(ok){$("#gAmt").value="";$("#gMsg").textContent=`${k}에게 ${a>0?"+":""}${fmt(a)}코인을 반영했어요.`}})};
+}
+
+/* ---------- 선생님: 학생 한 명 수정·리셋 ---------- */
+let selKey=null,editMsg="";
+function editHtml(k,s){
+  const holds=Object.entries(s.stocks||{}).filter(([,h])=>h.qty>1e-6);
+  const qz=s.quiz||{},todayTxt=qz.date===today()?(qz.state==="완료"?`오늘 도전 끝 (${qz.total}문제 중 ${qz.right}문제, +${fmt(qz.coins)}코인)`:"오늘 도전 푸는 중"):"오늘 아직 도전 안 함";
+  const sv=valueOf(s);
+  return `<section class="edit-card" id="editCard" aria-label="${esc(s.name)} 정보 수정">
+    <div class="t-head"><h3>${esc(k)} ${esc(s.name)}</h3><button type="button" class="link" id="eClose">닫기</button></div>
+    <p class="t-help">지금: 지갑 ${fmt(s.wallet)} · 은행 ${fmt(s.bank)} · 주식 ${fmt(sv)} · 모두 ${fmt((+s.wallet||0)+(+s.bank||0)+sv)}코인 · ${todayTxt}</p>
+    <div class="row2">
+      <label class="t-field" for="eName">이름<input type="text" id="eName" maxlength="20" value="${esc(s.name)}"></label>
+      <label class="t-field" for="eGrade">학년<input type="number" id="eGrade" min="1" max="6" value="${esc(s.grade)}"></label>
+      <label class="t-field" for="eCls">반<input type="number" id="eCls" min="1" max="30" value="${esc(s.cls)}"></label>
+      <label class="t-field" for="eNum">번호<input type="number" id="eNum" min="1" max="60" value="${esc(s.num)}"></label>
+      <label class="t-field" for="eWallet">지갑 코인<input type="number" id="eWallet" min="0" step="1" value="${esc(r2(+s.wallet||0))}"></label>
+      <label class="t-field" for="eBank">은행 코인<input type="number" id="eBank" min="0" step="1" value="${esc(r2(+s.bank||0))}"></label>
+      <label class="t-field" for="eQCount">퀴즈 도전 횟수<input type="number" id="eQCount" min="0" step="1" value="${esc(+s.qCount||0)}"></label>
+      <label class="t-field" for="eQRight">누적 맞힌 문제<input type="number" id="eQRight" min="0" step="1" value="${esc(+s.qRight||0)}"></label>
+    </div>
+    <p class="t-help">학년·반·번호를 바꾸면 기록은 새 학번으로 옮겨지고, 학생은 새 학번으로 들어와 비밀번호를 새로 정해요. 지갑·은행을 고치면 학생 기록에 '선생님 수정'으로 남아요.</p>
+    ${holds.length?`<p class="t-help">가진 주식: ${holds.map(([c,h])=>{const st=STOCKS.find(x=>x[0]===c.slice(1));return `${esc(st?st[1]:c)} ${fmtQ(h.qty)}주(${fmt(h.qty*coinPrice(c.slice(1)))}코인)`}).join(", ")}</p>`:""}
+    <div class="actions"><button type="button" class="primary" id="eSave">변경 저장</button></div>
+    <div class="t-sec">
+      <h3>리셋</h3>
+      <p class="t-help">버튼을 한 번 누르면 확인 문구로 바뀌어요. 한 번 더 눌러야 실행돼요.</p>
+      <div class="reset-grid">
+        <button type="button" class="ghost" data-op="pw" data-ok="비밀번호를 초기화했어요. 학생이 다음에 들어올 때 새 비밀번호를 정해요.">비밀번호 초기화</button>
+        <button type="button" class="ghost" data-op="quiz" ${qz.date===today()?"":"disabled"} data-ok="오늘 도전을 지웠어요. 오늘 한 번 더 풀 수 있어요. (이미 받은 코인은 그대로예요)">오늘 퀴즈 다시 풀게 하기</button>
+        <button type="button" class="ghost" data-op="sell" ${holds.length?"":"disabled"} data-ok="주식을 지금 시세로 모두 팔아 지갑에 넣었어요.">주식 모두 팔아 지갑으로</button>
+        <button type="button" class="ghost" data-op="zero" data-ok="지갑·은행·주식을 모두 0으로 만들었어요.">코인 모두 0으로</button>
+        <button type="button" class="ghost" data-op="full" data-ok="계정과 이름만 남기고 모든 기록을 지웠어요.">기록 전체 초기화</button>
+        <button type="button" class="ghost danger" data-op="del" data-ok="학생을 삭제했어요.">학생 삭제</button>
+      </div>
+    </div>
+    <p class="msg" id="eMsg" role="status">${esc(editMsg)}</p>
+  </section>`;
+}
+async function bumpGen(k){const g=(await db.ref("matchum/gens/"+k).once("value")).val()||0;return g+1}
+function bindEdit(k){
+  const m=$("#eMsg");
+  const done=(msg,keep=true)=>ok=>{if(ok){editMsg=msg;if(!keep)selKey=null;renderTeacher()}};
+  $("#eClose").onclick=()=>{selKey=null;editMsg="";renderTeacher()};
+  $("#eSave").onclick=()=>{
+    const s=STUDENTS[k];if(!s)return;
+    const name=$("#eName").value.trim().slice(0,20),g=parseInt($("#eGrade").value,10),c=parseInt($("#eCls").value,10),n=parseInt($("#eNum").value,10);
+    const wallet=Math.max(0,r2(+$("#eWallet").value||0)),bank=Math.max(0,r2(+$("#eBank").value||0));
+    const qCount=Math.max(0,Math.round(+$("#eQCount").value||0)),qRight=Math.max(0,Math.round(+$("#eQRight").value||0));
+    if(!name)return m.textContent="이름을 적어 주세요.";
+    if(!(g>=1&&g<=6&&c>=1&&n>=1))return m.textContent="학년(1~6), 반, 번호를 숫자로 적어 주세요.";
+    const nk=`${g}-${c}-${n}`;
+    act($("#eSave"),m,async()=>{
+      const up={},dw=r2(wallet-(+s.wallet||0)),dbk=r2(bank-(+s.bank||0));
+      const fields={name,grade:g,cls:c,num:n,wallet,bank,qCount,qRight};
+      const newLogs={};
+      if(dw)newLogs[R("logs").push().key]={t:SV.TIMESTAMP,text:"선생님 수정: 지갑",amount:dw};
+      if(dbk)newLogs[R("logs").push().key]={t:SV.TIMESTAMP,text:"선생님 수정: 은행",amount:dbk};
+      if(nk!==k){
+        if(STUDENTS[nk])throw new Error(`${nk} 학번은 이미 다른 학생이 쓰고 있어요.`);
+        const [lg,pc]=await Promise.all([R("logs/"+k).once("value"),R("purchases/"+k).once("value")]);
+        const rec={...s,...fields};delete rec.uid;
+        up[`students/${nk}`]=rec;up[`logs/${nk}`]={...(lg.val()||{}),...newLogs};up[`purchases/${nk}`]=pc.val();
+        up[`students/${k}`]=null;up[`logs/${k}`]=null;up[`purchases/${k}`]=null;
+        up[`gens/${nk}`]=await bumpGen(nk);up[`gens/${k}`]=await bumpGen(k);
+      }else{
+        for(const f in fields)up[`students/${k}/${f}`]=fields[f];
+        for(const id in newLogs)up[`logs/${k}/${id}`]=newLogs[id];
+      }
+      await db.ref("matchum").update(up);
+    }).then(ok=>{if(ok){editMsg=nk!==k?`${k} → ${nk}로 옮겼어요. 학생은 새 학번으로 들어와 비밀번호를 새로 정해요.`:"저장했어요.";if(nk!==k)selKey=nk;renderTeacher()}});
+  };
+  document.querySelectorAll("#editCard [data-op]").forEach(b=>b.onclick=()=>{
+    if(b.dataset.armed!=="1"){
+      document.querySelectorAll("#editCard [data-op]").forEach(x=>{if(x!==b&&x.dataset.armed==="1"){x.dataset.armed="";x.textContent=x.dataset.label}});
+      b.dataset.label=b.textContent;b.dataset.armed="1";b.textContent=`한 번 더 누르면 ${b.dataset.label}`;b.classList.add("armed");return;
+    }
+    const op=b.dataset.op,s=STUDENTS[k];if(!s)return;
+    act(b,m,async()=>{
+      const up={},L=(text,amount)=>{up[`logs/${k}/${R("logs").push().key}`]={t:SV.TIMESTAMP,text,amount:r2(amount)}};
+      const sv=r2(valueOf(s)),total=r2((+s.wallet||0)+(+s.bank||0)+sv);
+      if(op==="pw"){up[`gens/${k}`]=await bumpGen(k);up[`students/${k}/uid`]=null}
+      else if(op==="quiz"){up[`students/${k}/quiz`]=null}
+      else if(op==="sell"){up[`students/${k}/wallet`]=r2((+s.wallet||0)+sv);up[`students/${k}/stocks`]=null;L("선생님: 주식 모두 팔기",sv)}
+      else if(op==="zero"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null});if(total)L("선생님: 코인 초기화",-total)}
+      else if(op==="full"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null,[`students/${k}/quiz`]:null,[`students/${k}/qCount`]:0,[`students/${k}/qRight`]:0,[`logs/${k}`]:null,[`purchases/${k}`]:null})}
+      else if(op==="del"){Object.assign(up,{[`students/${k}`]:null,[`logs/${k}`]:null,[`purchases/${k}`]:null,[`gens/${k}`]:await bumpGen(k)})}
+      await db.ref("matchum").update(up);
+    }).then(done(b.dataset.ok,op!=="del"));
+  });
 }
 
 /* ---------- 시작 ---------- */
