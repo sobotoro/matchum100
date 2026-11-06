@@ -5,7 +5,7 @@ document.getElementById("app").innerHTML=`
   <header class="top">
     <div>
       <p class="eyebrow">초등 필수 어휘력 · 쓰면서 익히는 맞춤법</p>
-      <h1>맞춤법 <em>100</em> 퀴즈</h1>
+      <h1><button type="button" class="home-btn" id="homeBtn" aria-label="홈으로">맞춤법 <em>100</em> 퀴즈</button></h1>
     </div>
     <div class="me" id="me"></div>
   </header>
@@ -15,6 +15,8 @@ document.getElementById("app").innerHTML=`
     <button type="button" role="tab" data-tab="stock" id="tab-stock">주식</button>
     <button type="button" role="tab" data-tab="shop" id="tab-shop">상점</button>
     <button type="button" role="tab" data-tab="class" id="tab-class">우리 반</button>
+    <button type="button" role="tab" data-tab="board" id="tab-board">자유게시판</button>
+    <button type="button" role="tab" data-tab="me" id="tab-me">마이페이지</button>
     <button type="button" role="tab" data-tab="teacher" id="tab-teacher" hidden>선생님</button>
   </nav>
   <section class="view" id="view-login" hidden></section>
@@ -27,6 +29,8 @@ document.getElementById("app").innerHTML=`
   <section class="view" id="view-stock" hidden></section>
   <section class="view" id="view-shop" hidden></section>
   <section class="view" id="view-class" hidden></section>
+  <section class="view" id="view-board" hidden></section>
+  <section class="view" id="view-me" hidden></section>
   <section class="view" id="view-teacher" hidden></section>
 `;
 
@@ -340,7 +344,7 @@ function renderMe(){
   if(role==="teacher"){$("#me").innerHTML=`<div class="me-id"><b>선생님</b><span>${esc(TEACHER())}</span><button type="button" class="link" id="logoutBtn">로그아웃</button></div>`;$("#logoutBtn").onclick=()=>auth.signOut();return}
   if(!ME){$("#me").innerHTML="";return}
   const v=valueOf(ME),total=(+ME.wallet||0)+(+ME.bank||0)+v;
-  $("#me").innerHTML=`<div class="me-id"><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><b>${esc(ME.name)}</b><button type="button" class="link" id="logoutBtn">로그아웃</button></div>
+  $("#me").innerHTML=`<div class="me-id"><button type="button" class="me-av" id="meAvBtn" aria-label="마이페이지">${avatarSvg(avOf(ME),36,ME.name)}</button><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><b>${esc(ME.name)}</b><button type="button" class="link" id="logoutBtn">로그아웃</button></div>
     <div class="bal">
       <span class="pill"><i>지갑</i><b>${fmt(ME.wallet)}</b></span>
       <span class="pill"><i>은행</i><b>${fmt(ME.bank)}</b></span>
@@ -348,10 +352,11 @@ function renderMe(){
       <span class="pill total"><i>모두 (코인)</i><b>${fmt(total)}</b></span>
     </div>`;
   $("#logoutBtn").onclick=()=>auth.signOut();
+  $("#meAvBtn").onclick=()=>{location.hash="me"};
 }
 
 /* ---------- 로그인 화면 ---------- */
-const VIEWS=["login","quiz","bank","stock","shop","class","teacher"];
+const VIEWS=["login","quiz","bank","stock","shop","class","board","me","teacher"];
 let loginMode="student";
 function showLogin(msg){
   $("#tabs").hidden=true;VIEWS.forEach(x=>$("#view-"+x).hidden=x!=="login");
@@ -400,9 +405,9 @@ function showLogin(msg){
 }
 
 /* ---------- 탭 ---------- */
-const TABS=["quiz","bank","stock","shop","class","teacher"];
+const TABS=["quiz","bank","stock","shop","class","board","me","teacher"];
 let current="quiz";
-function allowedTabs(){return role==="teacher"?["quiz","stock","class","teacher"]:["quiz","bank","stock","shop","class"]}
+function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","teacher"]:["quiz","bank","stock","shop","class","board","me"]}
 function showTab(t){
   if(!role){showLogin();return}
   if(role==="student"&&!ME)return;
@@ -411,12 +416,13 @@ function showTab(t){
   current=t;$("#tabs").hidden=false;
   TABS.forEach(x=>{$("#tab-"+x).hidden=!ok.includes(x);$("#tab-"+x).setAttribute("aria-selected",String(x===t))});
   VIEWS.forEach(x=>$("#view-"+x).hidden=x!==t);
-  ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,teacher:renderTeacher})[t]();
+  ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,board:renderBoard,me:renderMyPage,teacher:renderTeacher})[t]();
 }
 document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{
   const t=b.dataset.tab;if(location.hash!=="#"+t)location.hash=t;else showTab(t);
 }));
 window.addEventListener("hashchange",()=>{if(role)showTab(location.hash.slice(1))});
+$("#homeBtn").addEventListener("click",()=>{if(!role)return;const h=role==="teacher"?"teacher":"quiz";if(h==="quiz"&&Q&&Q.finished)Q=null;if(location.hash!=="#"+h)location.hash=h;else showTab(h);window.scrollTo({top:0})});
 function rerender(){if(busy||typing())return;if(role&&!$("#view-"+current).hidden)showTab(current)}
 
 /* ---------- 오늘의 퀴즈 ---------- */
@@ -767,7 +773,7 @@ function boardData(){
 }
 function renderClass(){
   const b=boardData(),mode=CFG.board||"상위5",lim=mode==="상위5"?5:mode==="상위10"?10:999;
-  const rows=(arr,val,unit)=>arr&&arr.length?`<ol class="rank">${arr.map((x,i)=>`<li><span class="rk">${i+1}</span><span class="rn">${esc(x.name)}</span><span class="rv">${val(x)}${unit}</span></li>`).join("")}</ol>`:`<p class="empty">아직 기록이 없어요.</p>`;
+  const rows=(arr,val,unit)=>arr&&arr.length?`<ol class="rank">${arr.map((x,i)=>`<li><span class="rk">${i+1}</span><span class="rn">${avatarSvg(avOf(STUDENTS[x.k]||{}),28,x.name)}${esc(x.name)}</span><span class="rv">${val(x)}${unit}</span></li>`).join("")}</ol>`:`<p class="empty">아직 기록이 없어요.</p>`;
   const top=b.list.slice().sort((x,y)=>y.total-x.total).slice(0,lim);
   const savers=b.list.filter(x=>x.bank>0).sort((x,y)=>y.bank-x.bank).slice(0,Math.min(lim,5));
   const quizzers=b.list.filter(x=>x.quiz>0).sort((x,y)=>y.quiz-x.quiz).slice(0,Math.min(lim,5));
@@ -864,7 +870,7 @@ function renderTeacher(){
     const v={range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
       className:$("#cClass").value.trim()||"우리 반",board:$("#cBoard").value,boardName:$("#cBName").value};
-    act($("#cSave"),$("#cMsg"),async()=>{await R("config").set(v);tMsgTxt=`저장했어요. 퀴즈 범위: ${rangeText(parseDays(v.range))}`}).then(ok=>ok&&renderTeacher());
+    act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);tMsgTxt=`저장했어요. 퀴즈 범위: ${rangeText(parseDays(v.range))}`}).then(ok=>ok&&renderTeacher());
   };
   const syncShop=()=>TSHOP.forEach((it,i)=>{it.name=$("#ts-name-"+i).value;it.price=Math.max(0,Math.round(+$("#ts-price-"+i).value||0));it.desc=$("#ts-desc-"+i).value});
   $("#tAdd").onclick=()=>{syncShop();TSHOP.push({id:"p"+Date.now().toString(36),name:"",price:100,desc:"",on:true});renderTeacher();$("#ts-name-"+(TSHOP.length-1)).focus()};
@@ -877,6 +883,7 @@ function renderTeacher(){
     if(selKey){const c=$("#editCard");if(c)c.scrollIntoView({block:"nearest"})}
   });
   if(selKey&&$("#editCard"))bindEdit(selKey);
+  enhanceTeacher();
   $("#gGo").onclick=()=>{const k=$("#gWho").value,a=r2(+$("#gAmt").value||0),why=$("#gWhy").value.trim()||"선생님";
     if(!k||!a)return $("#gMsg").textContent="학생과 코인을 정해 주세요.";
     act($("#gGo"),$("#gMsg"),async()=>{const cur=(await R(`students/${k}/wallet`).once("value")).val()||0;
@@ -986,6 +993,7 @@ function setupData(user){
   }else{
     on(R("purchases"),s=>{ALLBUYS=s.val()||{};if(current==="teacher")rerender()});
   }
+  on(R("board"),s=>{BRD=s.val()||{};if(current==="board")rerender()});
 }
 function boot(){
   const fc=window.FIREBASE_CONFIG;
