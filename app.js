@@ -273,7 +273,8 @@ const TEACHER=()=>(window.EDITOR_EMAIL||"").toLowerCase();
 const emailOf=(g,c,n,gen)=>`s${+g}-${+c}-${+n}-${+gen||0}@matchum100.class`;
 const keyOfEmail=e=>{const m=String(e||"").match(/^s(\d+)-(\d+)-(\d+)-\d+@/);return m?`${+m[1]}-${+m[2]}-${+m[3]}`:null};
 const cfg=()=>({...CFG,days:parseDays(CFG.range),spell:CFG.type!=="빈칸",sent:CFG.type!=="고르기"});
-const shopList=()=>Object.entries(SHOP||{}).filter(([,it])=>it&&it.name&&it.on!==false).map(([id,it])=>({id,...it,price:Math.max(0,Math.round(+it.price||0))}));
+const byOrder=(a,b)=>((a.order??1e9)-(b.order??1e9));
+const shopList=()=>Object.entries(SHOP||{}).filter(([,it])=>it&&it.name&&it.on!==false).map(([id,it])=>({id,...it,price:Math.max(0,Math.round(+it.price||0))})).sort(byOrder);
 
 function authMsg(e){
   const c=e&&e.code||"";
@@ -743,13 +744,14 @@ function renderShop(){
   <article class="card">
     <h3>내 구매 확인증</h3>
     <p class="t-help">산 물건은 선생님께 확인 코드를 보여 주고 받아요. 선생님이 건네주면 '받았어요'로 바뀌어요.</p>
-    ${BUYS.length?`<ul class="receipts">${BUYS.map(r=>`<li class="${r.used?"used":""}">
+    ${BUYS.length?`<ul class="receipts">${BUYS.map(r=>`<li class="${r.used?"used":""}" data-rid="${esc(r.id||"")}">
       <span class="rinfo"><b>${esc(r.name)}</b><small>${whenKST(r.t)} · ${fmt(r.price)}코인</small></span>
       <span class="rcode" aria-label="확인 코드">${esc(r.code)}</span>
       <span class="donetag">${r.used?"받았어요 ✓":"선생님 확인 전"}</span>
     </li>`).join("")}</ul>`:`<p class="empty">아직 산 물건이 없어요.</p>`}
   </article>`;
   shopMsg="";
+  enhanceShop();
   document.querySelectorAll("[data-buy]").forEach(b=>b.onclick=()=>{confirmId=b.dataset.buy;renderShop()});
   document.querySelectorAll("[data-no]").forEach(b=>b.onclick=()=>{confirmId=null;renderShop()});
   document.querySelectorAll("[data-yes]").forEach(b=>b.onclick=()=>{
@@ -759,9 +761,9 @@ function renderShop(){
       if((+ME.wallet||0)+1e-9<it.price)throw new Error("코인이 모자라요.");
       const AZ="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";for(let i=0;i<4;i++)code+=AZ[Math.floor(Math.random()*AZ.length)];
       await upd({wallet:r2(ME.wallet-it.price)});
-      await R("purchases/"+KEY).push({t:SV.TIMESTAMP,name:it.name,price:it.price,code,used:false});
+      await R("purchases/"+KEY).push({t:SV.TIMESTAMP,name:it.name,price:it.price,code,used:false,...(isLotto(it)?{kind:"lotto"}:{})});
       await log(`상점: ${it.name}`,-it.price);
-      shopMsg=`${it.name}을(를) 샀어요. 확인 코드 ${code}를 선생님께 보여 주세요.`;
+      shopMsg=isLotto(it)?`${it.name}을(를) 샀어요. 아래 '내 구매 확인증'에서 긁어 보세요.`:`${it.name}을(를) 샀어요. 확인 코드 ${code}를 선생님께 보여 주세요.`;
     }).then(ok=>{confirmId=null;if(ok)renderShop()});
   });
 }
@@ -796,9 +798,9 @@ function renderClass(){
 let TSHOP=null,tMsgTxt="";
 function renderTeacher(){
   const c=CFG;
-  if(!TSHOP)TSHOP=Object.entries(SHOP||{}).map(([id,it])=>({id,...it}));
+  if(!TSHOP)TSHOP=Object.entries(SHOP||{}).map(([id,it])=>({id,...it})).sort(byOrder);
   const studs=Object.entries(STUDENTS||{}).sort((a,b)=>(a[1].grade-b[1].grade)||(a[1].cls-b[1].cls)||(a[1].num-b[1].num));
-  const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used)pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
+  const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used&&p.kind!=="lotto")pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
   pend.sort((a,b)=>a.t-b.t);
   const sel=(id,opts,v)=>`<select id="${id}">${opts.map(o=>`<option value="${esc(o[0])}" ${String(v)===String(o[0])?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`;
   $("#view-teacher").innerHTML=`<article class="card">
@@ -837,7 +839,7 @@ function renderTeacher(){
       <label class="t-field" for="ts-name-${i}">품목 이름<input type="text" id="ts-name-${i}" maxlength="30" value="${esc(it.name)}"></label>
       <label class="t-field" for="ts-price-${i}">가격(코인)<input type="number" id="ts-price-${i}" min="0" step="1" value="${esc(it.price)}"></label>
       <label class="t-field sr-desc" for="ts-desc-${i}">설명<input type="text" id="ts-desc-${i}" maxlength="60" value="${esc(it.desc||"")}"></label>
-      <button type="button" class="ghost" data-del="${i}">삭제</button>
+      <div class="row-btns"><button type="button" class="ghost" data-up="${i}" ${i?"":"disabled"} aria-label="${esc(it.name||"품목")} 위로">▲</button><button type="button" class="ghost" data-down="${i}" ${i<TSHOP.length-1?"":"disabled"} aria-label="${esc(it.name||"품목")} 아래로">▼</button><button type="button" class="ghost" data-del="${i}">삭제</button></div>
     </div>`).join("")||`<p class="empty">품목이 없어요.</p>`}</div>
     <div class="actions"><button type="button" class="ghost" id="tAdd">품목 추가</button><button type="button" class="primary" id="tShopSave">상점 저장</button></div>
     <p class="msg" id="tShopMsg" role="status"></p>
@@ -875,7 +877,10 @@ function renderTeacher(){
   const syncShop=()=>TSHOP.forEach((it,i)=>{it.name=$("#ts-name-"+i).value;it.price=Math.max(0,Math.round(+$("#ts-price-"+i).value||0));it.desc=$("#ts-desc-"+i).value});
   $("#tAdd").onclick=()=>{syncShop();TSHOP.push({id:"p"+Date.now().toString(36),name:"",price:100,desc:"",on:true});renderTeacher();$("#ts-name-"+(TSHOP.length-1)).focus()};
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{syncShop();TSHOP.splice(+b.dataset.del,1);renderTeacher()});
-  $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach(it=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true});
+  const mv=(i,d)=>{syncShop();const j=i+d;if(j<0||j>=TSHOP.length)return;[TSHOP[i],TSHOP[j]]=[TSHOP[j],TSHOP[i]];renderTeacher();$("#tShopMsg").textContent="순서를 바꿨어요. '상점 저장'을 눌러야 학생 화면에 반영돼요.";const f=$(`[data-${d<0?"up":"down"}="${j}"]`)||$(`[data-${d<0?"down":"up"}="${j}"]`);if(f)f.focus()};
+  document.querySelectorAll("[data-up]").forEach(b=>b.onclick=()=>mv(+b.dataset.up,-1));
+  document.querySelectorAll("[data-down]").forEach(b=>b.onclick=()=>mv(+b.dataset.down,1));
+  $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach((it,i)=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true,order:i});
     act($("#tShopSave"),$("#tShopMsg"),async()=>{await R("shop").set(obj);TSHOP=null}).then(ok=>{if(ok){renderTeacher();$("#tShopMsg").textContent="상점을 저장했어요."}})};
   document.querySelectorAll("[data-give]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.give.split("|");act(b,null,()=>R(`purchases/${k}/${id}/used`).set(true))});
   document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{
@@ -989,7 +994,7 @@ function setupData(user){
   on(R("students"),s=>{STUDENTS=s.val()||{};if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender()}}else rerender()});
   if(role==="student"){
     on(R("logs/"+KEY).limitToLast(25),s=>{LOGS=Object.values(s.val()||{}).sort((a,b)=>b.t-a.t);if(current==="bank")rerender()});
-    on(R("purchases/"+KEY),s=>{BUYS=Object.values(s.val()||{}).sort((a,b)=>b.t-a.t);if(current==="shop")rerender()});
+    on(R("purchases/"+KEY),s=>{BUYS=Object.entries(s.val()||{}).map(([id,v])=>({id,...v})).sort((a,b)=>b.t-a.t);if(current==="shop")rerender()});
   }else{
     on(R("purchases"),s=>{ALLBUYS=s.val()||{};if(current==="teacher")rerender()});
   }
