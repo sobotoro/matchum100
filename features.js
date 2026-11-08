@@ -166,7 +166,8 @@ function renderBoard(){
 /* ---------- 선생님: 여러 학생 한꺼번에 ---------- */
 let bulkSel=new Set(),bulkMsg="";
 function enhanceTeacher(){
-  const tbl=document.querySelector("#view-teacher .tbl");if(!tbl)return;
+  enhanceTeacherLotto();
+  const tbl=document.querySelector("#view-teacher .tbl:not(.lotto-tbl)");if(!tbl)return;
   [...bulkSel].forEach(k=>{if(!STUDENTS[k])bulkSel.delete(k)});
   const keys=[...tbl.querySelectorAll("[data-pick]")].map(b=>b.dataset.pick);
   const hr=tbl.querySelector("thead tr");
@@ -232,4 +233,81 @@ function enhanceTeacher(){
       if(Object.keys(up).length)await db.ref("matchum").update(up);
     }).then(ok=>{if(ok){bulkMsg=`${ks.length}명: ${LABEL[op]}.`;if(op==="del"){ks.forEach(k=>bulkSel.delete(k));if(ks.includes(selKey))selKey=null}renderTeacher()}});
   });
+}
+
+/* ---------- 코인 복권 ---------- */
+const LOTTO_DEF={p:[10000,3000,1500,700,300],w:[1,4,10,25,60]};
+const isLotto=it=>!!it&&(it.kind==="lotto"||/복권/.test(it.name||""));
+function lottoCfg(){
+  const l=CFG.lotto||{},p=[],w=[];
+  for(let i=0;i<5;i++){p.push(Math.max(0,Math.round(+((l.p||[])[i]??LOTTO_DEF.p[i])||0)));w.push(Math.max(0,+((l.w||[])[i]??LOTTO_DEF.w[i])||0))}
+  if(!w.some(x=>x>0))return LOTTO_DEF;
+  return {p,w};
+}
+function lottoOdds(){const L=lottoCfg(),t=L.w.reduce((a,b)=>a+b,0);return L.p.map((p,i)=>({rank:i+1,prize:p,pct:L.w[i]/t*100}))}
+const pctTxt=x=>x>=1?`${Math.round(x*10)/10}%`:`${Math.round(x*100)/100}%`;
+function drawRank(){const L=lottoCfg(),t=L.w.reduce((a,b)=>a+b,0);let x=Math.random()*t;for(let i=0;i<5;i++){x-=L.w[i];if(x<0)return i+1}return 5}
+function enhanceShop(){
+  const odds=lottoOdds();
+  document.querySelectorAll("#view-shop .item").forEach(li=>{
+    const nm=(li.querySelector(".iname")||{}).textContent||"";
+    if(!isLotto({name:nm})||li.querySelector(".lotto-odds"))return;
+    li.querySelector(".idesc").insertAdjacentHTML("afterend",`<ul class="lotto-odds" aria-label="복권 상금">${odds.map(o=>`<li><b class="rk r${o.rank}">${o.rank}등</b><span>${fmt(o.prize)}코인</span><small>${pctTxt(o.pct)}</small></li>`).join("")}</ul>`);
+  });
+  document.querySelectorAll("#view-shop .receipts li[data-rid]").forEach(li=>{
+    const r=BUYS.find(x=>x.id===li.dataset.rid);if(!r||!isLotto(r))return;
+    const code=li.querySelector(".rcode");if(code)code.remove();
+    const tag=li.querySelector(".donetag");if(!tag)return;
+    if(r.used&&r.rank)tag.innerHTML=`<b class="rk r${r.rank}">${r.rank}등</b> +${fmt(r.prize)}코인`;
+    else if(!r.used)tag.outerHTML=`<button type="button" class="primary" data-scratch="${esc(r.id)}">복권 긁기</button>`;
+  });
+  document.querySelectorAll("[data-scratch]").forEach(b=>b.onclick=()=>scratchLotto(b.dataset.scratch,b));
+}
+function scratchLotto(id,btn){
+  const m=$("#shopMsg");let rank=0,prize=0;
+  act(btn,m,async()=>{
+    const r0=lottoCfg(),rk=drawRank(),pz=r0.p[rk-1];
+    const res=await R(`purchases/${KEY}/${id}`).transaction(cur=>{if(!cur||cur.used)return;return {...cur,used:true,rank:rk,prize:pz,usedAt:SV.TIMESTAMP}});
+    if(!res.committed)throw new Error("이미 긁은 복권이에요.");
+    rank=rk;prize=pz;
+    const w=(await R(`students/${KEY}/wallet`).once("value")).val()||0;
+    await upd({wallet:r2(w+prize)});
+    await log(`복권 ${rank}등 당첨`,prize);
+  }).then(ok=>{if(ok)showLottoReveal(rank,prize)});
+}
+function showLottoReveal(rank,prize){
+  const old=$("#lottoOverlay");if(old)old.remove();
+  document.body.insertAdjacentHTML("beforeend",`<div class="lotto-overlay" id="lottoOverlay" role="dialog" aria-modal="true" aria-labelledby="lTitle">
+    <div class="lotto-card"><p class="kind" id="lTitle">코인 복권</p>
+      <div class="lotto-ball" id="lBall" aria-hidden="true">?</div>
+      <p class="lotto-txt" id="lTxt" aria-live="polite">두근두근…</p>
+      <button type="button" class="primary" id="lClose" hidden>확인</button></div></div>`);
+  const ball=$("#lBall"),txt=$("#lTxt"),close=$("#lClose");
+  const done=()=>{ball.textContent=`${rank}등`;ball.className=`lotto-ball r${rank} final`;
+    txt.textContent=rank===1?`대박! 1등이에요! +${fmt(prize)}코인`:rank<=3?`축하해요! ${rank}등이에요. +${fmt(prize)}코인`:`${rank}등이에요. +${fmt(prize)}코인을 지갑에 넣었어요.`;
+    close.hidden=false;close.focus()};
+  close.onclick=()=>{$("#lottoOverlay").remove();if(current==="shop")renderShop()};
+  if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches){done();return}
+  let n=0;const seq=[5,4,3,2,1];const t=setInterval(()=>{ball.textContent=`${seq[n%5]}등`;ball.className=`lotto-ball r${seq[n%5]}`;n++;if(n>14){clearInterval(t);done()}},90);
+}
+function enhanceTeacherLotto(){
+  const shopCard=$("#tShop")&&$("#tShop").closest("article");if(!shopCard||$("#lottoCard"))return;
+  const L=lottoCfg(),it=Object.values(SHOP||{}).find(isLotto),price=it?Math.round(+it.price||0):0;
+  shopCard.insertAdjacentHTML("afterend",`<article class="card" id="lottoCard"><h3>복권 상금</h3>
+    <p class="t-help">상점에서 이름에 '복권'이 들어간 품목은 복권이 돼요. 학생이 사서 '내 구매 확인증'에서 긁으면 바로 등수가 나오고, 상금이 지갑에 자동으로 들어가요. 확률은 비율이라 합이 100이 아니어도 돼요.</p>
+    <div class="tbl-wrap"><table class="tbl lotto-tbl"><thead><tr><th>등수</th><th>상금(코인)</th><th>확률(비율)</th><th>실제 확률</th></tr></thead><tbody>
+    ${[0,1,2,3,4].map(i=>`<tr><td><b class="rk r${i+1}">${i+1}등</b></td><td><input type="number" id="lp${i}" min="0" step="1" value="${L.p[i]}" aria-label="${i+1}등 상금"></td><td><input type="number" id="lw${i}" min="0" step="0.1" value="${L.w[i]}" aria-label="${i+1}등 확률"></td><td id="lpct${i}"></td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="t-help" id="lottoEv"></p>
+    <div class="actions"><button type="button" class="primary" id="lottoSave">복권 상금 저장</button><button type="button" class="ghost" id="lottoDef">기본값으로</button></div>
+    <p class="msg" id="lottoMsg" role="status"></p></article>`);
+  const read=()=>({p:[0,1,2,3,4].map(i=>Math.max(0,Math.round(+$("#lp"+i).value||0))),w:[0,1,2,3,4].map(i=>Math.max(0,+$("#lw"+i).value||0))});
+  const calc=()=>{const v=read(),t=v.w.reduce((a,b)=>a+b,0);
+    [0,1,2,3,4].forEach(i=>$("#lpct"+i).textContent=t?pctTxt(v.w[i]/t*100):"-");
+    const ev=t?v.p.reduce((a,p,i)=>a+p*v.w[i]/t,0):0;
+    $("#lottoEv").textContent=t?`한 장당 평균 ${fmt(ev)}코인을 돌려받아요.${price?` 복권값 ${fmt(price)}코인의 ${Math.round(ev/price*100)}%예요. ${ev<price?"오래 사면 손해라는 걸 배울 수 있어요.":"복권값보다 많이 돌려받는 설정이에요."}`:""}`:"확률을 하나 이상 0보다 크게 적어 주세요."};
+  [0,1,2,3,4].forEach(i=>{$("#lp"+i).oninput=calc;$("#lw"+i).oninput=calc});calc();
+  $("#lottoDef").onclick=()=>{[0,1,2,3,4].forEach(i=>{$("#lp"+i).value=LOTTO_DEF.p[i];$("#lw"+i).value=LOTTO_DEF.w[i]});calc()};
+  $("#lottoSave").onclick=()=>{const v=read();if(!v.w.some(x=>x>0))return $("#lottoMsg").textContent="확률을 하나 이상 0보다 크게 적어 주세요.";
+    act($("#lottoSave"),$("#lottoMsg"),()=>R("config/lotto").set(v)).then(ok=>{if(ok){$("#lottoSave").disabled=false;$("#lottoSave").textContent="복권 상금 저장";$("#lottoMsg").textContent="복권 상금을 저장했어요."}})};
 }
