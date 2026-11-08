@@ -78,7 +78,9 @@ const WEAPON={
 };
 const avCache=new Map();
 let fxSeq=0;
+const AVATAR_ON=false; // 캐릭터(아바타) 기능 끔
 function avatarSvg(av,size,label){
+  if(!AVATAR_ON)return "";
   size=size||40;
   const big=size>=80,key=JSON.stringify(av)+"|"+big;
   let body=avCache.get(key);
@@ -117,29 +119,15 @@ function renderMyPage(){
   const sg=x=>x>=0?"+":"";
   const raw=(s.avatar&&s.avatar.slots)||{};
   $("#view-me").innerHTML=`<article class="card me-hero">
-    <div class="hero-stage">${avatarSvg(av,168,s.name)}</div>
     <div class="hero-info">
-      <p class="kind">Lv.${lv} ${esc(jobOf(lv))}${nextJob?` · Lv.${nextJob[0]}${ga(nextJob[0])} 되면 '${esc(nextJob[1])}'`:""}</p>
       <h2>${esc(s.name)}</h2>
       <p class="t-help">${esc(s.grade)}학년 ${esc(s.cls)}반 ${esc(s.num)}번</p>
-      <div class="xp" role="progressbar" aria-label="다음 레벨까지" aria-valuemin="0" aria-valuemax="${XP_PER}" aria-valuenow="${into}"><i style="width:${into/XP_PER*100}%"></i></div>
-      <p class="t-help">퀴즈에서 ${XP_PER-into}문제 더 맞히면 Lv.${lv+1}${ga(lv+1)} 돼요. 레벨이 오르면 새 장비가 열려요.</p>
       <form class="status-form" id="stForm" novalidate>
         <label class="t-field" for="stIn">상태메시지<input type="text" id="stIn" maxlength="40" value="${esc(s.status||"")}" placeholder="오늘의 기분이나 목표를 적어요"></label>
         <button type="submit" class="secondary" id="stSave">저장</button>
       </form>
       <p class="msg" id="meMsg" role="status">${esc(meMsg)}</p>
     </div>
-  </article>
-  <article class="card"><h3>장비</h3>
-    <p class="t-help">고르지 않은 칸은 열린 장비 중 가장 좋은 것을 자동으로 입어요. 잠긴 장비는 필요한 레벨이 적혀 있어요.</p>
-    ${SLOTS.map(([slot,nm])=>`<div class="pick-row"><span class="lbl">${nm}</span><div class="pick-opts">${GEAR[slot].map(([id,n,need,col])=>{const lock=lv<need,on=av.slots[slot]===id;
-      return `<button type="button" class="gear ${on?"on":""}" data-gear="${slot}|${id}" ${lock?"disabled":""} aria-pressed="${on}"><span class="gdot" style="${col?`background:${col}`:""}"></span>${esc(n)}${lock?`<small>Lv.${need}</small>`:""}</button>`}).join("")}${raw[slot]?`<button type="button" class="link" data-gauto="${slot}">자동</button>`:""}</div></div>`).join("")}
-  </article>
-  <article class="card"><h3>캐릭터 모습</h3>
-    <div class="pick-row"><span class="lbl">성별</span><div class="pick-opts">${[["m","남자"],["f","여자"]].map(([g,n])=>`<button type="button" class="gear ${av.g===g?"on":""}" data-av-g="${g}" aria-pressed="${av.g===g}">${n}</button>`).join("")}</div></div>
-    <div class="pick-row"><span class="lbl">머리색</span><div class="pick-opts">${HAIRS.map((c,i)=>`<button type="button" class="swatch ${av.hair===i?"on":""}" data-av-h="${i}" style="background:${c}" aria-label="머리색 ${i+1}" aria-pressed="${av.hair===i}"></button>`).join("")}</div></div>
-    <div class="pick-row"><span class="lbl">피부</span><div class="pick-opts">${SKINS.map((c,i)=>`<button type="button" class="swatch ${av.skin===i?"on":""}" data-av-s="${i}" style="background:${c}" aria-label="피부색 ${i+1}" aria-pressed="${av.skin===i}"></button>`).join("")}</div></div>
   </article>
   <article class="card"><h3>내 코인</h3>
     <div class="acct four">
