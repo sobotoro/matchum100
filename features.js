@@ -1,53 +1,129 @@
 /* 마이페이지 · 캐릭터 · 자유게시판 · 선생님 일괄 작업 (app.js보다 먼저 불러와요) */
 
-/* ---------- 캐릭터 ---------- */
-const AV_COLORS=["#f7b2bd","#ffd166","#9ad1a8","#8ecae6","#c3a6e8","#f4a261"];
-const AV_FACES=["smile","wink","wow","cool"];
-const AV_FACE_NAMES={smile:"웃음",wink:"윙크",wow:"놀람",cool:"늠름"};
-const AV_ITEMS=[["none","없음",0],["leaf","새싹",0],["ribbon","리본",100],["glasses","안경",300],["cap","모자",600],["crown","왕관",1000]];
-const TITLES=[[0,"새싹 저축가"],[100,"꼬마 저축가"],[300,"알뜰 저축가"],[600,"똑똑한 투자자"],[1000,"코인 부자"],[2000,"맞춤법 경제왕"]];
-const totalOf=s=>(+(s&&s.wallet)||0)+(+(s&&s.bank)||0)+valueOf(s);
-const titleOf=t=>{let r=TITLES[0][1];for(const [m,n] of TITLES)if(t>=m)r=n;return r};
-const nextTitle=t=>TITLES.find(([m])=>m>t);
+/* ---------- 2D RPG 캐릭터 ---------- */
+const XP_PER=20; // 맞힌 문제 20개마다 레벨 1 올라요
+const JOBS=[[1,"견습생"],[5,"수련생"],[10,"모험가"],[20,"기사"],[35,"영웅"],[60,"전설"]];
+const levelOf=s=>1+Math.floor((+(s&&s.qRight)||0)/XP_PER);
+const ga=n=>[2,4,5,9].includes(n%10)?"가":"이";
+const jobOf=lv=>{let r=JOBS[0][1];for(const [m,n] of JOBS)if(lv>=m)r=n;return r};
+const SKINS=["#ffd9b8","#f1bf8f","#c98d5f"];
+const HAIRS=["#2b1d16","#6b3e1f","#d9a441","#a0522d","#4a4a6a"];
+const SLOTS=[["helmet","머리"],["armor","옷"],["shoes","신발"],["gloves","장갑"],["weapon","무기"],["effect","효과"]];
+const GEAR={
+  helmet:[["none","없음",1,""],["band","머리띠",3,"#d94848"],["cap","가죽 모자",8,"#8a5a33"],["iron","철 투구",15,"#9aa3ad"],["crown","황금 왕관",30,"#e9c046"]],
+  armor:[["dobok","수련복",1,"#f3f1ea"],["leather","가죽 갑옷",5,"#8a5a33"],["chain","사슬 갑옷",10,"#9aa3ad"],["knight","기사 갑옷",18,"#2f5dab"],["gold","황금 갑옷",40,"#e9c046"]],
+  shoes:[["basic","수련화",1,"#e6e0d2"],["boots","가죽 장화",4,"#6b4226"],["iron","철 장화",14,"#8f99a3"],["wing","날개 신발",28,"#7fd3ff"]],
+  gloves:[["none","맨손",1,""],["cloth","천 장갑",3,"#efe6d2"],["leather","가죽 장갑",9,"#7a4a28"],["iron","철 건틀릿",16,"#9aa3ad"],["magic","마법 장갑",32,"#8a5cf6"]],
+  weapon:[["none","없음",1,""],["stick","나무 막대",2,"#8b5a2b"],["wood","목검",6,"#c89b5d"],["iron","철검",12,"#cfd6de"],["staff","마법 지팡이",20,"#9b6bff"],["hero","용사의 검",45,"#9fd0ff"]],
+  effect:[["none","없음",1,""],["spark","반짝이",7,"#fff3a0"],["fire","불꽃 오라",22,"#ff8a3d"],["bolt","번개",38,"#ffe14d"],["rainbow","무지개 오라",60,"#c084fc"]]
+};
+const gearOf=(slot,id)=>GEAR[slot].find(g=>g[0]===id);
+function bestGear(slot,lv){let r=GEAR[slot][0];for(const g of GEAR[slot])if(g[2]<=lv)r=g;return r[0]}
 function avOf(s){
-  const a=(s&&s.avatar)||{};
-  return {c:AV_COLORS.includes(a.c)?a.c:AV_COLORS[((s&&+s.num)||0)%AV_COLORS.length],f:AV_FACES.includes(a.f)?a.f:"smile",i:AV_ITEMS.some(x=>x[0]===a.i)?a.i:"none"};
+  const a=(s&&s.avatar)||{},lv=levelOf(s),slots={};
+  for(const [slot] of SLOTS){
+    const want=a.slots&&a.slots[slot],g=want&&gearOf(slot,want);
+    slots[slot]=g&&g[2]<=lv?want:bestGear(slot,lv);
+  }
+  return {g:a.g==="f"?"f":"m",hair:HAIRS[a.hair]?+a.hair:((s&&+s.num)||0)%HAIRS.length,skin:SKINS[a.skin]?+a.skin:0,slots,lv};
 }
+const BASE=[
+"................",
+".....HHHHHH.....",
+"....HHHHHHHH....",
+"...HHHHHHHHHH...",
+"...HHSSSSSSHH...",
+"...HSSSSSSSSH...",
+"...SSESSSSESS...",
+"...SSSSSSSSSS...",
+"....SSSMMSSS....",
+".....SSSSSS.....",
+"......SSSS......",
+"....TTTttTTT....",
+"...ATTTTTTTTA...",
+"..AATTTTTTTTAA..",
+"..AATTTTTTTTAA..",
+"..GGBBBBBBBBGG..",
+"..GG.PPPPPP.GG..",
+".....PPPPPP.....",
+".....PPP.PPP....",
+".....PPP.PPP....",
+".....PPP.PPP....",
+".....FFF.FFF....",
+"....FFFF.FFFF...",
+"................"];
+const ARMOR={
+  dobok:{T:"#f3f1ea",t:"#d8d4c8",A:"#f3f1ea",B:"#2b2b2b",P:"#ebe7dc"},
+  leather:{T:"#8a5a33",t:"#5e3b1f",A:"#a06b3e",B:"#3e2a17",P:"#5b4636"},
+  chain:{T:"#9aa3ad",t:"#6b737c",A:"#b8c0c8",B:"#5a4632",P:"#59606a"},
+  knight:{T:"#c9ced6",t:"#2f5dab",A:"#aab2bd",B:"#2f5dab",P:"#4b5563",x:[[7,12,2,3,"#2f5dab"],[2,12,2,1,"#aab2bd"],[12,12,2,1,"#aab2bd"]]},
+  gold:{T:"#e9c046",t:"#b8860b",A:"#f3d36b",B:"#8a5a00",P:"#7a5a1a",x:[[7,12,2,2,"#e5484d"],[2,12,2,1,"#b8860b"],[12,12,2,1,"#b8860b"]]}
+};
+const HELMET={
+  band:[[3,4,10,1,"#d94848"],[13,4,1,1,"#d94848"],[14,5,1,2,"#d94848"]],
+  cap:[[4,0,8,1,"#8a5a33"],[3,1,10,3,"#8a5a33"],[2,4,12,1,"#5e3b1f"]],
+  iron:[[4,0,8,1,"#9aa3ad"],[3,1,10,1,"#9aa3ad"],[2,2,12,2,"#9aa3ad"],[2,4,12,1,"#6b737c"],[2,5,1,4,"#9aa3ad"],[13,5,1,4,"#9aa3ad"],[7,0,2,1,"#e5484d"]],
+  crown:[[4,1,8,2,"#e9c046"],[4,0,1,1,"#e9c046"],[7,0,2,1,"#e9c046"],[11,0,1,1,"#e9c046"],[6,2,1,1,"#e5484d"],[9,2,1,1,"#3b82f6"]]
+};
+const SHOES={basic:{F:"#e6e0d2"},boots:{F:"#6b4226",x:[[5,20,3,1,"#6b4226"],[9,20,3,1,"#6b4226"]]},iron:{F:"#8f99a3",x:[[5,19,3,2,"#8f99a3"],[9,19,3,2,"#8f99a3"]]},
+  wing:{F:"#f2f2f2",x:[[2,20,2,1,"#7fd3ff"],[3,21,1,1,"#7fd3ff"],[13,20,2,1,"#7fd3ff"],[13,21,1,1,"#7fd3ff"]]}};
+const GLOVES={cloth:"#efe6d2",leather:"#7a4a28",iron:"#9aa3ad",magic:"#8a5cf6"};
+// 무기는 20칸 기준 좌표(오른손 옆)
+const WEAPON={
+  stick:[[16,7,1,10,"#8b5a2b"]],
+  wood:[[16,4,1,1,"#e0b779"],[16,5,1,9,"#c89b5d"],[15,14,3,1,"#6b4226"],[16,15,1,2,"#4a2c17"]],
+  iron:[[16,3,1,11,"#e8edf2"],[17,4,1,10,"#9aa3ad"],[15,14,4,1,"#d4a017"],[16,15,1,2,"#4a2c17"],[16,17,1,1,"#d4a017"]],
+  staff:[[17,5,1,13,"#6b4226"],[16,2,3,3,"#9b6bff"],[17,3,1,1,"#e6d9ff"]],
+  hero:[[16,1,1,13,"#e8f4ff"],[17,1,1,13,"#9fd0ff"],[14,14,6,1,"#f2c14e"],[16,14,2,1,"#e5484d"],[16,15,2,2,"#3b2a1a"],[16,17,2,1,"#f2c14e"]]
+};
+const avCache=new Map();
+let fxSeq=0;
 function avatarSvg(av,size,label){
   size=size||40;
-  const eyes={smile:`<circle cx="23" cy="31" r="3"/><circle cx="37" cy="31" r="3"/>`,
-    wink:`<circle cx="23" cy="31" r="3"/><path d="M34 31h6" fill="none" stroke-width="2.6" stroke-linecap="round"/>`,
-    wow:`<circle cx="23" cy="30" r="3.6"/><circle cx="37" cy="30" r="3.6"/>`,
-    cool:`<path d="M19 30h8M33 30h8" fill="none" stroke-width="3" stroke-linecap="round"/>`}[av.f];
-  const mouth={smile:`<path d="M25 38q5 5 10 0" fill="none" stroke-width="2.4" stroke-linecap="round"/>`,
-    wink:`<path d="M26 38q4 4 8 0" fill="none" stroke-width="2.4" stroke-linecap="round"/>`,
-    wow:`<ellipse cx="30" cy="40" rx="3" ry="3.6"/>`,
-    cool:`<path d="M25 39h10" fill="none" stroke-width="2.4" stroke-linecap="round"/>`}[av.f];
-  const item={none:"",
-    leaf:`<path d="M30 12c0-6 6-9 11-8-1 6-6 9-11 8z" fill="#5fae6e"/><path d="M30 14v-5" stroke="#3f7d4b" stroke-width="2" stroke-linecap="round"/>`,
-    ribbon:`<path d="M38 13l8-5v10zM38 13l-8-5v10z" fill="#e5484d"/><circle cx="38" cy="13" r="2.6" fill="#b4232a"/>`,
-    glasses:`<g fill="none" stroke="#1f2d3a" stroke-width="2"><circle cx="23" cy="31" r="6"/><circle cx="37" cy="31" r="6"/><path d="M29 31h2"/></g>`,
-    cap:`<path d="M14 21q16-15 32 0z" fill="#3a6fd8"/><path d="M42 20h11" stroke="#3a6fd8" stroke-width="4" stroke-linecap="round"/>`,
-    crown:`<path d="M18 17l4-10 8 7 8-7 4 10z" fill="#f2c14e" stroke="#a8700a" stroke-width="1.2" stroke-linejoin="round"/>`}[av.i];
-  return `<svg class="av" width="${size}" height="${size}" viewBox="0 0 60 60" role="img" aria-label="${esc(label||"캐릭터")}"><path d="M30 10c14 0 22 10 22 24s-9 20-22 20S8 48 8 34 16 10 30 10z" fill="${av.c}" stroke="#1f2d3a" stroke-opacity=".25" stroke-width="1.5"/><ellipse cx="18" cy="39" rx="4" ry="2.4" fill="#ff8fa3" opacity=".55"/><ellipse cx="42" cy="39" rx="4" ry="2.4" fill="#ff8fa3" opacity=".55"/><g fill="#1f2d3a" stroke="#1f2d3a">${eyes}${mouth}</g>${item}</svg>`;
+  const big=size>=80,key=JSON.stringify(av)+"|"+big;
+  let body=avCache.get(key);
+  if(!body){
+    const W=20,H=24,px=Array.from({length:H},()=>Array(W).fill(null));
+    const arm=ARMOR[av.slots.armor]||ARMOR.dobok,sh=SHOES[av.slots.shoes]||SHOES.basic;
+    const pal={H:HAIRS[av.hair],S:SKINS[av.skin],E:"#1f2d3a",M:"#d9706a",G:GLOVES[av.slots.gloves]||SKINS[av.skin],F:sh.F,...arm};
+    BASE.forEach((row,y)=>[...row].forEach((c,x)=>{if(c!==".")px[y][x+2]=pal[c]}));
+    const put=(list,off)=>(list||[]).forEach(([x,y,w,h,c])=>{for(let j=0;j<h;j++)for(let i=0;i<w;i++){const X=x+i+off,Y=y+j;if(X>=0&&X<W&&Y>=0&&Y<H)px[Y][X]=c}});
+    if(av.g==="f"){put([[2,4,1,8,pal.H],[13,4,1,8,pal.H],[3,7,1,5,pal.H],[12,7,1,5,pal.H],[4,1,8,1,pal.H],[5,5,1,1,"#1f2d3a"],[10,5,1,1,"#1f2d3a"]],2);px[8][9]="#e87a8a";px[8][10]="#e87a8a"}
+    put(arm.x,2);put(sh.x,2);put(HELMET[av.slots.helmet],2);put(WEAPON[av.slots.weapon],0);
+    let r="";
+    for(let y=0;y<H;y++){let x=0;while(x<W){const c=px[y][x];if(!c){x++;continue}let e=x+1;while(e<W&&px[y][e]===c)e++;r+=`<rect x="${x}" y="${y}" width="${e-x}" height="1" fill="${c}"/>`;x=e}}
+    const fx=av.slots.effect,id="rb"+(++fxSeq);
+    const fxs={none:"",
+      spark:`<g class="fx fx-spark" fill="#fff3a0">${[[1,4],[18,8],[2,17],[17,20],[9,0]].map(([x,y])=>`<rect x="${x}" y="${y}" width="1" height="1"/><rect x="${x-0.5}" y="${y+0.33}" width="2" height=".34"/>`).join("")}</g>`,
+      fire:`<g class="fx fx-fire"><ellipse cx="10" cy="14" rx="9.5" ry="11" fill="#ff8a3d" opacity=".28"/><path d="M3 22 L4 15 L5 19 L6 12 L8 18 L10 9 L12 18 L14 12 L15 19 L16 15 L17 22Z" fill="#ff5e1f" opacity=".35"/></g>`,
+      bolt:`<g class="fx fx-bolt" fill="none" stroke="#ffe14d" stroke-width=".7" stroke-linejoin="round"><path d="M2 3 L4 7 L2 8 L4 12"/><path d="M18 10 L16 14 L18 15 L16 19"/><ellipse cx="10" cy="14" rx="9.5" ry="11" fill="#ffe14d" stroke="none" opacity=".15"/></g>`,
+      rainbow:`<defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b6b"/><stop offset=".25" stop-color="#ffd93d"/><stop offset=".5" stop-color="#6bcb77"/><stop offset=".75" stop-color="#4d96ff"/><stop offset="1" stop-color="#c084fc"/></linearGradient></defs><g class="fx fx-rainbow"><ellipse cx="10" cy="13.5" rx="9.4" ry="11.2" fill="none" stroke="url(#${id})" stroke-width="1.1"/><ellipse cx="10" cy="13.5" rx="9.4" ry="11.2" fill="url(#${id})" opacity=".14"/></g>`}[fx]||"";
+    body=`${fxs}<g shape-rendering="crispEdges">${r}</g>`;
+    if(fx!=="rainbow")avCache.set(key,body);
+  }
+  return `<svg class="av rpg${big?" big":""}" width="${Math.round(size*20/24)}" height="${size}" viewBox="0 0 20 24" role="img" aria-label="${esc(label||"캐릭터")}">${body}</svg>`;
 }
 
 /* ---------- 마이페이지 ---------- */
 let meMsg="";
 function renderMyPage(){
-  const s=ME,av=avOf(s),sv=valueOf(s),total=totalOf(s),nt=nextTitle(total);
+  const s=ME,av=avOf(s),sv=valueOf(s),total=(+s.wallet||0)+(+s.bank||0)+sv,lv=av.lv;
+  const into=(+s.qRight||0)%XP_PER,nextJob=JOBS.find(([m])=>m>lv);
   const holds=Object.entries(s.stocks||{}).filter(([,h])=>h.qty>1e-6).map(([k,h])=>{
     const c=k.slice(1),st=STOCKS.find(x=>x[0]===c)||[c,c],v=h.qty*coinPrice(c),cost=+h.cost||0,pl=v-cost;
     return {name:st[1],qty:h.qty,cost,v,pl,pct:cost?pl/cost*100:0};
   }).sort((a,b)=>b.v-a.v);
   const cost=holds.reduce((t,x)=>t+x.cost,0),pl=sv-cost,qz=s.quiz||{};
   const sg=x=>x>=0?"+":"";
+  const raw=(s.avatar&&s.avatar.slots)||{};
   $("#view-me").innerHTML=`<article class="card me-hero">
-    <div class="hero-av">${avatarSvg(av,112,s.name)}</div>
+    <div class="hero-stage">${avatarSvg(av,168,s.name)}</div>
     <div class="hero-info">
-      <p class="kind">${esc(titleOf(total))}${nt?` · ${fmt(nt[0]-total)}코인 더 모으면 '${esc(nt[1])}'`:""}</p>
+      <p class="kind">Lv.${lv} ${esc(jobOf(lv))}${nextJob?` · Lv.${nextJob[0]}${ga(nextJob[0])} 되면 '${esc(nextJob[1])}'`:""}</p>
       <h2>${esc(s.name)}</h2>
       <p class="t-help">${esc(s.grade)}학년 ${esc(s.cls)}반 ${esc(s.num)}번</p>
+      <div class="xp" role="progressbar" aria-label="다음 레벨까지" aria-valuemin="0" aria-valuemax="${XP_PER}" aria-valuenow="${into}"><i style="width:${into/XP_PER*100}%"></i></div>
+      <p class="t-help">퀴즈에서 ${XP_PER-into}문제 더 맞히면 Lv.${lv+1}${ga(lv+1)} 돼요. 레벨이 오르면 새 장비가 열려요.</p>
       <form class="status-form" id="stForm" novalidate>
         <label class="t-field" for="stIn">상태메시지<input type="text" id="stIn" maxlength="40" value="${esc(s.status||"")}" placeholder="오늘의 기분이나 목표를 적어요"></label>
         <button type="submit" class="secondary" id="stSave">저장</button>
@@ -55,11 +131,15 @@ function renderMyPage(){
       <p class="msg" id="meMsg" role="status">${esc(meMsg)}</p>
     </div>
   </article>
-  <article class="card"><h3>내 캐릭터 꾸미기</h3>
-    <div class="pick-row"><span class="lbl">색깔</span><div class="pick-opts">${AV_COLORS.map((c,i)=>`<button type="button" class="swatch ${av.c===c?"on":""}" data-av-c="${c}" style="background:${c}" aria-label="색깔 ${i+1}" aria-pressed="${av.c===c}"></button>`).join("")}</div></div>
-    <div class="pick-row"><span class="lbl">표정</span><div class="pick-opts">${AV_FACES.map(f=>`<button type="button" class="av-opt ${av.f===f?"on":""}" data-av-f="${f}" aria-pressed="${av.f===f}">${avatarSvg({...av,f,i:"none"},40,AV_FACE_NAMES[f])}<small>${AV_FACE_NAMES[f]}</small></button>`).join("")}</div></div>
-    <div class="pick-row"><span class="lbl">꾸미기</span><div class="pick-opts">${AV_ITEMS.map(([i,n,need])=>{const lock=total<need;return `<button type="button" class="av-opt ${av.i===i?"on":""}" data-av-i="${i}" ${lock?"disabled":""} aria-pressed="${av.i===i}">${avatarSvg({...av,i},40,n)}<small>${lock?`${need}코인`:n}</small></button>`}).join("")}</div></div>
-    <p class="t-help">꾸미기는 내가 가진 코인(지갑+은행+주식)이 많아질수록 하나씩 열려요.</p>
+  <article class="card"><h3>장비</h3>
+    <p class="t-help">고르지 않은 칸은 열린 장비 중 가장 좋은 것을 자동으로 입어요. 잠긴 장비는 필요한 레벨이 적혀 있어요.</p>
+    ${SLOTS.map(([slot,nm])=>`<div class="pick-row"><span class="lbl">${nm}</span><div class="pick-opts">${GEAR[slot].map(([id,n,need,col])=>{const lock=lv<need,on=av.slots[slot]===id;
+      return `<button type="button" class="gear ${on?"on":""}" data-gear="${slot}|${id}" ${lock?"disabled":""} aria-pressed="${on}"><span class="gdot" style="${col?`background:${col}`:""}"></span>${esc(n)}${lock?`<small>Lv.${need}</small>`:""}</button>`}).join("")}${raw[slot]?`<button type="button" class="link" data-gauto="${slot}">자동</button>`:""}</div></div>`).join("")}
+  </article>
+  <article class="card"><h3>캐릭터 모습</h3>
+    <div class="pick-row"><span class="lbl">성별</span><div class="pick-opts">${[["m","남자"],["f","여자"]].map(([g,n])=>`<button type="button" class="gear ${av.g===g?"on":""}" data-av-g="${g}" aria-pressed="${av.g===g}">${n}</button>`).join("")}</div></div>
+    <div class="pick-row"><span class="lbl">머리색</span><div class="pick-opts">${HAIRS.map((c,i)=>`<button type="button" class="swatch ${av.hair===i?"on":""}" data-av-h="${i}" style="background:${c}" aria-label="머리색 ${i+1}" aria-pressed="${av.hair===i}"></button>`).join("")}</div></div>
+    <div class="pick-row"><span class="lbl">피부</span><div class="pick-opts">${SKINS.map((c,i)=>`<button type="button" class="swatch ${av.skin===i?"on":""}" data-av-s="${i}" style="background:${c}" aria-label="피부색 ${i+1}" aria-pressed="${av.skin===i}"></button>`).join("")}</div></div>
   </article>
   <article class="card"><h3>내 코인</h3>
     <div class="acct four">
@@ -82,10 +162,13 @@ function renderMyPage(){
   </article>`;
   meMsg="";
   const m=$("#meMsg");
-  const saveAv=p=>act(null,m,()=>upd({avatar:{...avOf(ME),...p}}));
-  document.querySelectorAll("[data-av-c]").forEach(b=>b.onclick=()=>saveAv({c:b.dataset.avC}));
-  document.querySelectorAll("[data-av-f]").forEach(b=>b.onclick=()=>saveAv({f:b.dataset.avF}));
-  document.querySelectorAll("[data-av-i]").forEach(b=>b.onclick=()=>saveAv({i:b.dataset.avI}));
+  const cur=()=>{const a=(ME.avatar&&typeof ME.avatar==="object")?ME.avatar:{};return {g:a.g==="f"?"f":"m",hair:HAIRS[a.hair]?+a.hair:av.hair,skin:SKINS[a.skin]?+a.skin:0,slots:{...(a.slots||{})}}};
+  const save=a=>act(null,m,()=>upd({avatar:a})).then(ok=>{if(ok)renderMyPage()});
+  document.querySelectorAll("[data-av-g]").forEach(b=>b.onclick=()=>save({...cur(),g:b.dataset.avG}));
+  document.querySelectorAll("[data-av-h]").forEach(b=>b.onclick=()=>save({...cur(),hair:+b.dataset.avH}));
+  document.querySelectorAll("[data-av-s]").forEach(b=>b.onclick=()=>save({...cur(),skin:+b.dataset.avS}));
+  document.querySelectorAll("[data-gear]").forEach(b=>b.onclick=()=>{const [slot,id]=b.dataset.gear.split("|");const a=cur();a.slots[slot]=id;save(a)});
+  document.querySelectorAll("[data-gauto]").forEach(b=>b.onclick=()=>{const a=cur();delete a.slots[b.dataset.gauto];save(a)});
   $("#stForm").addEventListener("submit",e=>{
     e.preventDefault();const t=$("#stIn").value.trim().slice(0,40);
     act($("#stSave"),m,()=>upd({status:t})).then(ok=>{if(ok){meMsg=t?"상태메시지를 저장했어요.":"상태메시지를 지웠어요.";document.activeElement&&document.activeElement.blur();renderMyPage()}});
