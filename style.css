@@ -303,3 +303,8 @@ body{margin:0}
 .lotto-tbl input{width:7em;font:inherit;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
 @media (prefers-reduced-motion:reduce){.lotto-ball.final{animation:none}}
 .lotto-rule{margin:0;font-size:.8rem;color:var(--muted)}
+.shop-row{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,3fr) auto}
+.shop-row .t-field{min-width:0}
+.row-btns{flex-wrap:nowrap}
+.row-btns .ghost{white-space:nowrap;padding:6px 9px}
+@media (max-width:760px){.shop-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.shop-row .sr-desc{grid-column:1/-1}.shop-row .row-btns{grid-column:1/-1;justify-content:flex-end}}
