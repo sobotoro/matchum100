@@ -345,7 +345,7 @@ function renderMe(){
   if(role==="teacher"){$("#me").innerHTML=`<div class="me-id"><b>선생님</b><span>${esc(TEACHER())}</span><button type="button" class="link" id="logoutBtn">로그아웃</button></div>`;$("#logoutBtn").onclick=()=>auth.signOut();return}
   if(!ME){$("#me").innerHTML="";return}
   const v=valueOf(ME),total=(+ME.wallet||0)+(+ME.bank||0)+v;
-  $("#me").innerHTML=`<div class="me-id"><button type="button" class="me-av" id="meAvBtn" aria-label="마이페이지">${avatarSvg(avOf(ME),36,ME.name)}</button><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><b>${esc(ME.name)}</b><button type="button" class="link" id="logoutBtn">로그아웃</button></div>
+  $("#me").innerHTML=`<div class="me-id"><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><b>${esc(ME.name)}</b><button type="button" class="link" id="logoutBtn">로그아웃</button></div>
     <div class="bal">
       <span class="pill"><i>지갑</i><b>${fmt(ME.wallet)}</b></span>
       <span class="pill"><i>은행</i><b>${fmt(ME.bank)}</b></span>
@@ -353,7 +353,7 @@ function renderMe(){
       <span class="pill total"><i>모두 (코인)</i><b>${fmt(total)}</b></span>
     </div>`;
   $("#logoutBtn").onclick=()=>auth.signOut();
-  $("#meAvBtn").onclick=()=>{location.hash="me"};
+  
 }
 
 /* ---------- 로그인 화면 ---------- */
