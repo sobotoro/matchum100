@@ -236,23 +236,54 @@ function enhanceTeacher(){
 }
 
 /* ---------- 코인 복권 ---------- */
-const LOTTO_DEF={p:[10000,3000,1500,700,300],w:[1,4,10,25,60]};
+const LOTTO_DEF={p:[10000,3000,1500,700,300],w:[1,4,10,25,60],cap:[1,2,3,0,0],daily:1};
 const isLotto=it=>!!it&&(it.kind==="lotto"||/복권/.test(it.name||""));
+const n0=(v,d)=>{const x=+v;return isFinite(x)&&v!==""&&v!=null?x:d};
 function lottoCfg(){
-  const l=CFG.lotto||{},p=[],w=[];
-  for(let i=0;i<5;i++){p.push(Math.max(0,Math.round(+((l.p||[])[i]??LOTTO_DEF.p[i])||0)));w.push(Math.max(0,+((l.w||[])[i]??LOTTO_DEF.w[i])||0))}
-  if(!w.some(x=>x>0))return LOTTO_DEF;
-  return {p,w};
+  const l=CFG.lotto||{},p=[],w=[],cap=[];
+  for(let i=0;i<5;i++){
+    p.push(Math.max(0,Math.round(n0((l.p||[])[i],LOTTO_DEF.p[i]))));
+    w.push(Math.max(0,n0((l.w||[])[i],LOTTO_DEF.w[i])));
+    cap.push(Math.max(0,Math.round(n0((l.cap||[])[i],LOTTO_DEF.cap[i]))));
+  }
+  const daily=Math.max(0,Math.round(n0(l.daily,LOTTO_DEF.daily)));
+  if(!w.some(x=>x>0))return {...LOTTO_DEF};
+  return {p,w,cap,daily};
 }
-function lottoOdds(){const L=lottoCfg(),t=L.w.reduce((a,b)=>a+b,0);return L.p.map((p,i)=>({rank:i+1,prize:p,pct:L.w[i]/t*100}))}
+const weekOf=ds=>{const d=new Date(ds+"T00:00:00Z");d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10)};
+const kstDay=t=>new Date(t).toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"});
+let LW={},lwRef=null,lwWeek="";
+function watchLottoWeek(){
+  const wk=weekOf(today());
+  if(lwRef&&lwWeek===wk&&subs.includes(lwRef))return;
+  if(lwRef&&subs.includes(lwRef)){lwRef.off();subs.splice(subs.indexOf(lwRef),1)}
+  lwWeek=wk;lwRef=R("lottoWeek/"+wk);
+  on(lwRef,s=>{LW=s.val()||{};if(current==="shop"||current==="teacher")rerender()});
+}
+function lottoOdds(){const L=lottoCfg(),t=L.w.reduce((a,b)=>a+b,0);return L.p.map((p,i)=>({rank:i+1,prize:p,pct:L.w[i]/t*100,cap:L.cap[i],won:+LW["r"+(i+1)]||0}))}
 const pctTxt=x=>x>=1?`${Math.round(x*10)/10}%`:`${Math.round(x*100)/100}%`;
 function drawRank(){const L=lottoCfg(),t=L.w.reduce((a,b)=>a+b,0);let x=Math.random()*t;for(let i=0;i<5;i++){x-=L.w[i];if(x<0)return i+1}return 5}
+async function claimRank(r){
+  const L=lottoCfg(),wk=weekOf(today());
+  for(let k=r;k<=5;k++){
+    const cap=L.cap[k-1];
+    if(!cap)return k;
+    const res=await R(`lottoWeek/${wk}/r${k}`).transaction(c=>{c=+c||0;if(c>=cap)return;return c+1});
+    if(res.committed)return k;
+  }
+  return 5;
+}
+const boughtToday=()=>BUYS.filter(b=>isLotto(b)&&b.t&&kstDay(b.t)===today()).length;
 function enhanceShop(){
-  const odds=lottoOdds();
+  watchLottoWeek();
+  const L=lottoCfg(),odds=lottoOdds(),left=L.daily?Math.max(0,L.daily-boughtToday()):Infinity;
   document.querySelectorAll("#view-shop .item").forEach(li=>{
     const nm=(li.querySelector(".iname")||{}).textContent||"";
     if(!isLotto({name:nm})||li.querySelector(".lotto-odds"))return;
-    li.querySelector(".idesc").insertAdjacentHTML("afterend",`<ul class="lotto-odds" aria-label="복권 상금">${odds.map(o=>`<li><b class="rk r${o.rank}">${o.rank}등</b><span>${fmt(o.prize)}코인</span><small>${pctTxt(o.pct)}</small></li>`).join("")}</ul>`);
+    li.querySelector(".idesc").insertAdjacentHTML("afterend",`<ul class="lotto-odds" aria-label="복권 상금">${odds.map(o=>`<li><b class="rk r${o.rank}">${o.rank}등</b><span>${fmt(o.prize)}코인</span><small>${pctTxt(o.pct)}${o.cap?` · 이번 주 ${Math.max(0,o.cap-o.won)}/${o.cap}명 남음`:""}</small></li>`).join("")}</ul>
+      <p class="lotto-rule">${L.daily?`하루 ${L.daily}장까지 살 수 있어요.`:""} 1~3등은 한 주에 우리 반에서 정해진 인원만 나와요. 매주 월요일에 다시 채워져요.</p>`);
+    const b=li.querySelector("[data-buy]");
+    if(b&&left<=0){b.disabled=true;b.textContent="오늘은 이미 샀어요"}
   });
   document.querySelectorAll("#view-shop .receipts li[data-rid]").forEach(li=>{
     const r=BUYS.find(x=>x.id===li.dataset.rid);if(!r||!isLotto(r))return;
@@ -266,8 +297,10 @@ function enhanceShop(){
 function scratchLotto(id,btn){
   const m=$("#shopMsg");let rank=0,prize=0;
   act(btn,m,async()=>{
-    const r0=lottoCfg(),rk=drawRank(),pz=r0.p[rk-1];
-    const res=await R(`purchases/${KEY}/${id}`).transaction(cur=>{if(!cur||cur.used)return;return {...cur,used:true,rank:rk,prize:pz,usedAt:SV.TIMESTAMP}});
+    const cur=(await R(`purchases/${KEY}/${id}`).once("value")).val();
+    if(!cur||cur.used)throw new Error("이미 긁은 복권이에요.");
+    const rk=await claimRank(drawRank()),pz=lottoCfg().p[rk-1];
+    const res=await R(`purchases/${KEY}/${id}`).transaction(c=>{if(!c||c.used)return;return {...c,used:true,rank:rk,prize:pz,usedAt:SV.TIMESTAMP}});
     if(!res.committed)throw new Error("이미 긁은 복권이에요.");
     rank=rk;prize=pz;
     const w=(await R(`students/${KEY}/wallet`).once("value")).val()||0;
@@ -291,23 +324,29 @@ function showLottoReveal(rank,prize){
   let n=0;const seq=[5,4,3,2,1];const t=setInterval(()=>{ball.textContent=`${seq[n%5]}등`;ball.className=`lotto-ball r${seq[n%5]}`;n++;if(n>14){clearInterval(t);done()}},90);
 }
 function enhanceTeacherLotto(){
+  watchLottoWeek();
   const shopCard=$("#tShop")&&$("#tShop").closest("article");if(!shopCard||$("#lottoCard"))return;
-  const L=lottoCfg(),it=Object.values(SHOP||{}).find(isLotto),price=it?Math.round(+it.price||0):0;
+  const L=lottoCfg(),it=Object.values(SHOP||{}).find(isLotto),price=it?Math.round(+it.price||0):0,wk=weekOf(today());
   shopCard.insertAdjacentHTML("afterend",`<article class="card" id="lottoCard"><h3>복권 상금</h3>
     <p class="t-help">상점에서 이름에 '복권'이 들어간 품목은 복권이 돼요. 학생이 사서 '내 구매 확인증'에서 긁으면 바로 등수가 나오고, 상금이 지갑에 자동으로 들어가요. 확률은 비율이라 합이 100이 아니어도 돼요.</p>
-    <div class="tbl-wrap"><table class="tbl lotto-tbl"><thead><tr><th>등수</th><th>상금(코인)</th><th>확률(비율)</th><th>실제 확률</th></tr></thead><tbody>
-    ${[0,1,2,3,4].map(i=>`<tr><td><b class="rk r${i+1}">${i+1}등</b></td><td><input type="number" id="lp${i}" min="0" step="1" value="${L.p[i]}" aria-label="${i+1}등 상금"></td><td><input type="number" id="lw${i}" min="0" step="0.1" value="${L.w[i]}" aria-label="${i+1}등 확률"></td><td id="lpct${i}"></td></tr>`).join("")}
+    <div class="tbl-wrap"><table class="tbl lotto-tbl"><thead><tr><th>등수</th><th>상금(코인)</th><th>확률(비율)</th><th>실제 확률</th><th>한 주 최대 인원</th><th>이번 주</th></tr></thead><tbody>
+    ${[0,1,2,3,4].map(i=>`<tr><td><b class="rk r${i+1}">${i+1}등</b></td><td><input type="number" id="lp${i}" min="0" step="1" value="${L.p[i]}" aria-label="${i+1}등 상금"></td><td><input type="number" id="lw${i}" min="0" step="0.1" value="${L.w[i]}" aria-label="${i+1}등 확률"></td><td id="lpct${i}"></td><td><input type="number" id="lc${i}" min="0" step="1" value="${L.cap[i]||""}" placeholder="제한 없음" aria-label="${i+1}등 한 주 최대 인원"></td><td>${+LW["r"+(i+1)]||0}명</td></tr>`).join("")}
     </tbody></table></div>
+    <div class="row2"><label class="t-field" for="lDaily">학생 한 명이 하루에 살 수 있는 장수 (0이면 제한 없음)<input type="number" id="lDaily" min="0" step="1" value="${L.daily}"></label></div>
     <p class="t-help" id="lottoEv"></p>
-    <div class="actions"><button type="button" class="primary" id="lottoSave">복권 상금 저장</button><button type="button" class="ghost" id="lottoDef">기본값으로</button></div>
+    <p class="t-help">한 주 최대 인원이 다 차면 그 등수 대신 한 단계 낮은 등수가 나와요. 이번 주(${md(wk)} 월요일부터) 당첨 인원은 매주 월요일에 자동으로 0이 돼요.</p>
+    <div class="actions"><button type="button" class="primary" id="lottoSave">복권 설정 저장</button><button type="button" class="ghost" id="lottoDef">기본값으로</button><button type="button" class="ghost" id="lottoWkReset">이번 주 당첨 인원 0으로</button></div>
     <p class="msg" id="lottoMsg" role="status"></p></article>`);
-  const read=()=>({p:[0,1,2,3,4].map(i=>Math.max(0,Math.round(+$("#lp"+i).value||0))),w:[0,1,2,3,4].map(i=>Math.max(0,+$("#lw"+i).value||0))});
+  const read=()=>({p:[0,1,2,3,4].map(i=>Math.max(0,Math.round(+$("#lp"+i).value||0))),w:[0,1,2,3,4].map(i=>Math.max(0,+$("#lw"+i).value||0)),cap:[0,1,2,3,4].map(i=>Math.max(0,Math.round(+$("#lc"+i).value||0))),daily:Math.max(0,Math.round(+$("#lDaily").value||0))});
   const calc=()=>{const v=read(),t=v.w.reduce((a,b)=>a+b,0);
     [0,1,2,3,4].forEach(i=>$("#lpct"+i).textContent=t?pctTxt(v.w[i]/t*100):"-");
     const ev=t?v.p.reduce((a,p,i)=>a+p*v.w[i]/t,0):0;
-    $("#lottoEv").textContent=t?`한 장당 평균 ${fmt(ev)}코인을 돌려받아요.${price?` 복권값 ${fmt(price)}코인의 ${Math.round(ev/price*100)}%예요. ${ev<price?"오래 사면 손해라는 걸 배울 수 있어요.":"복권값보다 많이 돌려받는 설정이에요."}`:""}`:"확률을 하나 이상 0보다 크게 적어 주세요."};
+    $("#lottoEv").textContent=t?`인원 제한이 없을 때 한 장당 평균 ${fmt(ev)}코인을 돌려받아요.${price?` 복권값 ${fmt(price)}코인의 ${Math.round(ev/price*100)}%예요. 인원 제한이 걸리면 이보다 조금 낮아져요.`:""}`:"확률을 하나 이상 0보다 크게 적어 주세요."};
   [0,1,2,3,4].forEach(i=>{$("#lp"+i).oninput=calc;$("#lw"+i).oninput=calc});calc();
-  $("#lottoDef").onclick=()=>{[0,1,2,3,4].forEach(i=>{$("#lp"+i).value=LOTTO_DEF.p[i];$("#lw"+i).value=LOTTO_DEF.w[i]});calc()};
+  $("#lottoDef").onclick=()=>{[0,1,2,3,4].forEach(i=>{$("#lp"+i).value=LOTTO_DEF.p[i];$("#lw"+i).value=LOTTO_DEF.w[i];$("#lc"+i).value=LOTTO_DEF.cap[i]||""});$("#lDaily").value=LOTTO_DEF.daily;calc()};
+  const fin=(b,label,msg)=>ok=>{if(ok){b.disabled=false;b.textContent=label;$("#lottoMsg").textContent=msg}};
   $("#lottoSave").onclick=()=>{const v=read();if(!v.w.some(x=>x>0))return $("#lottoMsg").textContent="확률을 하나 이상 0보다 크게 적어 주세요.";
-    act($("#lottoSave"),$("#lottoMsg"),()=>R("config/lotto").set(v)).then(ok=>{if(ok){$("#lottoSave").disabled=false;$("#lottoSave").textContent="복권 상금 저장";$("#lottoMsg").textContent="복권 상금을 저장했어요."}})};
+    act($("#lottoSave"),$("#lottoMsg"),()=>R("config/lotto").set(v)).then(fin($("#lottoSave"),"복권 설정 저장","복권 설정을 저장했어요."))};
+  $("#lottoWkReset").onclick=()=>{const b=$("#lottoWkReset");if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="한 번 더 누르면 0으로";return}
+    act(b,$("#lottoMsg"),()=>R("lottoWeek/"+wk).remove()).then(ok=>{if(ok){b.dataset.armed="";renderTeacher();$("#lottoMsg")&&($("#lottoMsg").textContent="이번 주 당첨 인원을 0으로 만들었어요.")}})};
 }
