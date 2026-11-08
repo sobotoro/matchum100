@@ -308,3 +308,27 @@ body{margin:0}
 .row-btns{flex-wrap:nowrap}
 .row-btns .ghost{white-space:nowrap;padding:6px 9px}
 @media (max-width:760px){.shop-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.shop-row .sr-desc{grid-column:1/-1}.shop-row .row-btns{grid-column:1/-1;justify-content:flex-end}}
+/* 2D RPG 캐릭터 */
+:root{--ground:#cfe3c2}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ground:#2c4034}}
+:root[data-theme="dark"]{--ground:#2c4034}
+.av.rpg{image-rendering:pixelated;overflow:visible}
+.hero-stage{flex:none;border-radius:18px;padding:14px 22px 8px;line-height:0;background:linear-gradient(to bottom,var(--chip) 0 78%,var(--ground) 78% 100%)}
+.xp{height:10px;background:var(--grid);border-radius:999px;overflow:hidden;max-width:320px}
+.xp i{display:block;height:100%;background:var(--coin)}
+.gear{font:inherit;font-size:.9rem;background:var(--sheet);color:var(--ink);border:1.5px solid var(--line);border-radius:10px;padding:6px 10px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.gear.on{border-color:var(--ink);background:var(--chip);font-weight:700}
+.gear:disabled{opacity:.45;cursor:not-allowed}
+.gear small{font-size:.72rem;color:var(--muted)}
+.gdot{width:12px;height:12px;border-radius:3px;border:1px solid var(--line);flex:none}
+@keyframes twinkle{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes flicker{0%,100%{opacity:.8}50%{opacity:1}}
+@keyframes flash{0%,80%,100%{opacity:.25}85%,95%{opacity:1}}
+@keyframes hue{to{filter:hue-rotate(360deg)}}
+.av.big .fx-spark{animation:twinkle 1.6s ease-in-out infinite}
+.av.big .fx-fire{animation:flicker .7s ease-in-out infinite}
+.av.big .fx-bolt{animation:flash 2.2s linear infinite}
+.av.big .fx-rainbow{animation:hue 4s linear infinite}
+@media (prefers-reduced-motion:reduce){.av .fx{animation:none!important}}
+.pick-row{display:grid;grid-template-columns:3.5em minmax(0,1fr);align-items:center}
+@media (max-width:480px){.pick-row{grid-template-columns:1fr}}
