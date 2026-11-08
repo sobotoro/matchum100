@@ -302,3 +302,4 @@ body{margin:0}
 .lotto-txt{margin:0;font-family:var(--f-display);font-size:1.25rem}
 .lotto-tbl input{width:7em;font:inherit;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
 @media (prefers-reduced-motion:reduce){.lotto-ball.final{animation:none}}
+.lotto-rule{margin:0;font-size:.8rem;color:var(--muted)}
