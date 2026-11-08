@@ -286,3 +286,19 @@ body{margin:0}
 .cmt-form input{flex:1;min-width:0;font:inherit;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
 .bulk-bar{border:1.5px solid var(--ink);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;margin-top:14px;background:var(--chip)}
 .tbl input[type=checkbox]{width:18px;height:18px;accent-color:var(--pen)}
+.row-btns{display:flex;gap:4px;align-items:center}
+.row-btns .ghost{padding:6px 10px;border-radius:8px}
+.row-btns .ghost:disabled{opacity:.35;cursor:not-allowed}
+.lotto-odds{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;font-size:.85rem}
+.lotto-odds li{display:grid;grid-template-columns:2.6em 1fr auto;gap:6px;align-items:baseline}
+.lotto-odds small{color:var(--muted);font-variant-numeric:tabular-nums}
+.rk.r1,.lotto-ball.r1{color:#b8860b}.rk.r2,.lotto-ball.r2{color:var(--pen)}.rk.r3,.lotto-ball.r3{color:var(--down)}.rk.r4,.lotto-ball.r4,.rk.r5,.lotto-ball.r5{color:var(--muted)}
+.lotto-overlay{position:fixed;inset:0;z-index:50;background:rgba(15,22,28,.55);display:grid;place-items:center;padding:16px}
+.lotto-card{background:var(--sheet);color:var(--ink);border-radius:20px;padding:28px 24px;width:min(360px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.lotto-ball{width:140px;height:140px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-display);font-size:2.6rem;background:var(--chip);border:6px dashed var(--line)}
+.lotto-ball.final{border-style:solid;border-color:currentColor;animation:pop .35s ease-out}
+.lotto-ball.final.r1{background:#fff4cc}
+@keyframes pop{0%{transform:scale(.7)}70%{transform:scale(1.08)}100%{transform:scale(1)}}
+.lotto-txt{margin:0;font-family:var(--f-display);font-size:1.25rem}
+.lotto-tbl input{width:7em;font:inherit;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.lotto-ball.final{animation:none}}
