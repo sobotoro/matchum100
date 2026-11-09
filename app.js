@@ -493,16 +493,14 @@ function renderQuizTab(){
 }
 function renderStart(){
   const n=takeN(),tl=(+CFG.timer||0)?Math.round((+CFG.timer)*timeX(ME)):0;
-  $("#stage").innerHTML=`<article class="card"><div class="start-row"><div class="start-main">
+  $("#stage").innerHTML=`<article class="card">
     <p class="kind">오늘의 도전 · ${md(today())}</p>
     <h2>맞춤법 퀴즈 ${n}문제</h2>
     <p class="t-help">하루에 한 번만 도전할 수 있어요. 시작하면 끝까지 풀어야 해요.</p>
     <ul class="rules">${tl?`<li>문제마다 <b>${tl}초</b> 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li><li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
-    </div><div class="quiz-av" data-avatar-slot="quiz" data-size="sm" hidden></div></div>
     <p class="msg" id="startMsg" role="status"></p>
     <div class="actions"><button type="button" class="primary" id="goBtn" ${n?"":"disabled"}>도전 시작</button></div>
   </article>`;
-  avatarMount("quiz",ME);
   $("#goBtn").onclick=()=>{
     const qs=shuffle(pool()).slice(0,takeN());
     const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),shown:qs.map(q=>shuffle(q.opts)),picks:[]};
@@ -514,12 +512,11 @@ function renderStart(){
   };
 }
 function renderDoneOnly(qz){
-  $("#stage").innerHTML=`<article class="card"><div class="start-row"><div class="start-main">
+  $("#stage").innerHTML=`<article class="card">
     <p class="kind">오늘의 도전 · ${md(today())}</p>
     <h2>오늘 도전은 끝났어요</h2>
     <p class="t-help">${qz.total?`${qz.total}문제 중 ${qz.right}문제를 맞혀서 ${fmt(qz.coins)}코인을 받았어요. `:""}내일 또 도전할 수 있어요. 그동안 오답 노트로 연습해 보세요.</p>
-  </div><div class="quiz-av" data-avatar-slot="quiz" data-size="sm" hidden></div></div></article>`;
-  avatarMount("quiz",ME);
+  </article>`;
 }
 function resumeChallenge(qz){
   const picks=qz.picks?Object.values(qz.picks):[];
@@ -551,13 +548,12 @@ function renderQ(){
       <span class="tag">${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽</span>
       <div class="bar"><i style="width:${(Q.i/Q.qs.length)*100}%"></i></div></div>
     ${limitSec()?`<div class="tbar" id="tbar" role="timer" aria-label="남은 시간"><span class="tlbl" aria-hidden="true">⏱</span><span class="track"><i></i></span><span class="sec">${limitSec()}초</span></div>`:""}
-    <div class="q-row"><div class="q-main"><p class="kind">${q.kind}</p>
-    <p class="q" id="qText">${qText(q,false)}</p></div><div class="quiz-av" data-avatar-slot="quiz" data-size="sm" hidden></div></div>
+    <p class="kind">${q.kind}</p>
+    <p class="q" id="qText">${qText(q,false)}</p>
     <div class="opts">${q.shown.map((o,k)=>`<button type="button" class="opt" id="opt-${k}" data-k="${k}"><span class="key">${k+1}번</span>${boxes(o)}</button>`).join("")}</div>
     <div class="feedback" id="fb" hidden></div>
   </article>`;
   document.querySelectorAll(".opt").forEach(b=>b.addEventListener("click",()=>choose(+b.dataset.k)));
-  avatarMount("quiz",ME);
   startTimer();
 }
 const YES=["딩동댕!","정답이에요!","잘했어요!","완벽해요!"],NO=["아깝다!","다시 한번 볼까요?","헷갈렸구나!"];
@@ -577,7 +573,6 @@ function choose(k){
     else if(+b.dataset.k===k){b.classList.add("wrong");b.insertAdjacentHTML("beforeend",SLASH)}
   });
   if(q.sent)$("#qText").innerHTML=qText(q,true);
-  avatarReact(ok?"right":"wrong",ok&&Q.mode==="challenge"?(+CFG.coinPer||0):0);
   const pick=a=>a[Math.floor(Math.random()*a.length)];
   const last=Q.i===Q.qs.length-1;
   const fb=$("#fb");fb.hidden=false;
@@ -621,18 +616,16 @@ function renderEnd(){
       <p class="rwhy">${q.e}</p></li>`).join("")}</ul>`:`<p class="allright">하나도 안 틀렸어요! 맞춤법 박사네요.</p>`;
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">${ch?`오늘의 도전 결과 · ${md(today())}`:"연습 결과 · 코인 없음"}</p>
-    <div class="start-row"><div class="start-main"><div class="score"><div class="score-num">${score}점${score>=80?CIRCLE.replace('class="mark"','class=""'):""}</div>
+    <div class="score"><div class="score-num">${score}점${score>=80?CIRCLE.replace('class="mark"','class=""'):""}</div>
       <div class="score-txt"><strong>${total}문제 중 ${right}문제 맞혔어요</strong>
       ${avg?`<span class="empty">한 문제 평균 ${avg.toFixed(1)}초${lateN?` · 시간 초과 ${lateN}문제`:""}</span>`:""}
-      ${ch?`<p class="earned">+${fmt(Q.coins||0)}코인을 지갑에 넣었어요</p><span class="empty">내일 또 도전할 수 있어요.</span>`:""}</div></div></div><div class="quiz-av" data-avatar-slot="quiz" data-size="sm" hidden></div></div>
+      ${ch?`<p class="earned">+${fmt(Q.coins||0)}코인을 지갑에 넣었어요</p><span class="empty">내일 또 도전할 수 있어요.</span>`:""}</div></div>
     ${wrong.length?`<p class="kind">다시 보기</p>`:""}
     ${list}
     <div class="actions">
       ${wrong.length?`<button type="button" class="primary" id="retryBtn">틀린 문제 연습하기 (코인 없음)</button>`:""}
       ${ch?`<button type="button" class="secondary" id="toBank">지갑·은행 가기</button>`:`<button type="button" class="secondary" id="backToday">오늘의 퀴즈로 돌아가기</button>`}
     </div></article>`;
-  avatarMount("quiz",ME);
-  if(ch&&total&&right===total)setTimeout(()=>avatarReact("win"),350);
   if(wrong.length)$("#retryBtn").onclick=()=>startPractice(wrong.map(r=>r.q));
   if($("#toBank"))$("#toBank").onclick=()=>{Q=null;location.hash="bank"};
   if($("#backToday"))$("#backToday").onclick=()=>{Q=null;renderQuizTab()};
@@ -789,14 +782,14 @@ function renderShop(){
   <article class="card">
     <h3>내 구매 확인증</h3>
     <p class="t-help">산 물건은 선생님께 확인 코드를 보여 주고 받아요. 선생님이 건네주면 '받았어요'로 바뀌어요.</p>
-    ${BUYS.length?`<ul class="receipts">${BUYS.map(r=>`<li class="${r.used||r.kind==="pet"||r.kind==="fx"?"used":""}" data-rid="${esc(r.id||"")}">
+    ${BUYS.length?`<ul class="receipts">${BUYS.map(r=>`<li class="${r.used?"used":""}" data-rid="${esc(r.id||"")}">
       <span class="rinfo"><b>${esc(r.name)}</b><small>${whenKST(r.t)} · ${fmt(r.price)}코인</small></span>
       <span class="rcode" aria-label="확인 코드">${esc(r.code)}</span>
-      <span class="donetag">${r.kind==="pet"||r.kind==="fx"?"바로 생겼어요 ✓":r.used?"받았어요 ✓":"선생님 확인 전"}</span>
+      <span class="donetag">${r.used?"받았어요 ✓":"선생님 확인 전"}</span>
     </li>`).join("")}</ul>`:`<p class="empty">아직 산 물건이 없어요.</p>`}
   </article>`;
   shopMsg="";
-  enhanceShop();avatarEnhanceShop();
+  enhanceShop();
   document.querySelectorAll("[data-buy]").forEach(b=>b.onclick=()=>{confirmId=b.dataset.buy;renderShop()});
   document.querySelectorAll("[data-no]").forEach(b=>b.onclick=()=>{confirmId=null;renderShop()});
   document.querySelectorAll("[data-yes]").forEach(b=>b.onclick=()=>{
@@ -806,9 +799,9 @@ function renderShop(){
       if((+ME.wallet||0)+1e-9<it.price)throw new Error("코인이 모자라요.");
       const AZ="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";for(let i=0;i<4;i++)code+=AZ[Math.floor(Math.random()*AZ.length)];
       await upd({wallet:r2(ME.wallet-it.price)});
-      await R("purchases/"+KEY).push({t:SV.TIMESTAMP,name:it.name,price:it.price,code,used:false,...buyKind(it)});
+      await R("purchases/"+KEY).push({t:SV.TIMESTAMP,name:it.name,price:it.price,code,used:false,...(isLotto(it)?{kind:"lotto"}:{})});
       await log(`상점: ${it.name}`,-it.price);
-      shopMsg=buyMsg(it,code);
+      shopMsg=isLotto(it)?`${it.name}을(를) 샀어요. 아래 '내 구매 확인증'에서 긁어 보세요.`:`${it.name}을(를) 샀어요. 확인 코드 ${code}를 선생님께 보여 주세요.`;
     }).then(ok=>{confirmId=null;if(ok)renderShop()});
   });
 }
@@ -845,7 +838,7 @@ function renderTeacher(){
   const c=CFG;
   if(!TSHOP)TSHOP=Object.entries(SHOP||{}).map(([id,it])=>({id,...it})).sort(byOrder);
   const studs=Object.entries(STUDENTS||{}).sort((a,b)=>(a[1].grade-b[1].grade)||(a[1].cls-b[1].cls)||(a[1].num-b[1].num));
-  const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used&&!["lotto","pet","fx"].includes(p.kind))pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
+  const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used&&p.kind!=="lotto")pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
   pend.sort((a,b)=>a.t-b.t);
   const sel=(id,opts,v)=>`<select id="${id}">${opts.map(o=>`<option value="${esc(o[0])}" ${String(v)===String(o[0])?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`;
   $("#view-teacher").innerHTML=`<article class="card">
@@ -889,7 +882,6 @@ function renderTeacher(){
     <div class="shop-edit" id="tShop">${TSHOP.map((it,i)=>`<div class="shop-row">
       <label class="t-field" for="ts-name-${i}">품목 이름<input type="text" id="ts-name-${i}" maxlength="30" value="${esc(it.name)}"></label>
       <label class="t-field" for="ts-price-${i}">가격(코인)<input type="number" id="ts-price-${i}" min="0" step="1" value="${esc(it.price)}"></label>
-      <label class="t-field" for="ts-kind-${i}">종류<select id="ts-kind-${i}">${AV_KIND_OPTS.map(([v,n])=>`<option value="${esc(v)}" ${(it.kind||"")===v?"selected":""}>${esc(n)}</option>`).join("")}</select></label>
       <label class="t-field sr-desc" for="ts-desc-${i}">설명<input type="text" id="ts-desc-${i}" maxlength="60" value="${esc(it.desc||"")}"></label>
       <div class="row-btns"><button type="button" class="ghost" data-up="${i}" ${i?"":"disabled"} aria-label="${esc(it.name||"품목")} 위로">▲</button><button type="button" class="ghost" data-down="${i}" ${i<TSHOP.length-1?"":"disabled"} aria-label="${esc(it.name||"품목")} 아래로">▼</button><button type="button" class="ghost" data-del="${i}">삭제</button></div>
     </div>`).join("")||`<p class="empty">품목이 없어요.</p>`}</div>
@@ -926,13 +918,13 @@ function renderTeacher(){
       className:$("#cClass").value.trim()||"우리 반",board:$("#cBoard").value,boardName:$("#cBName").value};
     act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);tMsgTxt=`저장했어요. 퀴즈 범위: ${rangeText(parseDays(v.range))}`}).then(ok=>ok&&renderTeacher());
   };
-  const syncShop=()=>(TSHOP||(TSHOP=Object.entries(SHOP||{}).map(([id,it])=>({id,...it})).sort(byOrder))).forEach((it,i)=>{if(!$("#ts-name-"+i))return;it.name=$("#ts-name-"+i).value;it.price=Math.max(0,Math.round(+$("#ts-price-"+i).value||0));it.desc=$("#ts-desc-"+i).value;const k=$("#ts-kind-"+i);if(k)it.kind=k.value});
+  const syncShop=()=>TSHOP.forEach((it,i)=>{it.name=$("#ts-name-"+i).value;it.price=Math.max(0,Math.round(+$("#ts-price-"+i).value||0));it.desc=$("#ts-desc-"+i).value});
   $("#tAdd").onclick=()=>{syncShop();TSHOP.push({id:"p"+Date.now().toString(36),name:"",price:100,desc:"",on:true});renderTeacher();$("#ts-name-"+(TSHOP.length-1)).focus()};
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{syncShop();TSHOP.splice(+b.dataset.del,1);renderTeacher()});
   const mv=(i,d)=>{syncShop();const j=i+d;if(j<0||j>=TSHOP.length)return;[TSHOP[i],TSHOP[j]]=[TSHOP[j],TSHOP[i]];renderTeacher();$("#tShopMsg").textContent="순서를 바꿨어요. '상점 저장'을 눌러야 학생 화면에 반영돼요.";const f=$(`[data-${d<0?"up":"down"}="${j}"]`)||$(`[data-${d<0?"down":"up"}="${j}"]`);if(f)f.focus()};
   document.querySelectorAll("[data-up]").forEach(b=>b.onclick=()=>mv(+b.dataset.up,-1));
   document.querySelectorAll("[data-down]").forEach(b=>b.onclick=()=>mv(+b.dataset.down,1));
-  $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach((it,i)=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true,order:i,...(it.kind&&it.kind!=="lotto"?{kind:it.kind}:{})});
+  $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach((it,i)=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true,order:i});
     act($("#tShopSave"),$("#tShopMsg"),async()=>{await R("shop").set(obj);TSHOP=null}).then(ok=>{if(ok){renderTeacher();$("#tShopMsg").textContent="상점을 저장했어요."}})};
   document.querySelectorAll("[data-give]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.give.split("|");act(b,null,()=>R(`purchases/${k}/${id}/used`).set(true))});
   document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{
@@ -940,7 +932,7 @@ function renderTeacher(){
     if(selKey){const c=$("#editCard");if(c)c.scrollIntoView({block:"nearest"})}
   });
   if(selKey&&$("#editCard"))bindEdit(selKey);
-  enhanceTeacher();avatarTeacherCard();
+  enhanceTeacher();
   $("#gGo").onclick=()=>{const k=$("#gWho").value,a=r2(+$("#gAmt").value||0),why=$("#gWhy").value.trim()||"선생님";
     if(!k||!a)return $("#gMsg").textContent="학생과 코인을 정해 주세요.";
     act($("#gGo"),$("#gMsg"),async()=>{const cur=(await R(`students/${k}/wallet`).once("value")).val()||0;
