@@ -228,7 +228,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반"};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반"};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -450,6 +450,34 @@ function renderNotes(){
   $("#noteRun").onclick=()=>startPractice(ids.map(i=>BY_ID[i]));
   $("#noteClear").onclick=()=>{wrongNote={};store.set("mc100-wrong",wrongNote);renderNotes()};
 }
+/* ---------- 제한 시간 ---------- */
+const TIMEOUT="(시간 초과)";
+const timeX=s=>{const v=s&&s.timeX;return v==null||v===""||isNaN(+v)?1:+v};
+function limitSec(){
+  const base=+CFG.timer||0;if(!base||!Q)return 0;
+  if(Q.mode==="challenge")return Math.round(base*timeX(ME));
+  return role==="teacher"?base:0;
+}
+let tTick=null;
+function stopTimer(){if(tTick){clearInterval(tTick);tTick=null}}
+function startTimer(){
+  stopTimer();Q.limit=limitSec();Q.tStart=Date.now();
+  if(Q.mode==="challenge"){
+    const qt=(Q.qz&&Q.qz.qt)||{};const saved=+qt[Q.i];
+    if(saved&&saved<=Date.now())Q.tStart=saved;
+    else{Q.qz.qt=Q.qz.qt||{};Q.qz.qt[Q.i]=Q.tStart;R(`students/${KEY}/quiz/qt/${Q.i}`).set(Q.tStart).catch(()=>{})}
+  }
+  if(!Q.limit)return;
+  const draw=()=>{
+    const el=$("#tbar");if(!el||!Q||Q.locked){stopTimer();return}
+    const left=Math.max(0,Q.limit*1000-(Date.now()-Q.tStart)),sec=Math.ceil(left/1000);
+    el.querySelector("i").style.width=(left/(Q.limit*10))+"%";
+    el.querySelector(".sec").textContent=sec+"초";
+    el.classList.toggle("low",sec<=5);
+    if(left<=0){stopTimer();choose(-1)}
+  };
+  draw();if(Q&&!Q.locked)tTick=setInterval(draw,200);
+}
 function renderQuizTab(){
   applyBanner();
   if(Q&&!Q.finished){if(!$("#stage .opts"))renderQ();renderNotes();return}
@@ -464,12 +492,12 @@ function renderQuizTab(){
   renderStart();renderNotes();
 }
 function renderStart(){
-  const n=takeN();
+  const n=takeN(),tl=(+CFG.timer||0)?Math.round((+CFG.timer)*timeX(ME)):0;
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">오늘의 도전 · ${md(today())}</p>
     <h2>맞춤법 퀴즈 ${n}문제</h2>
     <p class="t-help">하루에 한 번만 도전할 수 있어요. 시작하면 끝까지 풀어야 해요.</p>
-    <ul class="rules"><li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li><li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li><li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
+    <ul class="rules">${tl?`<li>문제마다 <b>${tl}초</b> 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li><li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
     <p class="msg" id="startMsg" role="status"></p>
     <div class="actions"><button type="button" class="primary" id="goBtn" ${n?"":"disabled"}>도전 시작</button></div>
   </article>`;
@@ -493,12 +521,13 @@ function renderDoneOnly(qz){
 function resumeChallenge(qz){
   const picks=qz.picks?Object.values(qz.picks):[];
   const qs=qz.qids.map((id,i)=>BY_ID[id]?{...BY_ID[id],shown:qz.shown[i]}:null).filter(Boolean);
-  Q={mode:"challenge",qz,qs,picks,i:Math.min(picks.length,qs.length),res:picks.slice(0,qs.length).map((p,i)=>({q:qs[i],picked:p,ok:p===qs[i].ans})),locked:false,finished:false};
+  const msv=qz.ms?Object.values(qz.ms):[];
+  Q={mode:"challenge",qz,qs,picks,ms:qz.ms?{...qz.ms}:{},i:Math.min(picks.length,qs.length),res:picks.slice(0,qs.length).map((p,i)=>({q:qs[i],picked:p,ok:p===qs[i].ans})),locked:false,finished:false};
   if(Q.i>=Q.qs.length){finishChallenge();return}
   renderQ();
 }
 function startPractice(list){
-  Q={mode:"practice",qs:shuffle(list).map(q=>({...q,shown:shuffle(q.opts)})),i:0,res:[],locked:false,finished:false};
+  Q={mode:"practice",qs:shuffle(list).map(q=>({...q,shown:shuffle(q.opts)})),i:0,ms:{},res:[],locked:false,finished:false};
   if(current!=="quiz"){location.hash="quiz";return}
   renderQ();renderNotes();
 }
@@ -518,19 +547,24 @@ function renderQ(){
       <span class="tag">${lab}</span>
       <span class="tag">${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽</span>
       <div class="bar"><i style="width:${(Q.i/Q.qs.length)*100}%"></i></div></div>
+    ${limitSec()?`<div class="tbar" id="tbar" role="timer" aria-label="남은 시간"><span class="tlbl" aria-hidden="true">⏱</span><span class="track"><i></i></span><span class="sec">${limitSec()}초</span></div>`:""}
     <p class="kind">${q.kind}</p>
     <p class="q" id="qText">${qText(q,false)}</p>
     <div class="opts">${q.shown.map((o,k)=>`<button type="button" class="opt" id="opt-${k}" data-k="${k}"><span class="key">${k+1}번</span>${boxes(o)}</button>`).join("")}</div>
     <div class="feedback" id="fb" hidden></div>
   </article>`;
   document.querySelectorAll(".opt").forEach(b=>b.addEventListener("click",()=>choose(+b.dataset.k)));
+  startTimer();
 }
 const YES=["딩동댕!","정답이에요!","잘했어요!","완벽해요!"],NO=["아깝다!","다시 한번 볼까요?","헷갈렸구나!"];
 function choose(k){
-  if(!Q||Q.locked||Q.finished)return;Q.locked=true;
-  const q=Q.qs[Q.i],picked=q.shown[k],ok=picked===q.ans;
+  if(!Q||Q.locked||Q.finished)return;Q.locked=true;stopTimer();
+  const q=Q.qs[Q.i],late=k<0,picked=late?TIMEOUT:q.shown[k],ok=!late&&picked===q.ans;
+  const ms=Math.max(0,Date.now()-(Q.tStart||Date.now())),fastOn=Q.mode==="challenge"&&Q.limit&&+CFG.fastBonus>0,fast=ok&&fastOn&&ms<=(+CFG.fastSec||5)*1000;
+  Q.ms[Q.i]=ms;
   Q.res.push({q,picked,ok});
-  if(Q.mode==="challenge"){Q.picks.push(picked);R(`students/${KEY}/quiz/picks/${Q.picks.length-1}`).set(picked).catch(()=>{})}
+  if(Q.mode==="challenge"){Q.picks.push(picked);R(`students/${KEY}/quiz/picks/${Q.picks.length-1}`).set(picked).catch(()=>{});R(`students/${KEY}/quiz/ms/${Q.i}`).set(ms).catch(()=>{})}
+  const tb=$("#tbar");if(tb&&!late)tb.classList.add("stopped");
   if(ok)delete wrongNote[q.id];else wrongNote[q.id]=(wrongNote[q.id]||0)+1;
   store.set("mc100-wrong",wrongNote);
   document.querySelectorAll(".opt").forEach(b=>{
@@ -542,8 +576,8 @@ function choose(k){
   const pick=a=>a[Math.floor(Math.random()*a.length)];
   const last=Q.i===Q.qs.length-1;
   const fb=$("#fb");fb.hidden=false;
-  const gain=Q.mode==="challenge"&&ok?` +${fmt(CFG.coinPer)}코인`:"";
-  fb.innerHTML=`<p class="verdict ${ok?"":"no"}">${ok?pick(YES)+gain:pick(NO)+` 정답은 ‘${esc(q.ans)}’`}</p>
+  const gain=Q.mode==="challenge"&&ok?` +${fmt(CFG.coinPer)}코인${fast?` · 번개 +${fmt(CFG.fastBonus)}`:""}`:"";
+  fb.innerHTML=`<p class="verdict ${ok?"":"no"}">${ok?pick(YES)+gain:(late?"시간이 다 됐어요!":pick(NO))+` 정답은 ‘${esc(q.ans)}’`}</p>
     <p class="why">${q.e}</p>
     <div class="next-row"><button type="button" class="primary" id="nextBtn">${last?"채점 결과 보기":"다음 문제 →"}</button></div>`;
   $("#nextBtn").addEventListener("click",next);$("#nextBtn").focus({preventScroll:true});
@@ -561,9 +595,11 @@ function finishChallenge(){
     const cur=(await R("students/"+KEY).once("value")).val()||{};
     const qz=cur.quiz||{};
     if(qz.state==="완료"){Q.coins=qz.coins||0;return}
-    const coins=right*(+CFG.coinPer||0)+(right===total&&total>0?(+CFG.bonus||0):0);
+    const msAll={...(qz.ms||{}),...(Q.ms||{})},fs=(+CFG.fastSec||5)*1000;
+    const fast=(+CFG.timer||0)&&+CFG.fastBonus>0?Q.res.filter((r,i)=>r.ok&&msAll[i]!=null&&+msAll[i]<=fs).length:0;
+    const coins=right*(+CFG.coinPer||0)+(right===total&&total>0?(+CFG.bonus||0):0)+fast*(+CFG.fastBonus||0);
     await upd({wallet:r2((+cur.wallet||0)+coins),qCount:(+cur.qCount||0)+1,qRight:(+cur.qRight||0)+right,
-      quiz:{date:qz.date||today(),state:"완료",right,total,coins}});
+      quiz:{date:qz.date||today(),state:"완료",right,total,coins,fast}});
     if(coins>0)await log(`오늘의 퀴즈 (${total}문제 중 ${right}문제)`,coins);
     Q.coins=coins;
   }).then(ok=>{if(ok){Q.finished=true;renderEnd();renderNotes()}else if($("#doneBtn")){$("#doneBtn").hidden=false}});
@@ -572,15 +608,17 @@ function finishChallenge(){
 function renderEnd(){
   const total=Q.res.length,right=Q.res.filter(r=>r.ok).length,score=total?Math.round(right/total*100):0;
   const wrong=Q.res.filter(r=>!r.ok),ch=Q.mode==="challenge";
+  const mv=Object.values(Q.ms||{}).map(Number).filter(x=>x>0),avg=mv.length?mv.reduce((a,b)=>a+b,0)/mv.length/1000:0,lateN=Q.res.filter(r=>r.picked===TIMEOUT).length;
   const list=wrong.length?`<ul class="review">${wrong.map(({q,picked})=>`<li>
       <span class="tag" style="align-self:flex-start">${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽</span>
       <p class="rq">${q.sent?qText(q,true):(q.mean?`‘${esc(q.mean)}’ → <span class="blank filled">${esc(q.ans)}</span>`:`바른 말: <span class="blank filled">${esc(q.ans)}</span>`)}</p>
-      <p class="rmine">내가 고른 답: <s>${esc(picked)}</s></p>
+      <p class="rmine">${picked===TIMEOUT?"시간이 다 돼서 못 골랐어요":`내가 고른 답: <s>${esc(picked)}</s>`}</p>
       <p class="rwhy">${q.e}</p></li>`).join("")}</ul>`:`<p class="allright">하나도 안 틀렸어요! 맞춤법 박사네요.</p>`;
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">${ch?`오늘의 도전 결과 · ${md(today())}`:"연습 결과 · 코인 없음"}</p>
     <div class="score"><div class="score-num">${score}점${score>=80?CIRCLE.replace('class="mark"','class=""'):""}</div>
       <div class="score-txt"><strong>${total}문제 중 ${right}문제 맞혔어요</strong>
+      ${avg?`<span class="empty">한 문제 평균 ${avg.toFixed(1)}초${lateN?` · 시간 초과 ${lateN}문제`:""}</span>`:""}
       ${ch?`<p class="earned">+${fmt(Q.coins||0)}코인을 지갑에 넣었어요</p><span class="empty">내일 또 도전할 수 있어요.</span>`:""}</div></div>
     ${wrong.length?`<p class="kind">다시 보기</p>`:""}
     ${list}
@@ -813,6 +851,12 @@ function renderTeacher(){
         <label class="t-field" for="cType">문제 유형${sel("cType",[["둘다","고르기 + 빈칸"],["고르기","바른 말·뜻 고르기만"],["빈칸","문장 빈칸만"]],c.type)}</label>
         <label class="t-field" for="cRandom">출제 방식${sel("cRandom",[["0","범위 안에서"],["1","100개 낱말 전체에서 무작위"]],c.random?1:0)}</label>
       </div>
+      <div class="row2">
+        <label class="t-field" for="cTimer">문제당 제한 시간${sel("cTimer",[[0,"없음"],[10,"10초"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"]],+c.timer||0)}</label>
+        <label class="t-field" for="cFastB">번개 보너스 (코인, 0이면 끔)<input type="number" id="cFastB" min="0" step="1" value="${esc(+c.fastBonus||0)}"></label>
+        <label class="t-field" for="cFastS">번개 기준${sel("cFastS",[[3,"3초 안에 맞히면"],[5,"5초 안에 맞히면"],[7,"7초 안에 맞히면"],[10,"10초 안에 맞히면"]],+c.fastSec||5)}</label>
+      </div>
+      <p class="t-help">시간이 지나면 틀린 것으로 처리하고 정답을 보여 줘요. 새로고침해도 시간은 처음부터 다시 시작되지 않아요. 학생마다 시간을 늘리려면 아래 학생 명단에서 '수정·리셋'을 눌러요.</p>
       <label class="t-field" for="cNote">학생에게 보여 줄 안내 문구<input type="text" id="cNote" maxlength="80" value="${esc(c.note)}" placeholder="예: 이번 주는 5~7일차예요."></label>
     </div>
     <div class="t-sec"><h3>코인과 은행</h3>
@@ -853,7 +897,7 @@ function renderTeacher(){
   <article class="card">
     <h3>학생 (${studs.length}명)</h3>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>학번</th><th>이름</th><th>지갑</th><th>은행</th><th>주식</th><th>퀴즈</th><th>오늘</th><th></th></tr></thead><tbody>
-    ${studs.map(([k,s])=>`<tr class="${k===selKey?"picked":""}"><td>${esc(k)}</td><td>${esc(s.name)}</td><td>${fmt(s.wallet)}</td><td>${fmt(s.bank)}</td><td>${fmt(valueOf(s))}</td><td>${+s.qCount||0}회</td><td>${s.quiz&&s.quiz.date===today()?(s.quiz.state==="완료"?`${s.quiz.right}/${s.quiz.total}`:"푸는 중"):"-"}</td><td><button type="button" class="ghost" data-pick="${esc(k)}">${k===selKey?"선택됨":"수정·리셋"}</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">아직 들어온 학생이 없어요.</td></tr>`}
+    ${studs.map(([k,s])=>`<tr class="${k===selKey?"picked":""}"><td>${esc(k)}</td><td>${esc(s.name)}${timeX(s)!==1?` <small class="tx">${timeX(s)?`⏱×${timeX(s)}`:"⏱없음"}</small>`:""}</td><td>${fmt(s.wallet)}</td><td>${fmt(s.bank)}</td><td>${fmt(valueOf(s))}</td><td>${+s.qCount||0}회</td><td>${s.quiz&&s.quiz.date===today()?(s.quiz.state==="완료"?`${s.quiz.right}/${s.quiz.total}`:"푸는 중"):"-"}</td><td><button type="button" class="ghost" data-pick="${esc(k)}">${k===selKey?"선택됨":"수정·리셋"}</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">아직 들어온 학생이 없어요.</td></tr>`}
     </tbody></table></div>
     ${selKey&&STUDENTS[selKey]?editHtml(selKey,STUDENTS[selKey]):""}
     <div class="t-sec"><h3>코인 직접 주기·빼기</h3>
@@ -869,7 +913,7 @@ function renderTeacher(){
   <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. GitHub가 평일 장중 10분마다, 장 마감 뒤 한 번 더 네이버 시세를 가져와요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
   tMsgTxt="";
   $("#cSave").onclick=()=>{
-    const v={range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),
+    const v={range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
       className:$("#cClass").value.trim()||"우리 반",board:$("#cBoard").value,boardName:$("#cBName").value};
     act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);tMsgTxt=`저장했어요. 퀴즈 범위: ${rangeText(parseDays(v.range))}`}).then(ok=>ok&&renderTeacher());
@@ -914,6 +958,7 @@ function editHtml(k,s){
       <label class="t-field" for="eBank">은행 코인<input type="number" id="eBank" min="0" step="1" value="${esc(r2(+s.bank||0))}"></label>
       <label class="t-field" for="eQCount">퀴즈 도전 횟수<input type="number" id="eQCount" min="0" step="1" value="${esc(+s.qCount||0)}"></label>
       <label class="t-field" for="eQRight">누적 맞힌 문제<input type="number" id="eQRight" min="0" step="1" value="${esc(+s.qRight||0)}"></label>
+      <label class="t-field" for="eTimeX">퀴즈 제한 시간<select id="eTimeX">${[[1,"기본"],[1.5,"1.5배로 늘리기"],[2,"2배로 늘리기"],[0,"시간 제한 없음"]].map(([v,n])=>`<option value="${v}" ${timeX(s)===v?"selected":""}>${n}</option>`).join("")}</select></label>
     </div>
     <p class="t-help">학년·반·번호를 바꾸면 기록은 새 학번으로 옮겨지고, 학생은 새 학번으로 들어와 비밀번호를 새로 정해요. 지갑·은행을 고치면 학생 기록에 '선생님 수정'으로 남아요.</p>
     ${holds.length?`<p class="t-help">가진 주식: ${holds.map(([c,h])=>{const st=STOCKS.find(x=>x[0]===c.slice(1));return `${esc(st?st[1]:c)} ${fmtQ(h.qty)}주(${fmt(h.qty*coinPrice(c.slice(1)))}코인)`}).join(", ")}</p>`:""}
@@ -942,13 +987,13 @@ function bindEdit(k){
     const s=STUDENTS[k];if(!s)return;
     const name=$("#eName").value.trim().slice(0,20),g=parseInt($("#eGrade").value,10),c=parseInt($("#eCls").value,10),n=parseInt($("#eNum").value,10);
     const wallet=Math.max(0,r2(+$("#eWallet").value||0)),bank=Math.max(0,r2(+$("#eBank").value||0));
-    const qCount=Math.max(0,Math.round(+$("#eQCount").value||0)),qRight=Math.max(0,Math.round(+$("#eQRight").value||0));
+    const qCount=Math.max(0,Math.round(+$("#eQCount").value||0)),qRight=Math.max(0,Math.round(+$("#eQRight").value||0)),tX=+$("#eTimeX").value;
     if(!name)return m.textContent="이름을 적어 주세요.";
     if(!(g>=1&&g<=6&&c>=1&&n>=1))return m.textContent="학년(1~6), 반, 번호를 숫자로 적어 주세요.";
     const nk=`${g}-${c}-${n}`;
     act($("#eSave"),m,async()=>{
       const up={},dw=r2(wallet-(+s.wallet||0)),dbk=r2(bank-(+s.bank||0));
-      const fields={name,grade:g,cls:c,num:n,wallet,bank,qCount,qRight};
+      const fields={name,grade:g,cls:c,num:n,wallet,bank,qCount,qRight,timeX:tX===1?null:tX};
       const newLogs={};
       if(dw)newLogs[R("logs").push().key]={t:SV.TIMESTAMP,text:"선생님 수정: 지갑",amount:dw};
       if(dbk)newLogs[R("logs").push().key]={t:SV.TIMESTAMP,text:"선생님 수정: 은행",amount:dbk};
