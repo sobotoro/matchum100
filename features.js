@@ -80,7 +80,7 @@ const avCache=new Map();
 let fxSeq=0;
 const AVATAR_ON=false; // 캐릭터(아바타) 기능 끔
 function avatarSvg(av,size,label){
-  if(!AVATAR_ON)return "";
+  if(!AVATAR_ON)return typeof avatarFace==="function"?avatarFace(Math.min(size||40,36),label):"";
   size=size||40;
   const big=size>=80,key=JSON.stringify(av)+"|"+big;
   let body=avCache.get(key);
@@ -118,17 +118,7 @@ function renderMyPage(){
   const cost=holds.reduce((t,x)=>t+x.cost,0),pl=sv-cost,qz=s.quiz||{};
   const sg=x=>x>=0?"+":"";
   const raw=(s.avatar&&s.avatar.slots)||{};
-  $("#view-me").innerHTML=`<article class="card me-hero">
-    <div class="hero-info">
-      <h2>${esc(s.name)}</h2>
-      <p class="t-help">${esc(s.grade)}학년 ${esc(s.cls)}반 ${esc(s.num)}번</p>
-      <form class="status-form" id="stForm" novalidate>
-        <label class="t-field" for="stIn">상태메시지<input type="text" id="stIn" maxlength="40" value="${esc(s.status||"")}" placeholder="오늘의 기분이나 목표를 적어요"></label>
-        <button type="submit" class="secondary" id="stSave">저장</button>
-      </form>
-      <p class="msg" id="meMsg" role="status">${esc(meMsg)}</p>
-    </div>
-  </article>
+  $("#view-me").innerHTML=`${avatarCardHtml(s)}
   <article class="card"><h3>내 코인</h3>
     <div class="acct four">
       <div class="acct-box"><span class="lbl">모두</span><b>${fmt(total)}</b></div>
@@ -150,6 +140,7 @@ function renderMyPage(){
   </article>`;
   meMsg="";
   const m=$("#meMsg");
+  avatarBindCard(s,m);
   const cur=()=>{const a=(ME.avatar&&typeof ME.avatar==="object")?ME.avatar:{};return {g:a.g==="f"?"f":"m",hair:HAIRS[a.hair]?+a.hair:av.hair,skin:SKINS[a.skin]?+a.skin:0,slots:{...(a.slots||{})}}};
   const save=a=>act(null,m,()=>upd({avatar:a})).then(ok=>{if(ok)renderMyPage()});
   document.querySelectorAll("[data-av-g]").forEach(b=>b.onclick=()=>save({...cur(),g:b.dataset.avG}));
