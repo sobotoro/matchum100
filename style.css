@@ -332,3 +332,17 @@ body{margin:0}
 @media (prefers-reduced-motion:reduce){.av .fx{animation:none!important}}
 .pick-row{display:grid;grid-template-columns:3.5em minmax(0,1fr);align-items:center}
 @media (max-width:480px){.pick-row{grid-template-columns:1fr}}
+
+/* 제한 시간 */
+.tbar{display:flex;align-items:center;gap:8px;margin:2px 0 2px}
+.tbar .tlbl{font-size:.95rem;line-height:1}
+.tbar .track{flex:1;height:10px;background:var(--grid);border-radius:999px;overflow:hidden}
+.tbar .track i{display:block;height:100%;width:100%;background:var(--ink);border-radius:999px;transition:width .2s linear}
+.tbar .sec{min-width:3.2em;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.tbar.low .track i{background:var(--pen)}
+.tbar.low .sec{color:var(--pen);animation:tpulse 1s ease-in-out infinite}
+.tbar.stopped .track i{transition:none;opacity:.45}
+.tbar.stopped .sec{animation:none}
+@keyframes tpulse{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.tbar .track i{transition:none}.tbar.low .sec{animation:none}}
+.tbl small.tx{color:var(--muted);font-size:.78rem;white-space:nowrap}
