@@ -336,13 +336,47 @@ async function studentLogin(g,c,n,name,pin){
 /* ---------- 학생 기록 쓰기 ---------- */
 async function upd(fields){await R("students/"+KEY).update(fields)}
 async function log(text,amount){await R("logs/"+KEY).push({t:SV.TIMESTAMP,text,amount:r2(amount)})}
+/* ---------- 은행 이자: 실제 은행처럼 맡긴 날수만큼 ----------
+   이자 날(lastPaid+7일)에 지난 7일 평균 잔액 × 금리. accr = 잔액×날수 합, accrAt = 어디까지 더했는지 */
+const dayDiff=(a,b)=>Math.round((Date.parse(b+"T00:00:00Z")-Date.parse(a+"T00:00:00Z"))/864e5);
+function bankState(s,t){
+  const rate=Math.max(0,+CFG.rate||0);
+  let bank=+s.bank||0,last=s.lastPaid||"",accr=+s.accr||0,at=s.accrAt||last;const pays=[];
+  if(!last)return {bank,lastPaid:"",accr:0,accrAt:"",pays,rate};
+  if(at<last)at=last;
+  let g=0;
+  while(addDays(last,7)<=t&&g++<520){
+    const p=addDays(last,7);accr+=bank*Math.max(0,dayDiff(at,p));
+    const avg=accr/7,it=r2(avg*rate/100);
+    if(it>0){bank=r2(bank+it);pays.push({it,avg:r2(avg),date:p})}
+    accr=0;at=p;last=p;
+  }
+  if(at<t){accr+=bank*dayDiff(at,t);at=t}
+  return {bank,lastPaid:last,accr:r2(accr),accrAt:at,pays,rate};
+}
+function bankInfo(s){
+  const t=today(),st=bankState(s,t);if(!st.lastPaid)return null;
+  const next=addDays(st.lastPaid,7),avg=(st.accr+st.bank*dayDiff(st.accrAt,next))/7;
+  return {next,left:dayDiff(t,next),avg:r2(avg),expect:r2(avg*st.rate/100),rate:st.rate};
+}
+async function bankTx(fn){
+  let err=null,pays=[],rate=0;
+  const res=await R("students/"+KEY).transaction(cur=>{
+    if(!cur)return cur;
+    err=null;const t=today(),st=bankState(cur,t);pays=st.pays;rate=st.rate;
+    const ch=fn(cur,st,t);
+    if(typeof ch==="string"){err=ch;return}
+    if(!ch)return;
+    return {...cur,...ch};
+  });
+  if(err)throw new Error(err);
+  if(res&&res.committed)for(const p of pays)await log(`은행 이자 (${md(p.date)} · 평균 ${fmt(p.avg)}코인 × ${rate}%)`,p.it);
+  return !!(res&&res.committed);
+}
 async function payInterest(){
   if(!ME||!ME.lastPaid)return;
-  let last=ME.lastPaid,bank=+ME.bank||0;const t=today(),rate=Math.max(0,+CFG.rate||0),logs=[];let g=0;
-  while(addDays(last,7)<=t&&g++<520){last=addDays(last,7);const it=r2(bank*rate/100);if(it>0){bank=r2(bank+it);logs.push(it)}}
-  if(last===ME.lastPaid)return;
-  await upd({bank,lastPaid:last});
-  for(const it of logs)await log(`은행 이자 (1주일 ${rate}%)`,it);
+  if(bankState(ME,today()).lastPaid===ME.lastPaid)return;
+  try{await bankTx((cur,st)=>cur.lastPaid&&st.lastPaid!==cur.lastPaid?{bank:st.bank,lastPaid:st.lastPaid,accr:st.accr,accrAt:st.accrAt}:null)}catch(e){}
 }
 
 /* ---------- 시세 ---------- */
@@ -664,13 +698,13 @@ document.addEventListener("keydown",e=>{
 /* ---------- 지갑·은행 ---------- */
 let bankMsg="";
 function renderBank(){
-  const rate=+CFG.rate||0,nextPay=ME.lastPaid?addDays(ME.lastPaid,7):null,expect=r2((+ME.bank||0)*rate/100);
+  const rate=+CFG.rate||0,bi=bankInfo(ME),ex=r2(1300/7*rate/100);
   $("#view-bank").innerHTML=`<article class="card">
     <h2>지갑과 은행</h2>
-    <div class="acct">
+    <div class="acct three">
       <div class="acct-box"><span class="lbl">지갑</span><b>${fmt(ME.wallet)}</b><small>바로 쓸 수 있는 코인</small></div>
-      <div class="acct-box"><span class="lbl">은행 저금</span><b>${fmt(ME.bank)}</b>
-        <small>금리: 1주일에 ${fmt(rate)}%${nextPay?` · 다음 이자 ${md(nextPay)} (예상 +${fmt(expect)}코인)`:" · 저금하면 7일마다 이자가 붙어요"}</small></div>
+      <div class="acct-box"><span class="lbl">은행 저금</span><b>${fmt(ME.bank)}</b><small>금리: 1주일에 ${fmt(rate)}%</small></div>
+      <div class="acct-box next"><span class="lbl">다음 이자</span>${bi?`<b>+${fmt(bi.expect)}</b><small><strong>${md(bi.next)}</strong> (${bi.left<=0?"오늘":bi.left+"일 뒤"}) 예상</small><small>이번 주 평균 잔액 ${fmt(bi.avg)}코인 × ${fmt(rate)}%</small><small>지금 잔액 그대로 두었을 때예요. 넣고 빼면 바뀌어요.</small>`:`<b>-</b><small>저금하면 그날부터 7일마다 이자가 붙어요.</small>`}</div>
     </div>
     <div class="field">
       <label class="label" for="bankAmt">옮길 코인</label>
@@ -688,7 +722,7 @@ function renderBank(){
       </div>
       <p class="msg" id="bankMsg" role="status">${esc(bankMsg)}</p>
     </div>
-    <p class="t-help">한국은행 기준금리를 우리 반에서는 1주일 이율로 써요. 100코인을 저금하면 1주일 뒤 ${fmt(rate)}코인이 붙고, 이자에도 다시 이자가 붙어요. 금리는 선생님이 정해요.</p>
+    <p class="t-help">한국은행 기준금리를 우리 반에서는 1주일 이율로 써요. 은행은 맡긴 날수만큼 이자를 계산해요. 이자 날마다 지난 7일 동안의 평균 잔액 × 금리만큼 이자가 붙고, 이자에도 다시 이자가 붙어요. 예를 들어 첫날 100코인을 넣고 다음 날 100코인을 더 넣으면, 첫 이자 날에는 (100코인 × 7일 + 100코인 × 6일) ÷ 7 = 평균 185.71코인에 대한 이자 ${fmt(ex)}코인이 붙어요. 금리는 선생님이 정해요.</p>
   </article>
   <article class="card">
     <h3>최근 기록</h3>
@@ -701,14 +735,16 @@ function renderBank(){
   const m=$("#bankMsg");
   $("#depBtn").onclick=()=>{const a=amt();if(!(a>0))return m.textContent="옮길 코인을 적어 주세요.";
     act($("#depBtn"),m,async()=>{
-      if(a>(+ME.wallet||0)+1e-9)throw new Error(`지갑에 ${fmt(ME.wallet)}코인밖에 없어요.`);
-      await upd({wallet:r2(ME.wallet-a),bank:r2((+ME.bank||0)+a),...(ME.lastPaid?{}:{lastPaid:today()})});
+      const ok=await bankTx((cur,st,t)=>{const w=+cur.wallet||0;if(a>w+1e-9)return `지갑에 ${fmt(w)}코인밖에 없어요.`;
+        return {wallet:r2(w-a),bank:r2(st.bank+a),lastPaid:st.lastPaid||t,accr:st.accr,accrAt:st.accrAt||t}});
+      if(!ok)throw new Error("저금하지 못했어요. 다시 해 보세요.");
       await log("은행에 저금",-a);bankMsg=`${fmt(a)}코인을 저금했어요.`;
     }).then(ok=>ok&&renderBank())};
   $("#wdBtn").onclick=()=>{const a=amt();if(!(a>0))return m.textContent="찾을 코인을 적어 주세요.";
     act($("#wdBtn"),m,async()=>{
-      if(a>(+ME.bank||0)+1e-9)throw new Error(`저금한 코인은 ${fmt(ME.bank)}코인이에요.`);
-      await upd({bank:r2(ME.bank-a),wallet:r2((+ME.wallet||0)+a)});
+      const ok=await bankTx((cur,st)=>{if(a>st.bank+1e-9)return `저금한 코인은 ${fmt(st.bank)}코인이에요.`;
+        return {bank:r2(st.bank-a),wallet:r2((+cur.wallet||0)+a),lastPaid:st.lastPaid,accr:st.accr,accrAt:st.accrAt}});
+      if(!ok)throw new Error("찾지 못했어요. 다시 해 보세요.");
       await log("은행에서 찾기",a);bankMsg=`${fmt(a)}코인을 지갑으로 옮겼어요.`;
     }).then(ok=>ok&&renderBank())};
 }
@@ -1048,8 +1084,8 @@ function bindEdit(k){
       if(op==="pw"){up[`gens/${k}`]=await bumpGen(k);up[`students/${k}/uid`]=null}
       else if(op==="quiz"){up[`students/${k}/quiz`]=null}
       else if(op==="sell"){up[`students/${k}/wallet`]=r2((+s.wallet||0)+sv);up[`students/${k}/stocks`]=null;L("선생님: 주식 모두 팔기",sv)}
-      else if(op==="zero"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null});if(total)L("선생님: 코인 초기화",-total)}
-      else if(op==="full"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null,[`students/${k}/quiz`]:null,[`students/${k}/qh`]:null,[`students/${k}/qCount`]:0,[`students/${k}/qRight`]:0,[`logs/${k}`]:null,[`purchases/${k}`]:null})}
+      else if(op==="zero"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/accr`]:null,[`students/${k}/accrAt`]:null,[`students/${k}/stocks`]:null});if(total)L("선생님: 코인 초기화",-total)}
+      else if(op==="full"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/accr`]:null,[`students/${k}/accrAt`]:null,[`students/${k}/stocks`]:null,[`students/${k}/quiz`]:null,[`students/${k}/qh`]:null,[`students/${k}/qCount`]:0,[`students/${k}/qRight`]:0,[`logs/${k}`]:null,[`purchases/${k}`]:null})}
       else if(op==="del"){Object.assign(up,{[`students/${k}`]:null,[`logs/${k}`]:null,[`purchases/${k}`]:null,[`gens/${k}`]:await bumpGen(k)})}
       await db.ref("matchum").update(up);
     }).then(done(b.dataset.ok,op!=="del"));
