@@ -24,6 +24,7 @@ document.getElementById("app").innerHTML=`
     <section class="tbanner" id="tbanner" hidden></section>
     <div class="notes" id="notes" hidden></div>
     <main id="stage" aria-live="polite"></main>
+    <section id="meal"></section>
   </section>
   <section class="view" id="view-bank" hidden></section>
   <section class="view" id="view-stock" hidden></section>
@@ -253,7 +254,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반"};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -489,6 +490,68 @@ window.addEventListener("hashchange",()=>{if(role)showTab(location.hash.slice(1)
 $("#homeBtn").addEventListener("click",()=>{if(!role)return;const h=role==="teacher"?"teacher":"quiz";if(h==="quiz"&&Q&&Q.finished)Q=null;if(location.hash!=="#"+h)location.hash=h;else showTab(h);window.scrollTo({top:0})});
 function rerender(){if(busy||typing())return;if(role&&!$("#view-"+current).hidden)showTab(current)}
 
+/* ---------- 급식 완식 보드 ----------
+   학생 자기 기록에만 써요: meal {d,t,c,x(취소)} · mealSeen {d,k:{학번:1}} 봤어요 · mealFlag {d,k:{학번:1}} 선생님께 확인 요청 */
+let mealPledge=false,mealMsg="";
+const nowHM=()=>new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Seoul",hour12:false}).slice(0,5);
+const cardItem=()=>Object.values(SHOP||{}).find(it=>/칭찬\s*카드\s*1/.test(it.name||""));
+const mealCoins=()=>{const c=cardItem();return CFG.mealLink!==false&&c?Math.max(0,+c.price||0):Math.max(0,Math.round(+CFG.mealCoins||0))};
+const mealOpen=()=>{const d=dowOf(today()),h=nowHM();return d>0&&d<6&&h>=(CFG.mealFrom||"12:30")&&h<=(CFG.mealTo||"13:40")};
+const dayMark=(o,k)=>{const d=today();return !!(o&&o.d===d&&o.k&&o.k[k])};
+function mealList(){const d=today();return Object.entries(STUDENTS||{}).filter(([,s])=>s.meal&&s.meal.d===d).sort((a,b)=>(+a[1].meal.t||0)-(+b[1].meal.t||0))}
+const seenBy=k=>Object.entries(STUDENTS||{}).filter(([,s])=>dayMark(s.mealSeen,k)).map(([kk])=>kk);
+const flagBy=k=>Object.entries(STUDENTS||{}).filter(([,s])=>dayMark(s.mealFlag,k)).map(([kk,s])=>s.name||kk);
+function renderMeal(){
+  const el=$("#meal");if(!el)return;
+  if(CFG.mealOn===false||(Q&&!Q.finished)){el.innerHTML="";return}
+  const list=mealList(),ok=list.filter(([,s])=>!s.meal.x),c=mealCoins(),open=mealOpen(),useSeen=CFG.mealSeen!==false,t=role==="teacher";
+  const mine=ME&&ME.meal&&ME.meal.d===today()?ME.meal:null;
+  let top="";
+  if(!t){
+    if(mine&&mine.x)top=`<p class="meal-state no">선생님이 오늘 급식 보상을 취소했어요.</p>`;
+    else if(mine)top=`<p class="meal-state">다 먹었어요! <b>+${fmt(mine.c)}코인</b>을 받았어요.</p>`;
+    else if(open)top=`<label class="meal-pledge" for="mealPledge"><input type="checkbox" id="mealPledge" ${mealPledge?"checked":""}> 정직하게 눌러요. 다 먹지 않았으면 누르지 않아요.</label>
+      <div class="actions"><button type="button" class="primary" id="mealBtn" ${mealPledge?"":"disabled"}>급식 다 먹었어요 (+${fmt(c)}코인)</button></div>`;
+    else top=`<p class="meal-state off">급식을 다 먹었다면 평일 ${esc(CFG.mealFrom||"12:30")}~${esc(CFG.mealTo||"13:40")}에 누를 수 있어요.</p>`;
+  }
+  const row=([k,s])=>{
+    const x=!!s.meal.x,seen=seenBy(k),me=k===KEY,iSeen=!t&&dayMark(ME&&ME.mealSeen,k),iFlag=!t&&dayMark(ME&&ME.mealFlag,k),flags=t?flagBy(k):[];
+    return `<li class="${x?"x":""}${flags.length?" flag":""}"><span class="mn">${esc(s.name||k)}${me?` <small>(나)</small>`:""}</span><span class="mt">${new Date(+s.meal.t||0).toLocaleTimeString("ko-KR",{timeZone:"Asia/Seoul",hour:"numeric",minute:"2-digit"})}</span>
+      ${useSeen?`<span class="ms${seen.length>=2?" ok":""}" title="봤어요 ${seen.length}명">${seen.length>=2?"✔ ":""}봤어요 ${seen.length}</span>`:""}
+      ${x?`<span class="mx">취소됨</span>`:t?`${flags.length?`<span class="mf">확인 요청: ${esc(flags.join(", "))}</span>`:""}<button type="button" class="ghost" data-mcancel="${esc(k)}">보상 취소</button>`
+        :me?"":`${useSeen?`<button type="button" class="ghost" data-mseen="${esc(k)}" aria-pressed="${iSeen}">${iSeen?"봤어요 ✓":"봤어요"}</button>`:""}<button type="button" class="link mflag" data-mflag="${esc(k)}" aria-pressed="${iFlag}">${iFlag?"확인 요청함":"선생님께 확인 요청"}</button>`}
+    </li>`};
+  el.innerHTML=`<article class="card meal">
+    <div class="meal-head"><h3>오늘의 급식 완식</h3><span class="meal-n">${ok.length}명</span></div>
+    <p class="t-help">다 먹은 친구가 직접 눌러요. 칭찬 카드 1장 값인 <b>${fmt(c)}코인</b>을 받아요.${useSeen?" 급식실에서 친구 식판을 봤다면 '봤어요'를 눌러 주세요.":""}${t?" 확인 요청은 선생님에게만 보여요.":" '선생님께 확인 요청'은 선생님에게만 보여요."}</p>
+    ${top}<p class="msg" id="mealMsg" role="status">${esc(mealMsg)}</p>
+    ${list.length?`<ol class="meal-list">${list.map(row).join("")}</ol>`:`<p class="empty">아직 누른 친구가 없어요.</p>`}
+  </article>`;
+  mealMsg="";
+  const pl=$("#mealPledge");if(pl)pl.onchange=()=>{mealPledge=pl.checked;const b=$("#mealBtn");if(b)b.disabled=!mealPledge};
+  const mb=$("#mealBtn");if(mb)mb.onclick=()=>act(mb,$("#mealMsg"),async()=>{
+    if(!mealOpen())throw new Error("지금은 누를 수 있는 시간이 아니에요.");
+    const d=today(),coins=mealCoins();let dup=false;
+    const r=await R("students/"+KEY).transaction(cur=>{if(!cur)return cur;dup=!!(cur.meal&&cur.meal.d===d);if(dup)return;return {...cur,wallet:r2((+cur.wallet||0)+coins),meal:{d,t:Date.now(),c:coins}}});
+    if(dup)throw new Error("오늘은 이미 눌렀어요.");
+    if(!r||!r.committed)throw new Error("저장하지 못했어요. 다시 눌러 주세요.");
+    if(coins>0)await log("급식 다 먹었어요 (칭찬 카드 1장 값)",coins);
+    mealPledge=false;mealMsg="잘했어요! 코인이 지갑에 들어갔어요.";
+  }).then(()=>renderMeal());
+  const toggle=(field,k)=>{const d=today(),cur=ME&&ME[field]&&ME[field].d===d?{...(ME[field].k||{})}:{};if(cur[k])delete cur[k];else cur[k]=1;return R(`students/${KEY}/${field}`).set({d,k:cur})};
+  document.querySelectorAll("[data-mseen]").forEach(b=>b.onclick=()=>act(b,null,()=>toggle("mealSeen",b.dataset.mseen)).then(()=>renderMeal()));
+  document.querySelectorAll("[data-mflag]").forEach(b=>b.onclick=()=>{const was=dayMark(ME&&ME.mealFlag,b.dataset.mflag);act(b,null,()=>toggle("mealFlag",b.dataset.mflag)).then(ok=>{if(ok){mealMsg=was?"확인 요청을 거뒀어요.":"선생님께만 조용히 알렸어요.";renderMeal()}})});
+  document.querySelectorAll("[data-mcancel]").forEach(b=>b.onclick=()=>{
+    if(b.dataset.sure!=="1"){b.dataset.sure="1";b.textContent="한 번 더 누르면 취소";setTimeout(()=>{if(document.body.contains(b)){b.dataset.sure="";b.textContent="보상 취소"}},3000);return}
+    const k=b.dataset.mcancel,d=today();let c=0;
+    act(b,$("#mealMsg"),async()=>{
+      const r=await R("students/"+k).transaction(cur=>{if(!cur||!cur.meal||cur.meal.d!==d||cur.meal.x)return;c=+cur.meal.c||0;return {...cur,wallet:r2(Math.max(0,(+cur.wallet||0)-c)),meal:{...cur.meal,x:true}}});
+      if(r&&r.committed&&c)await R("logs/"+k).push({t:SV.TIMESTAMP,text:"선생님: 급식 보상 취소",amount:-c});
+      mealMsg="보상을 취소했어요.";
+    }).then(()=>renderMeal());
+  });
+}
+
 /* ---------- 오늘의 퀴즈 ---------- */
 let wrongNote=store.get("mc100-wrong",{});
 let Q=null;
@@ -542,7 +605,7 @@ function startTimer(){
   draw();if(Q&&!Q.locked)tTick=setInterval(draw,200);
 }
 function renderQuizTab(){
-  applyBanner();
+  applyBanner();renderMeal();
   if(Q&&!Q.finished){if(!$("#stage .opts"))renderQ();renderNotes();return}
   if(Q&&Q.finished){renderEnd();renderNotes();return}
   if(role==="teacher"){
@@ -932,6 +995,19 @@ function renderTeacher(){
       </div>
       <p class="t-help">한국은행 기준금리는 연 3.00%예요(2026년 10월 22일 동결, 다음 결정 11월 26일). 바뀌면 숫자만 고쳐 저장하세요.</p>
     </div>
+    <div class="t-sec"><h3>급식 완식 보상</h3>
+      <div class="row2">
+        <label class="t-field" for="cMealOn">급식 완식 보드${sel("cMealOn",[["1","켜기"],["0","끄기"]],c.mealOn===false?0:1)}</label>
+        <label class="t-field" for="cMealLink">보상 코인${sel("cMealLink",[["1",`칭찬 카드 1개 가격과 같게${cardItem()?` (지금 ${fmt(cardItem().price)}코인)`:""}`],["0","직접 정하기"]],c.mealLink===false?0:1)}</label>
+        <label class="t-field" for="cMealCoins">직접 정할 때 코인<input type="number" id="cMealCoins" min="0" step="1" value="${esc(+c.mealCoins||0)}"></label>
+      </div>
+      <div class="row2">
+        <label class="t-field" for="cMealFrom">누를 수 있는 시작 시각<input type="time" id="cMealFrom" value="${esc(c.mealFrom||"12:30")}"></label>
+        <label class="t-field" for="cMealTo">끝 시각<input type="time" id="cMealTo" value="${esc(c.mealTo||"13:40")}"></label>
+        <label class="t-field" for="cMealSeen">친구 '봤어요' 표시${sel("cMealSeen",[["1","쓰기"],["0","안 쓰기"]],c.mealSeen===false?0:1)}</label>
+      </div>
+      <p class="t-help">평일에만 누를 수 있고 하루에 한 번이에요. 누르면 코인이 바로 들어가요. 학생 화면 '오늘의 퀴즈' 아래 보드에서 '선생님께 확인 요청'이 들어온 학생을 보고, 사실이 아니면 '보상 취소'를 누르면 코인을 돌려받아요.</p>
+    </div>
     <div class="t-sec"><h3>우리 반 순위표</h3>
       <div class="row2">
         <label class="t-field" for="cClass">반 이름<input type="text" id="cClass" maxlength="20" value="${esc(c.className)}"></label>
@@ -980,7 +1056,9 @@ function renderTeacher(){
   $("#cSave").onclick=()=>{
     const v={range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
-      className:$("#cClass").value.trim()||"우리 반",board:$("#cBoard").value,boardName:$("#cBName").value};
+      className:$("#cClass").value.trim()||"우리 반",board:$("#cBoard").value,boardName:$("#cBName").value,
+      mealOn:$("#cMealOn").value==="1",mealLink:$("#cMealLink").value==="1",mealCoins:Math.max(0,Math.round(+$("#cMealCoins").value||0)),
+      mealFrom:$("#cMealFrom").value||"12:30",mealTo:$("#cMealTo").value||"13:40",mealSeen:$("#cMealSeen").value==="1"};
     act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);tMsgTxt=`저장했어요. 퀴즈 범위: ${rangeText(parseDays(v.range))}`}).then(ok=>ok&&renderTeacher());
   };
   const syncShop=()=>TSHOP.forEach((it,i)=>{it.name=$("#ts-name-"+i).value;it.price=Math.max(0,Math.round(+$("#ts-price-"+i).value||0));it.desc=$("#ts-desc-"+i).value});
