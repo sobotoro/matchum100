@@ -336,17 +336,21 @@ async function studentLogin(g,c,n,name,pin){
 /* ---------- 학생 기록 쓰기 ---------- */
 async function upd(fields){await R("students/"+KEY).update(fields)}
 async function log(text,amount){await R("logs/"+KEY).push({t:SV.TIMESTAMP,text,amount:r2(amount)})}
-/* ---------- 은행 이자: 실제 은행처럼 맡긴 날수만큼 ----------
-   이자 날(lastPaid+7일)에 지난 7일 평균 잔액 × 금리. accr = 잔액×날수 합, accrAt = 어디까지 더했는지 */
+/* ---------- 은행 이자: 실제 은행처럼 맡긴 날수만큼, 반 전체 매주 월요일 지급 ----------
+   이자 날(월요일)에 지난 7일 평균 잔액 × 금리. lastPaid = 마지막으로 정산한 월요일,
+   accr = 잔액×날수 합, accrAt = 어디까지 더했는지 */
 const dayDiff=(a,b)=>Math.round((Date.parse(b+"T00:00:00Z")-Date.parse(a+"T00:00:00Z"))/864e5);
+const dowOf=ds=>new Date(ds+"T00:00:00Z").getUTCDay();
+const nextMon=ds=>addDays(ds,((8-dowOf(ds))%7)||7);
+const monOf=ds=>addDays(ds,-((dowOf(ds)+6)%7));
 function bankState(s,t){
   const rate=Math.max(0,+CFG.rate||0);
   let bank=+s.bank||0,last=s.lastPaid||"",accr=+s.accr||0,at=s.accrAt||last;const pays=[];
   if(!last)return {bank,lastPaid:"",accr:0,accrAt:"",pays,rate};
   if(at<last)at=last;
   let g=0;
-  while(addDays(last,7)<=t&&g++<520){
-    const p=addDays(last,7);accr+=bank*Math.max(0,dayDiff(at,p));
+  while(nextMon(last)<=t&&g++<520){
+    const p=nextMon(last);accr+=bank*Math.max(0,dayDiff(at,p));
     const avg=accr/7,it=r2(avg*rate/100);
     if(it>0){bank=r2(bank+it);pays.push({it,avg:r2(avg),date:p})}
     accr=0;at=p;last=p;
@@ -356,7 +360,7 @@ function bankState(s,t){
 }
 function bankInfo(s){
   const t=today(),st=bankState(s,t);if(!st.lastPaid)return null;
-  const next=addDays(st.lastPaid,7),avg=(st.accr+st.bank*dayDiff(st.accrAt,next))/7;
+  const next=nextMon(st.lastPaid),avg=(st.accr+st.bank*dayDiff(st.accrAt,next))/7;
   return {next,left:dayDiff(t,next),avg:r2(avg),expect:r2(avg*st.rate/100),rate:st.rate};
 }
 async function bankTx(fn){
@@ -704,7 +708,7 @@ function renderBank(){
     <div class="acct three">
       <div class="acct-box"><span class="lbl">지갑</span><b>${fmt(ME.wallet)}</b><small>바로 쓸 수 있는 코인</small></div>
       <div class="acct-box"><span class="lbl">은행 저금</span><b>${fmt(ME.bank)}</b><small>금리: 1주일에 ${fmt(rate)}%</small></div>
-      <div class="acct-box next"><span class="lbl">다음 이자</span>${bi?`<b>+${fmt(bi.expect)}</b><small><strong>${md(bi.next)}</strong> (${bi.left<=0?"오늘":bi.left+"일 뒤"}) 예상</small><small>이번 주 평균 잔액 ${fmt(bi.avg)}코인 × ${fmt(rate)}%</small><small>지금 잔액 그대로 두었을 때예요. 넣고 빼면 바뀌어요.</small>`:`<b>-</b><small>저금하면 그날부터 7일마다 이자가 붙어요.</small>`}</div>
+      <div class="acct-box next"><span class="lbl">다음 이자</span>${bi?`<b>+${fmt(bi.expect)}</b><small><strong>${md(bi.next)} 월요일</strong> (${bi.left<=0?"오늘":bi.left+"일 뒤"}) 예상</small><small>이번 주 평균 잔액 ${fmt(bi.avg)}코인 × ${fmt(rate)}%</small><small>지금 잔액 그대로 두었을 때예요. 넣고 빼면 바뀌어요.</small>`:`<b>-</b><small>매주 월요일이 이자 날이에요. 저금하면 넣은 날부터 이자가 쌓여요.</small>`}</div>
     </div>
     <div class="field">
       <label class="label" for="bankAmt">옮길 코인</label>
@@ -722,7 +726,7 @@ function renderBank(){
       </div>
       <p class="msg" id="bankMsg" role="status">${esc(bankMsg)}</p>
     </div>
-    <p class="t-help">한국은행 기준금리를 우리 반에서는 1주일 이율로 써요. 은행은 맡긴 날수만큼 이자를 계산해요. 이자 날마다 지난 7일 동안의 평균 잔액 × 금리만큼 이자가 붙고, 이자에도 다시 이자가 붙어요. 예를 들어 첫날 100코인을 넣고 다음 날 100코인을 더 넣으면, 첫 이자 날에는 (100코인 × 7일 + 100코인 × 6일) ÷ 7 = 평균 185.71코인에 대한 이자 ${fmt(ex)}코인이 붙어요. 금리는 선생님이 정해요.</p>
+    <p class="t-help">한국은행 기준금리를 우리 반에서는 1주일 이율로 써요. 우리 반 은행은 <b>매주 월요일</b>에 이자를 줘요. 이자는 맡긴 날수만큼 계산해서, 지난 7일 동안의 평균 잔액 × 금리만큼 붙고, 이자에도 다시 이자가 붙어요. 예를 들어 월요일에 100코인을 넣고 화요일에 100코인을 더 넣으면, 다음 월요일에는 (100코인 × 7일 + 100코인 × 6일) ÷ 7 = 평균 185.71코인에 대한 이자 ${fmt(ex)}코인이 붙어요. 중간에 모두 찾아도 그때까지 맡긴 날수만큼의 이자는 월요일에 들어와요. 금리는 선생님이 정해요.</p>
   </article>
   <article class="card">
     <h3>최근 기록</h3>
@@ -736,7 +740,7 @@ function renderBank(){
   $("#depBtn").onclick=()=>{const a=amt();if(!(a>0))return m.textContent="옮길 코인을 적어 주세요.";
     act($("#depBtn"),m,async()=>{
       const ok=await bankTx((cur,st,t)=>{const w=+cur.wallet||0;if(a>w+1e-9)return `지갑에 ${fmt(w)}코인밖에 없어요.`;
-        return {wallet:r2(w-a),bank:r2(st.bank+a),lastPaid:st.lastPaid||t,accr:st.accr,accrAt:st.accrAt||t}});
+        return {wallet:r2(w-a),bank:r2(st.bank+a),lastPaid:st.lastPaid||monOf(t),accr:st.accr,accrAt:st.accrAt||t}});
       if(!ok)throw new Error("저금하지 못했어요. 다시 해 보세요.");
       await log("은행에 저금",-a);bankMsg=`${fmt(a)}코인을 저금했어요.`;
     }).then(ok=>ok&&renderBank())};
