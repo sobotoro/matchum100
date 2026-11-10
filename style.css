@@ -346,3 +346,8 @@ body{margin:0}
 @keyframes tpulse{50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.tbar .track i{transition:none}.tbar.low .sec{animation:none}}
 .tbl small.tx{color:var(--muted);font-size:.78rem;white-space:nowrap}
+.acct.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.acct-box.next{border-style:dashed}
+.acct-box.next small strong{color:var(--ink);font-weight:700}
+@media (max-width:620px){.acct.three{grid-template-columns:1fr 1fr}.acct.three .acct-box.next{grid-column:1/-1}}
+@media (max-width:480px){.acct.three{grid-template-columns:1fr}}
