@@ -217,6 +217,31 @@ B.forEach(([d,n,a,am,b,bm,ss])=>{
   ss.forEach(([s,ok,ng],i)=>ALL.push({id:`t-${n}-${i}`,d,n,type:"sent",kind:"문장 빈칸 채우기",sent:s,opts:[ok,ng],ans:ok,e}));
 });
 const BY_ID=Object.fromEntries(ALL.map(q=>[q.id,q]));
+/* ---------- 예시문 여러 개 (examples.js) ---------- */
+const EXS=typeof EX==="object"&&EX?EX:{};
+ALL.forEach(q=>{if(q.type!=="sent")return;q.vars=[[q.sent,q.opts[0],q.opts[1]],...(EXS[q.id]||[]).map(x=>typeof x==="string"?[x,q.opts[0],q.opts[1]]:x)]});
+function withVar(q,v){const x=q&&q.vars&&q.vars[v];if(!x)return q;return {...q,sent:x[0],ans:x[1],opts:[x[1],x[2]],vi:v}}
+const qHist=id=>{const h=ME&&ME.qh&&ME.qh[id];if(!h)return null;const t=String(h);return {d:`20${t.slice(0,2)}-${t.slice(2,4)}-${t.slice(4,6)}`,ok:t[6]==="1",v:+t.slice(7)||0}};
+function pickVar(q){
+  const n=q.vars?q.vars.length:0;if(n<2)return 0;
+  const h=qHist(q.id),last=h?h.v:-1,c=[...Array(n).keys()].filter(i=>i!==last);
+  return c[Math.floor(Math.random()*c.length)];
+}
+/* 최근에 맞힌 문제는 덜, 틀린 문제·안 푼 문제는 더 자주 */
+function qWeight(q){
+  const h=qHist(q.id);if(!h)return 3;if(!h.ok)return 4;
+  const days=(Date.parse(today())-Date.parse(h.d))/864e5;
+  return !(days>=0)?1:days<3?0.25:days<7?0.6:days<14?1.2:2;
+}
+function pickQs(list,n){
+  return list.map(q=>({q,k:Math.pow(Math.random(),1/qWeight(q))})).sort((a,b)=>b.k-a.k).slice(0,n).map(x=>x.q);
+}
+function saveHist(q,ok){
+  if(role!=="student"||!KEY||!q||!q.id)return;
+  const v=`${today().slice(2).replace(/-/g,"")}${ok?1:0}${q.vi||0}`;
+  if(ME){ME.qh=ME.qh||{};ME.qh[q.id]=v}
+  R(`students/${KEY}/qh/${q.id}`).set(v).catch(()=>{});
+}
 
 /* 2026년 11월 3일 시가총액 기준 코스피·코스닥 상위 10개(우선주 제외). 순위가 바뀌어도 그대로 둡니다. */
 const STOCKS=[
@@ -484,7 +509,7 @@ function renderQuizTab(){
   if(Q&&Q.finished){renderEnd();renderNotes();return}
   if(role==="teacher"){
     $("#stage").innerHTML=`<article class="card"><p class="kind">선생님 미리보기</p><h2>지금 설정으로 ${takeN()}문제 풀어 보기</h2><p class="t-help">선생님 화면에서는 코인이 쌓이지 않아요.</p><div class="actions"><button type="button" class="primary" id="tryBtn">미리 풀어 보기</button></div></article>`;
-    $("#tryBtn").onclick=()=>startPractice(shuffle(pool()).slice(0,takeN()));renderNotes();return;
+    $("#tryBtn").onclick=()=>startPractice(pickQs(pool(),takeN()));renderNotes();return;
   }
   const qz=ME.quiz||{};
   if(qz.date===today()&&qz.state==="시작"&&qz.qids){resumeChallenge(qz);renderNotes();return}
@@ -502,8 +527,8 @@ function renderStart(){
     <div class="actions"><button type="button" class="primary" id="goBtn" ${n?"":"disabled"}>도전 시작</button></div>
   </article>`;
   $("#goBtn").onclick=()=>{
-    const qs=shuffle(pool()).slice(0,takeN());
-    const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),shown:qs.map(q=>shuffle(q.opts)),picks:[]};
+    const qs=shuffle(pickQs(pool(),takeN())).map(q=>withVar(q,pickVar(q)));
+    const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),shown:qs.map(q=>shuffle(q.opts)),vi:qs.map(q=>q.vi||0),picks:[]};
     act($("#goBtn"),$("#startMsg"),async()=>{
       const cur=(await R(`students/${KEY}/quiz`).once("value")).val()||{};
       if(cur.date===today())throw new Error("오늘의 도전은 이미 시작했어요.");
@@ -520,14 +545,14 @@ function renderDoneOnly(qz){
 }
 function resumeChallenge(qz){
   const picks=qz.picks?Object.values(qz.picks):[];
-  const qs=qz.qids.map((id,i)=>BY_ID[id]?{...BY_ID[id],shown:qz.shown[i]}:null).filter(Boolean);
+  const qs=qz.qids.map((id,i)=>BY_ID[id]?{...withVar(BY_ID[id],(qz.vi&&+qz.vi[i])||0),shown:qz.shown[i]}:null).filter(Boolean);
   const msv=qz.ms?Object.values(qz.ms):[];
   Q={mode:"challenge",qz,qs,picks,ms:qz.ms?{...qz.ms}:{},i:Math.min(picks.length,qs.length),res:picks.slice(0,qs.length).map((p,i)=>({q:qs[i],picked:p,ok:p===qs[i].ans})),locked:false,finished:false};
   if(Q.i>=Q.qs.length){finishChallenge();return}
   renderQ();
 }
 function startPractice(list){
-  Q={mode:"practice",qs:shuffle(list).map(q=>({...q,shown:shuffle(q.opts)})),i:0,ms:{},res:[],locked:false,finished:false};
+  Q={mode:"practice",qs:shuffle(list).map(q=>{const x=withVar(BY_ID[q.id]||q,pickVar(q));return {...x,shown:shuffle(x.opts)}}),i:0,ms:{},res:[],locked:false,finished:false};
   if(current!=="quiz"){location.hash="quiz";return}
   renderQ();renderNotes();
 }
@@ -562,7 +587,7 @@ function choose(k){
   const q=Q.qs[Q.i],late=k<0,picked=late?TIMEOUT:q.shown[k],ok=!late&&picked===q.ans;
   const ms=Math.max(0,Date.now()-(Q.tStart||Date.now())),fastOn=Q.mode==="challenge"&&Q.limit&&+CFG.fastBonus>0,fast=ok&&fastOn&&ms<=(+CFG.fastSec||5)*1000;
   Q.ms[Q.i]=ms;
-  Q.res.push({q,picked,ok});
+  Q.res.push({q,picked,ok});saveHist(q,ok);
   if(Q.mode==="challenge"){Q.picks.push(picked);R(`students/${KEY}/quiz/picks/${Q.picks.length-1}`).set(picked).catch(()=>{});R(`students/${KEY}/quiz/ms/${Q.i}`).set(ms).catch(()=>{})}
   const tb=$("#tbar");if(tb&&!late)tb.classList.add("stopped");
   if(ok)delete wrongNote[q.id];else wrongNote[q.id]=(wrongNote[q.id]||0)+1;
@@ -1024,7 +1049,7 @@ function bindEdit(k){
       else if(op==="quiz"){up[`students/${k}/quiz`]=null}
       else if(op==="sell"){up[`students/${k}/wallet`]=r2((+s.wallet||0)+sv);up[`students/${k}/stocks`]=null;L("선생님: 주식 모두 팔기",sv)}
       else if(op==="zero"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null});if(total)L("선생님: 코인 초기화",-total)}
-      else if(op==="full"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null,[`students/${k}/quiz`]:null,[`students/${k}/qCount`]:0,[`students/${k}/qRight`]:0,[`logs/${k}`]:null,[`purchases/${k}`]:null})}
+      else if(op==="full"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null,[`students/${k}/quiz`]:null,[`students/${k}/qh`]:null,[`students/${k}/qCount`]:0,[`students/${k}/qRight`]:0,[`logs/${k}`]:null,[`purchases/${k}`]:null})}
       else if(op==="del"){Object.assign(up,{[`students/${k}`]:null,[`logs/${k}`]:null,[`purchases/${k}`]:null,[`gens/${k}`]:await bumpGen(k)})}
       await db.ref("matchum").update(up);
     }).then(done(b.dataset.ok,op!=="del"));
