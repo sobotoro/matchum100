@@ -380,3 +380,18 @@ body{margin:0}
 .meal-list li.x{opacity:.55}
 .meal-list li.x .mn{text-decoration:line-through}
 .meal-list .mx{margin-left:auto;font-size:.8rem;color:var(--pen)}
+/* 넓은 화면: 양옆 공간까지 쓰기 */
+@media (min-width:1000px){
+  .wrap{max-width:1200px}
+  .top{flex-direction:row;align-items:flex-end;justify-content:space-between;gap:24px}
+  .top>div:first-child{flex:0 1 auto;min-width:0}
+  .top .me{flex:0 1 580px;min-width:0}
+  #view-quiz:has(#meal:not(:empty)){display:grid;grid-template-columns:minmax(0,1.7fr) minmax(320px,1fr);align-items:start;column-gap:20px}
+  #view-quiz:has(#meal:not(:empty))>*{grid-column:1}
+  #view-quiz:has(#meal:not(:empty))>#meal{grid-column:2;grid-row:1/span 3;margin-top:0;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+  #view-bank{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);align-items:start;gap:16px 20px}
+  #view-shop,#view-class,#view-me{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px 20px}
+  #view-shop>:first-child,#view-class>:first-child,#view-me>:first-child{grid-column:1/-1}
+  #view-shop>:last-child:nth-child(even),#view-class>:last-child:nth-child(even),#view-me>:last-child:nth-child(even){grid-column:1/-1}
+  .me-hero .status-form{max-width:640px}
+}
