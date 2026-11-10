@@ -3,9 +3,10 @@
 /* ---------- 화면 뼈대 ---------- */
 document.getElementById("app").innerHTML=`
   <header class="top">
-    <div>
-      <p class="eyebrow">초등 필수 어휘력 · 쓰면서 익히는 맞춤법</p>
-      <h1><button type="button" class="home-btn" id="homeBtn" aria-label="홈으로">맞춤법 <em>100</em> 퀴즈</button></h1>
+    <div class="brand">
+      <p class="eyebrow" id="brandTag">우리 반 실험실</p>
+      <h1 class="brand-h"><button type="button" class="home-btn" id="homeBtn" aria-label="홈으로"><span class="flask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 15H17.4L19.4 18.4A1.8 1.8 0 0 1 17.8 21H6.2A1.8 1.8 0 0 1 4.6 18.4Z" fill="var(--pen)"/><path d="M9 3h6M10 3v6.2L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9.2V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="12.4" r=".9" fill="var(--pen)"/><circle cx="13.4" cy="10.9" r=".6" fill="var(--pen)"/></svg></span><span id="brandName">CLASS <em>LAB</em></span></button><span class="cls-tag" id="clsTag" hidden></span><button type="button" class="lab-q" id="labQ" aria-expanded="false" aria-controls="labTip">LAB이 뭐예요?</button></h1>
+      <p class="lab-tip" id="labTip" hidden>LAB(랩)은 영어 <b>laboratory</b>의 줄임말로 <b>실험실</b>이라는 뜻이에요. 노래하는 랩(rap)과는 철자도 뜻도 달라요. 우리 반은 매일 배우고, 모으고, 함께 자라는 실험실이에요!</p>
     </div>
     <div class="me" id="me"></div>
   </header>
@@ -254,7 +255,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -405,6 +406,22 @@ async function act(btn,msgEl,fn){
   try{await fn();busy=false;return true}
   catch(e){busy=false;if(btn&&document.body.contains(btn)){btn.disabled=false;btn.textContent=label}const m=e instanceof Error&&!e.code?e.message:authMsg(e);if(msgEl)msgEl.textContent=m;return false}
 }
+/* ---------- 사이트 이름 (CLASS LAB + 반 표시) ---------- */
+function autoTag(){
+  if(ME&&ME.grade&&ME.cls)return `${ME.grade}-${ME.cls}`;
+  const cnt={};Object.values(STUDENTS||{}).forEach(s=>{if(s&&s.grade&&s.cls){const k=`${s.grade}-${s.cls}`;cnt[k]=(cnt[k]||0)+1}});
+  return Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]?.[0]||"";
+}
+function renderBrand(){
+  const name=String(CFG.siteName||"CLASS LAB").trim()||"CLASS LAB",tag=String(CFG.classTag||"").trim()||autoTag(),line=String(CFG.tagline??"우리 반 실험실").trim();
+  const w=name.split(/\s+/),nm=$("#brandName"),ct=$("#clsTag"),tg=$("#brandTag");
+  if(nm)nm.innerHTML=w.length>1?`${esc(w.slice(0,-1).join(" "))} <em>${esc(w[w.length-1])}</em>`:`<em>${esc(name)}</em>`;
+  if(ct){ct.textContent=tag;ct.hidden=!tag}
+  if(tg){tg.textContent=line;tg.hidden=!line}
+  const q=$("#labQ");if(q)q.hidden=!/\bLAB\b|랩/i.test(name);
+  document.title=[name+(tag?" "+tag:""),line].filter(Boolean).join(" · ");
+}
+$("#labQ").addEventListener("click",()=>{const t=$("#labTip"),q=$("#labQ");t.hidden=!t.hidden;q.setAttribute("aria-expanded",String(!t.hidden))});
 function renderMe(){
   if(role==="teacher"){$("#me").innerHTML=`<div class="me-id"><b>선생님</b><span>${esc(TEACHER())}</span><button type="button" class="link" id="logoutBtn">로그아웃</button></div>`;$("#logoutBtn").onclick=()=>auth.signOut();return}
   if(!ME){$("#me").innerHTML="";return}
@@ -972,6 +989,14 @@ function renderTeacher(){
   $("#view-teacher").innerHTML=`<article class="card">
     <div class="t-head"><h2>선생님 설정</h2><span class="t-only">선생님 계정에만 보여요</span></div>
     <p class="t-help">'저장'을 누르면 모든 학생 화면에 바로 반영돼요.</p>
+    <div class="t-sec"><h3>사이트 이름</h3>
+      <div class="row2">
+        <label class="t-field" for="cSite">사이트 이름<input type="text" id="cSite" maxlength="20" value="${esc(c.siteName||"CLASS LAB")}"></label>
+        <label class="t-field" for="cTag">반 표시<input type="text" id="cTag" maxlength="12" value="${esc(c.classTag||"")}" placeholder="비우면 자동 (${esc(autoTag()||"예: 5-1")})"></label>
+        <label class="t-field" for="cTagline">제목 위 한 줄 문구<input type="text" id="cTagline" maxlength="40" value="${esc(c.tagline||"")}" placeholder="예: 우리 반 실험실"></label>
+      </div>
+      <p class="t-help">화면 맨 위 제목과 브라우저 탭 이름이 바뀌어요. 사이트 이름의 마지막 낱말은 빨간색으로 강조돼요.</p>
+    </div>
     <div class="t-sec"><h3>오늘의 퀴즈</h3>
       <div class="row2">
         <label class="t-field" for="cRange">범위 (일차)<input type="text" id="cRange" value="${esc(c.range)}" placeholder="예: 1-5 또는 1,3,6-8"></label>
@@ -1056,7 +1081,7 @@ function renderTeacher(){
   $("#cSave").onclick=()=>{
     const v={range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
-      className:$("#cClass").value.trim()||"우리 반",board:$("#cBoard").value,boardName:$("#cBName").value,
+      className:$("#cClass").value.trim()||"우리 반",siteName:$("#cSite").value.trim().slice(0,20)||"CLASS LAB",classTag:$("#cTag").value.trim().slice(0,12),tagline:$("#cTagline").value.trim().slice(0,40),board:$("#cBoard").value,boardName:$("#cBName").value,
       mealOn:$("#cMealOn").value==="1",mealLink:$("#cMealLink").value==="1",mealCoins:Math.max(0,Math.round(+$("#cMealCoins").value||0)),
       mealFrom:$("#cMealFrom").value||"12:30",mealTo:$("#cMealTo").value||"13:40",mealSeen:$("#cMealSeen").value==="1"};
     act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);tMsgTxt=`저장했어요. 퀴즈 범위: ${rangeText(parseDays(v.range))}`}).then(ok=>ok&&renderTeacher());
@@ -1177,9 +1202,9 @@ function bindEdit(k){
 /* ---------- 시작 ---------- */
 function setupData(user){
   offAll();
-  on(R("config"),s=>{CFG={...DEF_CFG,...(s.val()||{})};rerender()});
+  on(R("config"),s=>{CFG={...DEF_CFG,...(s.val()||{})};renderBrand();rerender()});
   on(R("shop"),s=>{SHOP=s.exists()?s.val():DEF_SHOP;if(role==="teacher"&&current==="teacher"&&!typing())TSHOP=null;rerender()});
-  on(R("students"),s=>{STUDENTS=s.val()||{};if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender()}}else rerender()});
+  on(R("students"),s=>{STUDENTS=s.val()||{};renderBrand();if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender()}}else rerender()});
   if(role==="student"){
     on(R("logs/"+KEY).limitToLast(25),s=>{LOGS=Object.values(s.val()||{}).sort((a,b)=>b.t-a.t);if(current==="bank")rerender()});
     on(R("purchases/"+KEY),s=>{BUYS=Object.entries(s.val()||{}).map(([id,v])=>({id,...v})).sort((a,b)=>b.t-a.t);if(current==="shop")rerender()});
