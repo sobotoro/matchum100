@@ -389,7 +389,13 @@ async function payInterest(){
 async function loadMarket(){
   const url=window.PRICES_URL;if(!url)return;
   try{const r=await fetch(url+"?t="+Math.floor(Date.now()/60000),{cache:"no-store"});if(!r.ok)return;const j=await r.json();
-    if(j&&j.prices&&Object.keys(j.prices).length){MARKET=j;renderMe();if(!busy&&!typing()){if(current==="stock")renderStock();if(current==="class")renderClass()}}}catch(_){}
+    applyMarket(j)}catch(_){}
+}
+/* 시세는 두 곳에서 와요: 구글 Apps Script가 넣는 Firebase(matchum/market), GitHub가 올리는 파일. 더 새것을 써요. */
+function applyMarket(j){
+  if(!j||!j.prices||!Object.keys(j.prices).length)return;
+  if(MARKET&&MARKET.asOf&&String(j.asOf||"")<String(MARKET.asOf))return;
+  MARKET=j;renderMe();if(!busy&&!typing()){if(current==="stock")renderStock();if(current==="class")renderClass()}
 }
 const typing=()=>document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
 const priceOf=c=>{const p=MARKET.prices[c];return p?+p[0]||0:0};
@@ -1076,7 +1082,7 @@ function renderTeacher(){
       <p class="msg" id="gMsg" role="status"></p>
     </div>
   </article>
-  <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. GitHub가 평일 장중 10분마다, 장 마감 뒤 한 번 더 네이버 시세를 가져와요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
+  <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. 구글 Apps Script(CLASS LAB 주가 갱신)가 평일 장중 10분마다 네이버 시세를 가져와 Firebase에 넣어요. GitHub도 예비로 시세 파일을 올려요. 둘 중 더 새 시세를 써요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
   tMsgTxt="";
   $("#cSave").onclick=()=>{
     const v={range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
@@ -1212,6 +1218,7 @@ function setupData(user){
     on(R("purchases"),s=>{ALLBUYS=s.val()||{};if(current==="teacher")rerender()});
   }
   on(R("board"),s=>{BRD=s.val()||{};if(current==="board")rerender()});
+  on(R("market"),s=>applyMarket(s.val()));
 }
 function boot(){
   const fc=window.FIREBASE_CONFIG;
