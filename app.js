@@ -446,6 +446,7 @@ function notiList(){
       const mineAt=(list.find(c=>c.k===KEY)||{}).t;
       list.forEach(c=>{
         if(c.k===KEY)return;
+        if(c.re&&c.to===KEY){const par=(cs||{})[c.re];add(c.t,"↩️",`${jo(c.name||"친구","이","가")} 내 댓글${par&&par.k===KEY?` '${snip(par.text)}'`:""}에 답글을 달았어요: '${snip(c.text)}'`,{tab:"board",post:pid,thread:c.re});return}
         if(p.k===KEY)add(c.t,"💬",`${jo(c.name||"친구","이","가")} 내 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid});
         else if(mineAt&&c.t>mineAt)add(c.t,"💬",`${jo(c.name||"친구","이","가")} 내가 댓글 단 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid});
       });
@@ -462,7 +463,8 @@ function notiList(){
     if(dw>0&&dw<6&&nowHM()>="14:00"&&!(ME.quiz&&ME.quiz.date===d))add(kstAt(d,"14:00"),"📝","오늘의 도전을 아직 안 했어요. 오늘 안에 도전해 보세요!",{tab:"quiz"});
   }else if(role==="teacher"){
     Object.entries(posts).forEach(([pid,p])=>{if(p&&p.k&&p.k!=="T")add(p.t,"📝",`${jo(p.name||p.k,"이","가")} 새 글을 올렸어요: '${snip(p.text)}'`,{tab:"board",post:pid})});
-    Object.entries(cmts).forEach(([pid,cs])=>{const p=posts[pid];if(p&&p.k==="T")Object.values(cs||{}).forEach(c=>{if(c&&c.k!=="T")add(c.t,"💬",`${jo(c.name||c.k,"이","가")} 선생님 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid})})});
+    Object.entries(cmts).forEach(([pid,cs])=>{const p=posts[pid];if(p&&p.k==="T")Object.values(cs||{}).forEach(c=>{if(c&&c.k!=="T"&&!(c.re&&c.to==="T"))add(c.t,"💬",`${jo(c.name||c.k,"이","가")} 선생님 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid})})});
+    Object.entries(cmts).forEach(([pid,cs])=>Object.values(cs||{}).forEach(c=>{if(c&&c.re&&c.to==="T"&&c.k!=="T")add(c.t,"↩️",`${jo(c.name||c.k,"이","가")} 선생님 댓글에 답글을 달았어요: '${snip(c.text)}'`,{tab:"board",post:pid,thread:c.re})}));
     const d=today();
     Object.entries(STUDENTS||{}).forEach(([k,s])=>{const f=s&&s.mealFlag;if(f&&f.d===d&&f.k)Object.entries(f.k).forEach(([tk,v])=>{const who=(STUDENTS[tk]||{}).name||tk;add(+v>1?+v:kstAt(d,"12:30"),"🍚",`${jo(s.name||k,"이","가")} ${who}의 급식 완식 확인을 요청했어요.`,{tab:"quiz"})})});
     Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.values(ps||{}).forEach(p=>{if(p&&!p.used&&!["lotto","pet","fx"].includes(p.kind))add(p.t,"🛍️",`${jo((STUDENTS[k]||{}).name||k,"이","가")} ${qj(p.name||"물건","을","를")} 샀어요. 건네주세요.`,{tab:"teacher"})}));
@@ -486,6 +488,7 @@ function renderBell(){
   document.querySelectorAll("[data-ni]").forEach(b=>b.onclick=()=>{
     const x=list[+b.dataset.ni];bellOpen=false;renderBell();if(!x)return;
     if(x.go.post&&typeof openPost!=="undefined")openPost=x.go.post;
+    if(x.go.thread&&typeof openReplies!=="undefined")openReplies.add(x.go.post+"|"+x.go.thread);
     if(location.hash!=="#"+x.go.tab)location.hash=x.go.tab;else showTab(x.go.tab);
     if(x.go.post)setTimeout(()=>{const el=document.getElementById("post-"+x.go.post);if(el)el.scrollIntoView({block:"start",behavior:"smooth"})},150);
   });
