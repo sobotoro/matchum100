@@ -129,11 +129,12 @@ function renderMyPage(){
       <p class="msg" id="meMsg" role="status">${esc(meMsg)}</p>
     </div>
   </article>
+  ${typeof bagCardHtml==="function"?bagCardHtml(BUYS):""}
   <article class="card"><h3>내 코인</h3>
     <div class="acct four">
       <div class="acct-box"><span class="lbl">모두</span><b>${fmt(total)}</b></div>
       <div class="acct-box"><span class="lbl">지갑</span><b>${fmt(s.wallet)}</b></div>
-      <div class="acct-box"><span class="lbl">은행 저금</span><b>${fmt(s.bank)}</b><small>${s.lastPaid?`다음 이자 ${md(addDays(s.lastPaid,7))}`:"저금하면 이자가 붙어요"}</small></div>
+      <div class="acct-box"><span class="lbl">은행 저금</span><b>${fmt(s.bank)}</b><small>${(typeof bankInfo==="function"&&bankInfo(s))?`다음 이자 ${md(bankInfo(s).next)} 월요일`:"저금하면 이자가 붙어요"}</small></div>
       <div class="acct-box"><span class="lbl">주식</span><b>${fmt(sv)}</b><small class="${cost?(pl>=0?"up":"down"):""}">${cost?`${sg(pl)}${fmt(pl)} (${sg(pl)}${(pl/cost*100).toFixed(1)}%)`:"아직 없어요"}</small></div>
     </div>
   </article>
