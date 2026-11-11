@@ -171,9 +171,28 @@ function whoHtml(k,name){
   const s=STUDENTS[k];
   return `${k==="T"?`<span class="t-badge" aria-hidden="true">T</span>`:avatarSvg(avOf(s||{}),32,name)}<span class="pname">${esc(k==="T"?"선생님":(s?s.name:name))}</span>`;
 }
+/* 댓글 → 답글 한 단계 (인스타그램·유튜브처럼). 답글은 re(원래 댓글 id), to/toName(누구에게), at(답글에 단 답글이면 @표시) */
+let openReplies=new Set(),replyTo=null;
+function cmtHtml(pid,top,c,isReply,open){
+  const del=isT()?`<button type="button" class="link" data-cdel="${esc(pid)}|${esc(c.id)}"${isReply?"":` data-top="1"`}>지우기</button>`:"";
+  const who=c.k==="T"?"선생님":((STUDENTS[c.k]||{}).name||c.name||"친구");
+  return `<div class="cmt${isReply?" reply":""}"><div class="post-head">${whoHtml(c.k,c.name)}<span class="when">${whenKST(c.t)}</span>${del}</div>
+    <p>${isReply&&c.at&&c.toName?`<span class="at">@${esc(c.toName)}</span> `:""}${esc(c.text)}</p>
+    ${open?`<button type="button" class="link rbtn" data-reply="${esc(pid)}|${esc(top)}|${esc(c.k)}|${esc(who)}|${isReply?1:0}">답글</button>`:""}</div>`;
+}
+function threadHtml(pid,c,reps,open){
+  const key=pid+"|"+c.id,shown=openReplies.has(key),rt=replyTo&&replyTo.pid===pid&&replyTo.top===c.id?replyTo:null;
+  return `<div class="thread">${cmtHtml(pid,c.id,c,false,open)}
+    ${reps.length?`<button type="button" class="link rtoggle" data-rtog="${esc(key)}" aria-expanded="${shown}">${shown?"답글 숨기기":`답글 ${reps.length}개 보기`}</button>`:""}
+    ${shown&&reps.length?`<div class="replies">${reps.map(r=>cmtHtml(pid,c.id,r,true,open)).join("")}</div>`:""}
+    ${rt&&open?`<form class="cmt-form reply-form" data-rform="${esc(key)}" novalidate><input type="text" id="r-${esc(pid)}-${esc(c.id)}" maxlength="150" placeholder="@${esc(rt.toName)}에게 답글 달기" aria-label="${esc(rt.toName)}에게 답글"><button type="submit" class="secondary">답글</button><button type="button" class="link" data-rcancel="1">취소</button></form>`:""}
+  </div>`;
+}
 function postHtml(p){
   const likes=(BRD.likes||{})[p.id]||{},nLike=Object.keys(likes).length,liked=!!likes[myKey()];
-  const cm=Object.entries((BRD.comments||{})[p.id]||{}).map(([id,c])=>({id,...c})).sort((a,b)=>a.t-b.t);
+  const cm=Object.entries((BRD.comments||{})[p.id]||{}).map(([id,c])=>({id,...c})).filter(c=>c&&c.text).sort((a,b)=>a.t-b.t);
+  const ids=new Set(cm.map(c=>c.id)),tops=cm.filter(c=>!c.re||!ids.has(c.re)),byRe={};
+  cm.forEach(c=>{if(c.re&&ids.has(c.re))(byRe[c.re]=byRe[c.re]||[]).push(c)});
   const mine=p.k===myKey()||isT(),open=CFG.boardOpen!==false||isT();
   return `<article class="card post ${p.notice?"notice":""}" id="post-${esc(p.id)}">
     <div class="post-head">${whoHtml(p.k,p.name)}<span class="when">${p.notice?"공지 · ":""}${whenKST(p.t)}</span></div>
@@ -184,7 +203,7 @@ function postHtml(p){
       ${mine?`<button type="button" class="link" data-pdel="${esc(p.id)}">지우기</button>`:""}
     </div>
     ${openPost===p.id?`<div class="cmts">
-      ${cm.map(c=>`<div class="cmt"><div class="post-head">${whoHtml(c.k,c.name)}<span class="when">${whenKST(c.t)}</span>${c.k===myKey()||isT()?`<button type="button" class="link" data-cdel="${esc(p.id)}|${esc(c.id)}">지우기</button>`:""}</div><p>${esc(c.text)}</p></div>`).join("")||`<p class="empty">첫 댓글을 달아 보세요.</p>`}
+      ${tops.length?tops.map(c=>threadHtml(p.id,c,(byRe[c.id]||[]),open)).join(""):`<p class="empty">첫 댓글을 달아 보세요.</p>`}
       ${open?`<form class="cmt-form" data-cform="${esc(p.id)}" novalidate><input type="text" id="c-${esc(p.id)}" maxlength="150" placeholder="댓글을 적어요" aria-label="댓글"><button type="submit" class="secondary">달기</button></form>`:""}
     </div>`:""}
   </article>`;
@@ -229,9 +248,26 @@ function renderBoard(){
     act(b,m,()=>isT()?R("board").update({[`posts/${id}`]:null,[`comments/${id}`]:null,[`likes/${id}`]:null}):R(`board/posts/${id}`).remove()).then(ok=>{if(ok){boardMsg="글을 지웠어요.";renderBoard()}});
   });
   document.querySelectorAll("[data-cdel]").forEach(b=>b.onclick=()=>{
-    if(!arm(b))return;const [pid,cid]=b.dataset.cdel.split("|");
-    act(b,m,()=>R(`board/comments/${pid}/${cid}`).remove()).then(ok=>{if(ok)renderBoard()});
+    if(!isT())return;
+    const [pid,cid]=b.dataset.cdel.split("|"),reps=Object.entries((BRD.comments||{})[pid]||{}).filter(([,c])=>c&&c.re===cid).map(([id])=>id);
+    if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent=reps.length?`한 번 더 누르면 지워요 (답글 ${reps.length}개 포함)`:"한 번 더 누르면 지워요";return}
+    const up={[cid]:null};reps.forEach(id=>up[id]=null);
+    act(b,m,()=>R(`board/comments/${pid}`).update(up)).then(ok=>{if(ok)renderBoard()});
   });
+  document.querySelectorAll("[data-rtog]").forEach(b=>b.onclick=()=>{const k=b.dataset.rtog;openReplies.has(k)?openReplies.delete(k):openReplies.add(k);renderBoard()});
+  document.querySelectorAll("[data-reply]").forEach(b=>b.onclick=()=>{
+    const [pid,top,to,toName,isRep]=b.dataset.reply.split("|");
+    replyTo={pid,top,to,toName,at:isRep==="1"};openReplies.add(pid+"|"+top);renderBoard();
+    const i=$(`#r-${pid}-${top}`);if(i)i.focus();
+  });
+  document.querySelectorAll("[data-rcancel]").forEach(b=>b.onclick=()=>{replyTo=null;renderBoard()});
+  document.querySelectorAll("[data-rform]").forEach(f=>f.addEventListener("submit",e=>{
+    e.preventDefault();const [pid,top]=f.dataset.rform.split("|"),inp=f.querySelector("input"),text=inp.value.trim().slice(0,150);
+    if(!text||!replyTo)return;
+    const base=isT()?{k:"T",name:"선생님"}:{k:KEY,name:ME.name};
+    const c={...base,text,t:SV.TIMESTAMP,re:top,to:replyTo.to,toName:replyTo.toName,...(replyTo.at?{at:true}:{})};
+    act(f.querySelector("button"),m,()=>R(`board/comments/${pid}`).push(c)).then(ok=>{if(ok){replyTo=null;openReplies.add(pid+"|"+top);renderBoard()}});
+  }));
 }
 
 /* ---------- 선생님: 여러 학생 한꺼번에 ---------- */
