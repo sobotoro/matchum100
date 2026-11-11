@@ -428,11 +428,80 @@ function renderBrand(){
   document.title=[name+(tag?" "+tag:""),line].filter(Boolean).join(" · ");
 }
 $("#labQ").addEventListener("click",()=>{const t=$("#labTip"),q=$("#labQ");t.hidden=!t.hidden;q.setAttribute("aria-expanded",String(!t.hidden))});
+/* ---------- 알림 (🔔) ----------
+   이미 쌓이는 기록(게시판·은행 기록·상점·급식·퀴즈)에서 알림을 만들어요. 본 시각만 저장: 학생 students/학번/notiSeen, 선생님 tmeta/notiSeen */
+let bellOpen=false,TSEEN=0;
+const NOTI_DAYS=14;
+const jo=(w,a,b)=>{w=String(w);const c=w.charCodeAt(w.length-1);return w+(c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?a:b)};
+const qj=(w,a,b)=>{w=String(w);const c=w.charCodeAt(w.length-1);return `'${w}'`+(c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?a:b)};
+const kstAt=(ds,hm)=>Date.parse(`${ds}T${hm}:00+09:00`);
+const snip=t=>{t=String(t||"").replace(/\s+/g," ").trim();return t.length>14?t.slice(0,14)+"…":t};
+function notiList(){
+  const out=[],since=Date.now()-NOTI_DAYS*864e5,posts=(BRD&&BRD.posts)||{},cmts=(BRD&&BRD.comments)||{};
+  const add=(t,ico,text,go)=>{if(+t>=since)out.push({t:+t,ico,text,go})};
+  if(role==="student"&&ME){
+    Object.entries(cmts).forEach(([pid,cs])=>{
+      const p=posts[pid];if(!p)return;
+      const list=Object.values(cs||{}).filter(c=>c&&c.t).sort((a,b)=>a.t-b.t);
+      const mineAt=(list.find(c=>c.k===KEY)||{}).t;
+      list.forEach(c=>{
+        if(c.k===KEY)return;
+        if(p.k===KEY)add(c.t,"💬",`${jo(c.name||"친구","이","가")} 내 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid});
+        else if(mineAt&&c.t>mineAt)add(c.t,"💬",`${jo(c.name||"친구","이","가")} 내가 댓글 단 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid});
+      });
+    });
+    Object.entries(posts).forEach(([pid,p])=>{if(p&&p.notice&&p.k==="T")add(p.t,"📢",`선생님이 공지를 올렸어요: '${snip(p.text)}'`,{tab:"board",post:pid})});
+    (LOGS||[]).forEach(l=>{
+      const tx=String(l.text||""),a=+l.amount||0;
+      if(tx.startsWith("은행 이자"))add(l.t,"🏦",`은행 이자 +${fmt(a)}코인이 들어왔어요.${tx.match(/\((.*)\)/)?` (${tx.match(/\((.*)\)/)[1]})`:""}`,{tab:"bank"});
+      else if(tx==="선생님: 급식 보상 취소")add(l.t,"🍚",`선생님이 급식 보상을 취소했어요. (${fmt(a)}코인)`,{tab:"quiz"});
+      else if(tx.startsWith("선생님:")){const why=tx.slice(4).trim();add(l.t,"🎁",a>=0?`선생님이 코인을 줬어요: ${why} +${fmt(a)}`:`선생님이 코인을 뺐어요: ${why} ${fmt(a)}`,{tab:"bank"})}
+    });
+    (BUYS||[]).forEach(b=>{if(b.used&&b.usedAt&&!["lotto","pet","fx"].includes(b.kind))add(b.usedAt,"🛍️",`산 물건 ${qj(b.name||"물건","을","를")} 선생님이 건네줬어요.`,{tab:"shop"})});
+    const d=today(),dw=dowOf(d);
+    if(dw>0&&dw<6&&nowHM()>="14:00"&&!(ME.quiz&&ME.quiz.date===d))add(kstAt(d,"14:00"),"📝","오늘의 도전을 아직 안 했어요. 오늘 안에 도전해 보세요!",{tab:"quiz"});
+  }else if(role==="teacher"){
+    Object.entries(posts).forEach(([pid,p])=>{if(p&&p.k&&p.k!=="T")add(p.t,"📝",`${jo(p.name||p.k,"이","가")} 새 글을 올렸어요: '${snip(p.text)}'`,{tab:"board",post:pid})});
+    Object.entries(cmts).forEach(([pid,cs])=>{const p=posts[pid];if(p&&p.k==="T")Object.values(cs||{}).forEach(c=>{if(c&&c.k!=="T")add(c.t,"💬",`${jo(c.name||c.k,"이","가")} 선생님 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid})})});
+    const d=today();
+    Object.entries(STUDENTS||{}).forEach(([k,s])=>{const f=s&&s.mealFlag;if(f&&f.d===d&&f.k)Object.entries(f.k).forEach(([tk,v])=>{const who=(STUDENTS[tk]||{}).name||tk;add(+v>1?+v:kstAt(d,"12:30"),"🍚",`${jo(s.name||k,"이","가")} ${who}의 급식 완식 확인을 요청했어요.`,{tab:"quiz"})})});
+    Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.values(ps||{}).forEach(p=>{if(p&&!p.used&&!["lotto","pet","fx"].includes(p.kind))add(p.t,"🛍️",`${jo((STUDENTS[k]||{}).name||k,"이","가")} ${qj(p.name||"물건","을","를")} 샀어요. 건네주세요.`,{tab:"teacher"})}));
+  }
+  return out.sort((a,b)=>b.t-a.t).slice(0,40);
+}
+const notiSeen=()=>role==="teacher"?TSEEN:(+(ME&&ME.notiSeen)||0);
+function renderBell(){
+  const slot=$("#bellSlot");if(!slot)return;
+  const list=notiList(),seen=notiSeen(),n=list.filter(x=>x.t>seen).length;
+  slot.innerHTML=`<button type="button" class="bell" id="bellBtn" aria-expanded="${!!bellOpen}" aria-controls="bellPanel" aria-label="알림${n?` ${n}개 새로 왔어요`:""}"><span aria-hidden="true">🔔</span>${n?`<b class="bell-n">${n>99?"99+":n}</b>`:""}</button>
+    ${bellOpen?`<div class="bell-panel" id="bellPanel" role="dialog" aria-label="알림">
+      <div class="bell-head"><b>알림</b><button type="button" class="link" id="bellClose">닫기</button></div>
+      ${list.length?`<ul class="bell-list">${list.map((x,i)=>`<li class="${x.t>(bellOpen.seen??seen)?"new":""}"><button type="button" data-ni="${i}"><span class="ni" aria-hidden="true">${x.ico}</span><span class="nt">${esc(x.text)}<small>${whenKST(x.t)}</small></span></button></li>`).join("")}</ul>`:`<p class="empty">최근 ${NOTI_DAYS}일 동안 알림이 없어요.</p>`}
+    </div>`:""}`;
+  $("#bellBtn").onclick=()=>{
+    if(bellOpen){bellOpen=false;renderBell();return}
+    bellOpen={seen};renderBell();markSeen(list[0]?list[0].t:0);
+  };
+  const c=$("#bellClose");if(c)c.onclick=()=>{bellOpen=false;renderBell()};
+  document.querySelectorAll("[data-ni]").forEach(b=>b.onclick=()=>{
+    const x=list[+b.dataset.ni];bellOpen=false;renderBell();if(!x)return;
+    if(x.go.post&&typeof openPost!=="undefined")openPost=x.go.post;
+    if(location.hash!=="#"+x.go.tab)location.hash=x.go.tab;else showTab(x.go.tab);
+    if(x.go.post)setTimeout(()=>{const el=document.getElementById("post-"+x.go.post);if(el)el.scrollIntoView({block:"start",behavior:"smooth"})},150);
+  });
+}
+function markSeen(t){
+  const v=Math.max(Date.now(),+t||0);
+  if(role==="teacher"){TSEEN=v;R("tmeta/notiSeen").set(v).catch(()=>{})}
+  else if(role==="student"&&KEY){if(ME)ME.notiSeen=v;R(`students/${KEY}/notiSeen`).set(v).catch(()=>{})}
+}
+document.addEventListener("click",e=>{if(bellOpen&&e.target.isConnected&&!e.target.closest("#bellSlot")){bellOpen=false;renderBell()}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&bellOpen){bellOpen=false;renderBell();const b=$("#bellBtn");if(b)b.focus()}});
 function renderMe(){
-  if(role==="teacher"){$("#me").innerHTML=`<div class="me-id"><b>선생님</b><span>${esc(TEACHER())}</span><button type="button" class="link" id="logoutBtn">로그아웃</button></div>`;$("#logoutBtn").onclick=()=>auth.signOut();return}
+  if(role==="teacher"){$("#me").innerHTML=`<div class="me-id"><b>선생님</b><span>${esc(TEACHER())}</span><button type="button" class="link" id="logoutBtn">로그아웃</button><span class="bell-slot" id="bellSlot"></span></div>`;$("#logoutBtn").onclick=()=>auth.signOut();renderBell();return}
   if(!ME){$("#me").innerHTML="";return}
   const v=valueOf(ME),total=(+ME.wallet||0)+(+ME.bank||0)+v;
-  $("#me").innerHTML=`<div class="me-id"><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><b>${esc(ME.name)}</b><button type="button" class="link" id="logoutBtn">로그아웃</button></div>
+  $("#me").innerHTML=`<div class="me-id"><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><b>${esc(ME.name)}</b><button type="button" class="link" id="logoutBtn">로그아웃</button><span class="bell-slot" id="bellSlot"></span></div>
     <div class="bal">
       <span class="pill"><i>지갑</i><b>${fmt(ME.wallet)}</b></span>
       <span class="pill"><i>은행</i><b>${fmt(ME.bank)}</b></span>
@@ -440,7 +509,7 @@ function renderMe(){
       <span class="pill total"><i>모두 (코인)</i><b>${fmt(total)}</b></span>
     </div>`;
   $("#logoutBtn").onclick=()=>auth.signOut();
-  
+  renderBell();
 }
 
 /* ---------- 로그인 화면 ---------- */
@@ -561,7 +630,7 @@ function renderMeal(){
     if(coins>0)await log("급식 다 먹었어요 (칭찬 카드 1장 값)",coins);
     mealPledge=false;mealMsg="잘했어요! 코인이 지갑에 들어갔어요.";
   }).then(()=>renderMeal());
-  const toggle=(field,k)=>{const d=today(),cur=ME&&ME[field]&&ME[field].d===d?{...(ME[field].k||{})}:{};if(cur[k])delete cur[k];else cur[k]=1;return R(`students/${KEY}/${field}`).set({d,k:cur})};
+  const toggle=(field,k)=>{const d=today(),cur=ME&&ME[field]&&ME[field].d===d?{...(ME[field].k||{})}:{};if(cur[k])delete cur[k];else cur[k]=Date.now();return R(`students/${KEY}/${field}`).set({d,k:cur})};
   document.querySelectorAll("[data-mseen]").forEach(b=>b.onclick=()=>act(b,null,()=>toggle("mealSeen",b.dataset.mseen)).then(()=>renderMeal()));
   document.querySelectorAll("[data-mflag]").forEach(b=>b.onclick=()=>{const was=dayMark(ME&&ME.mealFlag,b.dataset.mflag);act(b,null,()=>toggle("mealFlag",b.dataset.mflag)).then(ok=>{if(ok){mealMsg=was?"확인 요청을 거뒀어요.":"선생님께만 조용히 알렸어요.";renderMeal()}})});
   document.querySelectorAll("[data-mcancel]").forEach(b=>b.onclick=()=>{
@@ -1100,7 +1169,7 @@ function renderTeacher(){
   document.querySelectorAll("[data-down]").forEach(b=>b.onclick=()=>mv(+b.dataset.down,1));
   $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach((it,i)=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true,order:i});
     act($("#tShopSave"),$("#tShopMsg"),async()=>{await R("shop").set(obj);TSHOP=null}).then(ok=>{if(ok){renderTeacher();$("#tShopMsg").textContent="상점을 저장했어요."}})};
-  document.querySelectorAll("[data-give]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.give.split("|");act(b,null,()=>R(`purchases/${k}/${id}/used`).set(true))});
+  document.querySelectorAll("[data-give]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.give.split("|");act(b,null,()=>R(`purchases/${k}/${id}`).update({used:true,usedAt:SV.TIMESTAMP}))});
   document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.pick;selKey=selKey===k?null:k;editMsg="";renderTeacher();
     if(selKey){const c=$("#editCard");if(c)c.scrollIntoView({block:"nearest"})}
@@ -1212,13 +1281,14 @@ function setupData(user){
   on(R("shop"),s=>{SHOP=s.exists()?s.val():DEF_SHOP;if(role==="teacher"&&current==="teacher"&&!typing())TSHOP=null;rerender()});
   on(R("students"),s=>{STUDENTS=s.val()||{};renderBrand();if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender()}}else rerender()});
   if(role==="student"){
-    on(R("logs/"+KEY).limitToLast(25),s=>{LOGS=Object.values(s.val()||{}).sort((a,b)=>b.t-a.t);if(current==="bank")rerender()});
-    on(R("purchases/"+KEY),s=>{BUYS=Object.entries(s.val()||{}).map(([id,v])=>({id,...v})).sort((a,b)=>b.t-a.t);if(current==="shop")rerender()});
+    on(R("logs/"+KEY).limitToLast(25),s=>{LOGS=Object.values(s.val()||{}).sort((a,b)=>b.t-a.t);renderBell();if(current==="bank")rerender()});
+    on(R("purchases/"+KEY),s=>{BUYS=Object.entries(s.val()||{}).map(([id,v])=>({id,...v})).sort((a,b)=>b.t-a.t);renderBell();if(current==="shop")rerender()});
   }else{
-    on(R("purchases"),s=>{ALLBUYS=s.val()||{};if(current==="teacher")rerender()});
+    on(R("purchases"),s=>{ALLBUYS=s.val()||{};renderBell();if(current==="teacher")rerender()});
   }
-  on(R("board"),s=>{BRD=s.val()||{};if(current==="board")rerender()});
+  on(R("board"),s=>{BRD=s.val()||{};renderBell();if(current==="board")rerender()});
   on(R("market"),s=>applyMarket(s.val()));
+  if(role==="teacher")on(R("tmeta/notiSeen"),s=>{TSEEN=+s.val()||0;renderBell()});
 }
 function boot(){
   const fc=window.FIREBASE_CONFIG;
@@ -1226,7 +1296,7 @@ function boot(){
   firebase.initializeApp(fc);db=firebase.database();auth=firebase.auth();SV=firebase.database.ServerValue;
   $("#view-login").hidden=false;$("#view-login").innerHTML=`<article class="card"><p class="kind">불러오는 중</p><h2>우리 반 기록을 가져오고 있어요…</h2></article>`;
   auth.onAuthStateChanged(user=>{
-    offAll();ME=null;Q=null;STUDENTS={};LOGS=[];BUYS=[];TSHOP=null;
+    offAll();ME=null;Q=null;STUDENTS={};bellOpen=false;TSEEN=0;LOGS=[];BUYS=[];TSHOP=null;
     if(!user){role=null;KEY=null;renderMe();showLogin();return}
     if((user.email||"").toLowerCase()===TEACHER()){role="teacher";KEY=null;renderMe();setupData(user);showTab(location.hash.slice(1)||"teacher");return}
     const k=keyOfEmail(user.email);
