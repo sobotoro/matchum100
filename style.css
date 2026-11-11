@@ -421,3 +421,14 @@ body{margin:0}
 .bell-list small{display:block;color:var(--muted);font-size:.75rem;margin-top:2px}
 .bell-panel .empty{margin:10px 6px;color:var(--muted);font-size:.9rem}
 @media (max-width:700px){.bell-panel{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 70px);width:auto}}
+/* 답글 (인스타그램·유튜브처럼 한 단계) */
+.thread{display:flex;flex-direction:column;gap:4px}
+.cmt .rbtn{align-self:flex-start;font-size:.78rem;text-decoration:none;color:var(--muted);font-weight:700}
+.cmt .rbtn:hover{text-decoration:underline}
+.rtoggle{align-self:flex-start;margin-left:14px;font-size:.8rem;text-decoration:none;color:var(--down);font-weight:700;display:inline-flex;align-items:center;gap:8px}
+.rtoggle::before{content:"";width:22px;border-top:1.5px solid var(--line)}
+.replies{display:flex;flex-direction:column;gap:8px;margin-left:28px}
+.cmt.reply{border-left-color:var(--line)}
+.cmt .at{color:var(--down);font-weight:700}
+.reply-form{margin-left:28px}
+.reply-form .link{white-space:nowrap}
