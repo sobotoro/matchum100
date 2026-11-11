@@ -432,3 +432,15 @@ body{margin:0}
 .cmt .at{color:var(--down);font-weight:700}
 .reply-form{margin-left:28px}
 .reply-form .link{white-space:nowrap}
+/* 내 가방 */
+.bag-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.bag-head h3{margin:0}
+.bag-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.bag-item{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"i n" "i c" "x x";gap:2px 10px;align-items:center;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--sheet);min-width:0}
+.bag-item .bi{grid-area:i;font-size:1.7rem;line-height:1;width:44px;height:44px;border-radius:10px;background:var(--chip);display:flex;align-items:center;justify-content:center}
+.bag-item .bn{grid-area:n;font-size:.9rem;color:var(--muted);overflow-wrap:anywhere}
+.bag-item .bc{grid-area:c;font-family:var(--f-display);font-weight:400;font-size:1.6rem;line-height:1.1;color:var(--coin);font-variant-numeric:tabular-nums}
+.bag-item .bc small{font-size:.9rem;margin-left:2px;color:var(--muted)}
+.bag-item .bx{grid-area:x;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:.78rem;color:var(--muted);margin-top:4px}
+.bag-item .bw{color:var(--pen)}
+.bag-item.none{opacity:.6}
