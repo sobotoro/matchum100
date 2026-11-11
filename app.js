@@ -428,6 +428,43 @@ function renderBrand(){
   document.title=[name+(tag?" "+tag:""),line].filter(Boolean).join(" · ");
 }
 $("#labQ").addEventListener("click",()=>{const t=$("#labTip"),q=$("#labQ");t.hidden=!t.hidden;q.setAttribute("aria-expanded",String(!t.hidden))});
+/* ---------- 내 가방: 선생님이 '건네줬어요'를 누른 물건 ----------
+   '칭찬 카드 2개'처럼 이름 끝에 개수가 있으면 2장으로 셉니다. 선생님이 '1장 사용'을 누르면 purchases/…/spent 가 늘어요. */
+const BAG_SKIP=["lotto","pet","fx"];
+const bagSplit=nm=>{nm=String(nm||"물건").trim();const m=nm.match(/^(.*?)\s*(\d+)\s*(개|장)$/);return m&&m[1]&&+m[2]>0&&+m[2]<=50?{base:m[1].trim(),n:+m[2]}:{base:nm,n:1}};
+const bagUnit=nm=>/카드|권|쿠폰/.test(nm)?"장":"개";
+const bagIcon=nm=>/칭찬|카드/.test(nm)?"⭐":/자리/.test(nm)?"💺":/급식/.test(nm)?"🍱":/과자|파티/.test(nm)?"🍪":/피구|공/.test(nm)?"🏐":/짝/.test(nm)?"🤝":"🎁";
+function bagOf(list){
+  const m={};
+  (list||[]).forEach(p=>{
+    if(!p||BAG_SKIP.includes(p.kind))return;
+    const {base,n}=bagSplit(p.name),e=m[base]=m[base]||{name:base,have:0,wait:0,used:0};
+    if(p.used){const sp=Math.min(n,+p.spent||0);e.have+=n-sp;e.used+=sp}else e.wait+=n;
+  });
+  return Object.values(m).sort((a,b)=>(b.have-a.have)||(b.wait-a.wait)||a.name.localeCompare(b.name,"ko"));
+}
+function bagCardHtml(list){
+  const items=bagOf(list);
+  return `<article class="card bag"><div class="bag-head"><h3>내 가방</h3><span class="t-help">선생님께 받은 물건이 여기에 쌓여요.</span></div>
+    ${items.length?`<ul class="bag-grid">${items.map(e=>`<li class="bag-item${e.have?"":" none"}"><span class="bi" aria-hidden="true">${bagIcon(e.name)}</span><span class="bn">${esc(e.name)}</span><b class="bc">${e.have}<small>${bagUnit(e.name)}</small></b>${e.wait||e.used?`<span class="bx">${e.wait?`<small class="bw">받기 전 ${e.wait}</small>`:""}${e.used?`<small>쓴 것 ${e.used}</small>`:""}</span>`:""}</li>`).join("")}</ul>`
+      :`<p class="empty">아직 가방이 비어 있어요. 상점에서 산 물건을 선생님께 받으면 여기에 쌓여요.</p>`}
+  </article>`;
+}
+function bagTeacherHtml(k){
+  const list=Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})),items=bagOf(list).filter(e=>e.have||e.used);
+  return `<div class="t-sec"><h3>가방</h3>
+    ${items.length?`<ul class="bag-grid">${items.map(e=>`<li class="bag-item${e.have?"":" none"}"><span class="bi" aria-hidden="true">${bagIcon(e.name)}</span><span class="bn">${esc(e.name)}</span><b class="bc">${e.have}<small>${bagUnit(e.name)}</small></b>
+      <span class="bx"><button type="button" class="ghost" data-bag-use="${esc(k)}|${esc(e.name)}" ${e.have?"":"disabled"}>1${bagUnit(e.name)} 사용</button>${e.used?`<button type="button" class="link" data-bag-undo="${esc(k)}|${esc(e.name)}">사용 취소</button>`:""}</span></li>`).join("")}</ul>`:`<p class="t-help">아직 건네받은 물건이 없어요.</p>`}
+    <p class="t-help">학생이 물건을 쓰면 '사용'을 눌러요. 학생 가방에서 하나가 빠지고 학생에게 알림이 가요.</p>
+  </div>`;
+}
+async function bagUse(k,base,undo){
+  const ps=Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})).filter(p=>p.used&&!BAG_SKIP.includes(p.kind)&&bagSplit(p.name).base===base);
+  const pick=undo?ps.filter(p=>+p.spent>0).sort((a,b)=>(+b.spentAt||0)-(+a.spentAt||0))[0]
+    :ps.filter(p=>(+p.spent||0)<bagSplit(p.name).n).sort((a,b)=>(+a.t||0)-(+b.t||0))[0];
+  if(!pick)throw new Error(undo?"되돌릴 사용 기록이 없어요.":"가방에 남은 물건이 없어요.");
+  await R(`purchases/${k}/${pick.id}`).update(undo?{spent:(+pick.spent||0)-1}:{spent:(+pick.spent||0)+1,spentAt:SV.TIMESTAMP});
+}
 /* ---------- 알림 (🔔) ----------
    이미 쌓이는 기록(게시판·은행 기록·상점·급식·퀴즈)에서 알림을 만들어요. 본 시각만 저장: 학생 students/학번/notiSeen, 선생님 tmeta/notiSeen */
 let bellOpen=false,TSEEN=0;
@@ -458,7 +495,8 @@ function notiList(){
       else if(tx==="선생님: 급식 보상 취소")add(l.t,"🍚",`선생님이 급식 보상을 취소했어요. (${fmt(a)}코인)`,{tab:"quiz"});
       else if(tx.startsWith("선생님:")){const why=tx.slice(4).trim();add(l.t,"🎁",a>=0?`선생님이 코인을 줬어요: ${why} +${fmt(a)}`:`선생님이 코인을 뺐어요: ${why} ${fmt(a)}`,{tab:"bank"})}
     });
-    (BUYS||[]).forEach(b=>{if(b.used&&b.usedAt&&!["lotto","pet","fx"].includes(b.kind))add(b.usedAt,"🛍️",`산 물건 ${qj(b.name||"물건","을","를")} 선생님이 건네줬어요.`,{tab:"shop"})});
+    (BUYS||[]).forEach(b=>{if(b.used&&b.usedAt&&!["lotto","pet","fx"].includes(b.kind))add(b.usedAt,"🛍️",`산 물건 ${qj(b.name||"물건","을","를")} 선생님이 건네줬어요. 내 가방에 들어갔어요.`,{tab:"me"});
+      if(b.spentAt&&+b.spent>0&&!["lotto","pet","fx"].includes(b.kind)){const nm=bagSplit(b.name).base;add(b.spentAt,"🎒",`선생님이 가방의 '${nm}' 1${bagUnit(nm)}${bagUnit(nm)==="장"?"을":"를"} 사용 처리했어요.`,{tab:"me"})}});
     const d=today(),dw=dowOf(d);
     if(dw>0&&dw<6&&nowHM()>="14:00"&&!(ME.quiz&&ME.quiz.date===d))add(kstAt(d,"14:00"),"📝","오늘의 도전을 아직 안 했어요. 오늘 안에 도전해 보세요!",{tab:"quiz"});
   }else if(role==="teacher"){
@@ -1004,7 +1042,7 @@ function renderShop(){
   </article>
   <article class="card">
     <h3>내 구매 확인증</h3>
-    <p class="t-help">산 물건은 선생님께 확인 코드를 보여 주고 받아요. 선생님이 건네주면 '받았어요'로 바뀌어요.</p>
+    <p class="t-help">산 물건은 선생님께 확인 코드를 보여 주고 받아요. 선생님이 건네주면 '받았어요'로 바뀌고 마이페이지 '내 가방'에 들어가요.</p>
     ${BUYS.length?`<ul class="receipts">${BUYS.map(r=>`<li class="${r.used?"used":""}" data-rid="${esc(r.id||"")}">
       <span class="rinfo"><b>${esc(r.name)}</b><small>${whenKST(r.t)} · ${fmt(r.price)}코인</small></span>
       <span class="rcode" aria-label="확인 코드">${esc(r.code)}</span>
@@ -1172,6 +1210,7 @@ function renderTeacher(){
   document.querySelectorAll("[data-down]").forEach(b=>b.onclick=()=>mv(+b.dataset.down,1));
   $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach((it,i)=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true,order:i});
     act($("#tShopSave"),$("#tShopMsg"),async()=>{await R("shop").set(obj);TSHOP=null}).then(ok=>{if(ok){renderTeacher();$("#tShopMsg").textContent="상점을 저장했어요."}})};
+  document.querySelectorAll("[data-bag-use],[data-bag-undo]").forEach(b=>b.onclick=()=>{const undo=!!b.dataset.bagUndo,[k,...rest]=(b.dataset.bagUse||b.dataset.bagUndo).split("|");act(b,null,()=>bagUse(k,rest.join("|"),undo)).then(()=>renderTeacher())});
   document.querySelectorAll("[data-give]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.give.split("|");act(b,null,()=>R(`purchases/${k}/${id}`).update({used:true,usedAt:SV.TIMESTAMP}))});
   document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.pick;selKey=selKey===k?null:k;editMsg="";renderTeacher();
@@ -1209,6 +1248,7 @@ function editHtml(k,s){
     <p class="t-help">학년·반·번호를 바꾸면 기록은 새 학번으로 옮겨지고, 학생은 새 학번으로 들어와 비밀번호를 새로 정해요. 지갑·은행을 고치면 학생 기록에 '선생님 수정'으로 남아요.</p>
     ${holds.length?`<p class="t-help">가진 주식: ${holds.map(([c,h])=>{const st=STOCKS.find(x=>x[0]===c.slice(1));return `${esc(st?st[1]:c)} ${fmtQ(h.qty)}주(${fmt(h.qty*coinPrice(c.slice(1)))}코인)`}).join(", ")}</p>`:""}
     <div class="actions"><button type="button" class="primary" id="eSave">변경 저장</button></div>
+    ${bagTeacherHtml(k)}
     <div class="t-sec">
       <h3>리셋</h3>
       <p class="t-help">버튼을 한 번 누르면 확인 문구로 바뀌어요. 한 번 더 눌러야 실행돼요.</p>
