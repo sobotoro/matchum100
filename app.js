@@ -443,12 +443,100 @@ function bagOf(list){
   });
   return Object.values(m).sort((a,b)=>(b.have-a.have)||(b.wait-a.wait)||a.name.localeCompare(b.name,"ko"));
 }
+const bagReqs=s=>Object.entries((s&&s.bagReq)||{}).map(([id,r])=>({id,...r})).filter(r=>r&&r.name).sort((a,b)=>(+a.t||0)-(+b.t||0));
+let bagMsg="";
 function bagCardHtml(list){
-  const items=bagOf(list);
-  return `<article class="card bag"><div class="bag-head"><h3>내 가방</h3><span class="t-help">선생님께 받은 물건이 여기에 쌓여요.</span></div>
-    ${items.length?`<ul class="bag-grid">${items.map(e=>`<li class="bag-item${e.have?"":" none"}"><span class="bi" aria-hidden="true">${bagIcon(e.name)}</span><span class="bn">${esc(e.name)}</span><b class="bc">${e.have}<small>${bagUnit(e.name)}</small></b>${e.wait||e.used?`<span class="bx">${e.wait?`<small class="bw">받기 전 ${e.wait}</small>`:""}${e.used?`<small>쓴 것 ${e.used}</small>`:""}</span>`:""}</li>`).join("")}</ul>`
+  const items=bagOf(list),reqs=bagReqs(ME);
+  return `<article class="card bag"><div class="bag-head"><h3>내 가방</h3><span class="t-help">선생님께 받은 물건이에요. 쓰고 싶을 때 '사용 신청'을 누르면 선생님이 확인해 줘요.</span></div>
+    ${items.length?`<ul class="bag-grid">${items.map(e=>{const pend=reqs.filter(r=>r.name===e.name).reduce((t,r)=>t+(+r.n||1),0),can=e.have-pend,u=bagUnit(e.name);
+      return `<li class="bag-item${e.have?"":" none"}"><span class="bi" aria-hidden="true">${bagIcon(e.name)}</span><span class="bn">${esc(e.name)}</span><b class="bc">${e.have}<small>${u}</small></b>
+      <span class="bx">${pend?`<small class="bp">사용 신청 중 ${pend}${u}</small><button type="button" class="link" data-breq-cancel="${esc(e.name)}">신청 취소</button>`:""}${e.wait?`<small class="bw">받기 전 ${e.wait}</small>`:""}${e.used?`<small>쓴 것 ${e.used}</small>`:""}</span>
+      ${can>0?`<button type="button" class="ghost breq" data-breq="${esc(e.name)}">1${u} 사용 신청</button>`:""}</li>`}).join("")}</ul>`
       :`<p class="empty">아직 가방이 비어 있어요. 상점에서 산 물건을 선생님께 받으면 여기에 쌓여요.</p>`}
+    <p class="msg" id="bagMsg" role="status">${esc(bagMsg)}</p>
   </article>`;
+}
+function bagBindStudent(){
+  bagMsg="";
+  document.querySelectorAll("[data-breq]").forEach(b=>b.onclick=()=>{
+    const nm=b.dataset.breq,u=bagUnit(nm);
+    if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent=`한 번 더 누르면 신청해요`;return}
+    act(b,$("#bagMsg"),()=>R(`students/${KEY}/bagReq`).push({name:nm,n:1,t:SV.TIMESTAMP})).then(ok=>{if(ok){bagMsg=`'${nm}' 1${u} 사용을 신청했어요. 선생님이 확인하면 가방에서 빠져요.`;renderMyPage()}});
+  });
+  document.querySelectorAll("[data-breq-cancel]").forEach(b=>b.onclick=()=>{
+    const nm=b.dataset.breqCancel,r=bagReqs(ME).filter(x=>x.name===nm).pop();if(!r)return;
+    act(b,$("#bagMsg"),()=>R(`students/${KEY}/bagReq/${r.id}`).remove()).then(ok=>{if(ok){bagMsg="사용 신청을 취소했어요.";renderMyPage()}});
+  });
+}
+/* 여러 학생·여러 장을 한 번에: 오래된 구매부터 spent를 채우는 갱신 목록을 만들어요 */
+function bagPlan(up,planned,k,base,n){
+  const ps=Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})).filter(p=>p.used&&!BAG_SKIP.includes(p.kind)&&bagSplit(p.name).base===base).sort((a,b)=>(+a.t||0)-(+b.t||0));
+  let left=n;
+  for(const p of ps){
+    if(left<=0)break;
+    const key=k+"/"+p.id,sp=planned[key]??(+p.spent||0),room=bagSplit(p.name).n-sp,take=Math.min(room,left);
+    if(take>0){planned[key]=sp+take;up[`purchases/${k}/${p.id}/spent`]=sp+take;up[`purchases/${k}/${p.id}/spentAt`]=SV.TIMESTAMP;left-=take}
+  }
+  return left===0;
+}
+function bagReqCardHtml(){
+  const all=[];Object.entries(STUDENTS||{}).forEach(([k,s])=>bagReqs(s).forEach(r=>all.push({k,who:s.name||k,...r})));
+  all.sort((a,b)=>(+a.t||0)-(+b.t||0));
+  return `<article class="card" id="bagReqCard">
+    <div class="t-head"><h3>가방 사용 신청 (${all.length})</h3>${all.length>1?`<button type="button" class="primary" id="bReqAll">모두 확인</button>`:""}</div>
+    ${all.length?`<ul class="receipts">${all.map(r=>`<li><span class="rinfo"><b>${esc(r.who)} · ${bagIcon(r.name)} ${esc(r.name)} ${+r.n||1}${bagUnit(r.name)}</b><small>${whenKST(r.t)} 신청</small></span><span class="row-btns"><button type="button" class="ghost" data-breq-ok="${esc(r.k)}|${esc(r.id)}">확인</button><button type="button" class="link" data-breq-no="${esc(r.k)}|${esc(r.id)}">돌려보내기</button></span></li>`).join("")}</ul>`:`<p class="empty">학생이 '사용 신청'을 누르면 여기에 떠요.</p>`}
+    <p class="msg" id="bReqMsg" role="status"></p>
+  </article>`;
+}
+let bagSelT=new Set(),bagItemT="",bagMsgT="";
+function bagClassCardHtml(){
+  const studs=Object.entries(STUDENTS||{}).sort((a,b)=>(a[1].grade-b[1].grade)||(a[1].cls-b[1].cls)||(a[1].num-b[1].num));
+  const bags={},names=new Set();
+  studs.forEach(([k])=>{const items=bagOf(Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})));bags[k]={};items.forEach(e=>{if(e.have||e.used){bags[k][e.name]=e;names.add(e.name)}})});
+  const cols=[...names].sort((a,b)=>/칭찬/.test(b)-/칭찬/.test(a)||a.localeCompare(b,"ko"));
+  if(!cols.length)return `<article class="card"><h3>반 전체 가방</h3><p class="empty">아직 학생에게 건네준 물건이 없어요.</p></article>`;
+  if(!cols.includes(bagItemT))bagItemT=cols[0];
+  const rows=studs.filter(([k])=>Object.keys(bags[k]).length);
+  return `<article class="card" id="bagClassCard">
+    <h3>반 전체 가방</h3>
+    <p class="t-help">학생을 고르고 물건과 개수를 정해 '사용 처리'를 누르면 한꺼번에 빠져요. 칸의 −1을 누르면 그 학생만 1개 빠져요.</p>
+    <div class="tbl-wrap"><table class="tbl bag-tbl"><thead><tr><th><input type="checkbox" id="bgAll" aria-label="모두 선택" ${rows.length&&rows.every(([k])=>bagSelT.has(k))?"checked":""}></th><th>학번</th><th>이름</th>${cols.map(c=>`<th>${bagIcon(c)} ${esc(c)}</th>`).join("")}</tr></thead><tbody>
+    ${rows.map(([k,s])=>`<tr class="${bagSelT.has(k)?"picked":""}"><td><input type="checkbox" data-bgsel="${esc(k)}" aria-label="${esc(k)} 선택" ${bagSelT.has(k)?"checked":""}></td><td>${esc(k)}</td><td>${esc(s.name)}</td>${cols.map(c=>{const e=bags[k][c];return `<td>${e?`<b>${e.have}</b>${e.have?` <button type="button" class="ghost mini" data-bg1="${esc(k)}|${esc(c)}" aria-label="${esc(s.name)} ${esc(c)} 1개 사용">−1</button>`:""}`:`<span class="lbl">-</span>`}</td>`}).join("")}</tr>`).join("")}
+    </tbody></table></div>
+    <div class="bag-bulk">
+      <label class="t-field" for="bgItem">물건<select id="bgItem">${cols.map(c=>`<option value="${esc(c)}" ${c===bagItemT?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
+      <label class="t-field" for="bgN">개수<input type="number" id="bgN" min="1" max="50" step="1" value="1"></label>
+      <button type="button" class="primary" id="bgGo" ${bagSelT.size?"":"disabled"}>선택한 ${bagSelT.size}명 사용 처리</button>
+    </div>
+    <p class="msg" id="bgMsg" role="status">${esc(bagMsgT)}</p>
+  </article>`;
+}
+function bagBindTeacher(){
+  bagMsgT="";
+  const msg=$("#bReqMsg");
+  const approve=(list)=>{const up={},planned={},fail=[];
+    list.forEach(r=>{if(bagPlan(up,planned,r.k,r.name,+r.n||1))up[`students/${r.k}/bagReq/${r.id}`]=null;else fail.push(r)});
+    return {up,fail}};
+  const reqOf=(k,id)=>{const r=((STUDENTS[k]||{}).bagReq||{})[id];return r?{k,id,...r}:null};
+  document.querySelectorAll("[data-breq-ok]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.breqOk.split("|"),r=reqOf(k,id);if(!r)return;
+    const {up,fail}=approve([r]);if(fail.length){msg.textContent="가방에 남은 물건이 없어요. '돌려보내기'를 눌러 주세요.";return}
+    act(b,msg,()=>R("").update(up)).then(()=>renderTeacher())});
+  document.querySelectorAll("[data-breq-no]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.breqNo.split("|"),r=reqOf(k,id);if(!r)return;
+    act(b,msg,()=>R("").update({[`students/${k}/bagReq/${id}`]:null,[`students/${k}/bagLog/${R("logs").push().key}`]:{t:SV.TIMESTAMP,text:`선생님이 '${r.name}' 사용 신청을 돌려보냈어요.`}})).then(()=>renderTeacher())});
+  const all=$("#bReqAll");if(all)all.onclick=()=>{const list=[];Object.entries(STUDENTS||{}).forEach(([k,s])=>bagReqs(s).forEach(r=>list.push({k,...r})));
+    const {up,fail}=approve(list);act(all,msg,()=>R("").update(up)).then(ok=>{renderTeacher();if(ok&&fail.length){const m=$("#bReqMsg");if(m)m.textContent=`${fail.length}건은 가방에 남은 물건이 없어서 그대로 두었어요.`}})};
+  const rowsKeys=[...document.querySelectorAll("[data-bgsel]")].map(c=>c.dataset.bgsel);
+  const ba=$("#bgAll");if(ba)ba.onchange=e=>{rowsKeys.forEach(k=>e.target.checked?bagSelT.add(k):bagSelT.delete(k));renderTeacher()};
+  document.querySelectorAll("[data-bgsel]").forEach(c=>c.onchange=()=>{c.checked?bagSelT.add(c.dataset.bgsel):bagSelT.delete(c.dataset.bgsel);renderTeacher()});
+  const it=$("#bgItem");if(it)it.onchange=()=>{bagItemT=it.value};
+  document.querySelectorAll("[data-bg1]").forEach(b=>b.onclick=()=>{const [k,...r]=b.dataset.bg1.split("|"),nm=r.join("|"),up={};
+    if(!bagPlan(up,{},k,nm,1))return;act(b,$("#bgMsg"),()=>R("").update(up)).then(ok=>{if(ok)bagMsgT=`${(STUDENTS[k]||{}).name||k}: ${nm} 1${bagUnit(nm)} 사용 처리했어요.`;renderTeacher()})});
+  const go=$("#bgGo");if(go)go.onclick=()=>{
+    const nm=$("#bgItem").value,n=Math.max(1,Math.min(50,Math.round(+$("#bgN").value||1))),up={},planned={},short=[];
+    [...bagSelT].forEach(k=>{if(!bagPlan(up,planned,k,nm,n))short.push((STUDENTS[k]||{}).name||k)});
+    if(short.length){$("#bgMsg").textContent=`${jo(short.join(", "),"은","는")} ${qj(nm,"이","가")} ${n}${bagUnit(nm)}보다 적어요. 개수를 줄이거나 선택을 빼 주세요.`;return}
+    act(go,$("#bgMsg"),()=>R("").update(up)).then(ok=>{if(ok){bagMsgT=`${bagSelT.size}명에게서 ${nm} ${n}${bagUnit(nm)}씩 사용 처리했어요.`;bagSelT.clear()}renderTeacher()});
+  };
 }
 function bagTeacherHtml(k){
   const list=Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})),items=bagOf(list).filter(e=>e.have||e.used);
@@ -497,6 +585,7 @@ function notiList(){
     });
     (BUYS||[]).forEach(b=>{if(b.used&&b.usedAt&&!["lotto","pet","fx"].includes(b.kind))add(b.usedAt,"🛍️",`산 물건 ${qj(b.name||"물건","을","를")} 선생님이 건네줬어요. 내 가방에 들어갔어요.`,{tab:"me"});
       if(b.spentAt&&+b.spent>0&&!["lotto","pet","fx"].includes(b.kind)){const nm=bagSplit(b.name).base;add(b.spentAt,"🎒",`선생님이 가방의 '${nm}' 1${bagUnit(nm)}${bagUnit(nm)==="장"?"을":"를"} 사용 처리했어요.`,{tab:"me"})}});
+    Object.values((ME.bagLog)||{}).forEach(x=>{if(x&&x.t)add(x.t,"🎒",x.text||"",{tab:"me"})});
     const d=today(),dw=dowOf(d);
     if(dw>0&&dw<6&&nowHM()>="14:00"&&!(ME.quiz&&ME.quiz.date===d))add(kstAt(d,"14:00"),"📝","오늘의 도전을 아직 안 했어요. 오늘 안에 도전해 보세요!",{tab:"quiz"});
   }else if(role==="teacher"){
@@ -505,6 +594,7 @@ function notiList(){
     Object.entries(cmts).forEach(([pid,cs])=>Object.values(cs||{}).forEach(c=>{if(c&&c.re&&c.to==="T"&&c.k!=="T")add(c.t,"↩️",`${jo(c.name||c.k,"이","가")} 선생님 댓글에 답글을 달았어요: '${snip(c.text)}'`,{tab:"board",post:pid,thread:c.re})}));
     const d=today();
     Object.entries(STUDENTS||{}).forEach(([k,s])=>{const f=s&&s.mealFlag;if(f&&f.d===d&&f.k)Object.entries(f.k).forEach(([tk,v])=>{const who=(STUDENTS[tk]||{}).name||tk;add(+v>1?+v:kstAt(d,"12:30"),"🍚",`${jo(s.name||k,"이","가")} ${who}의 급식 완식 확인을 요청했어요.`,{tab:"quiz"})})});
+    Object.entries(STUDENTS||{}).forEach(([k,s])=>bagReqs(s).forEach(r=>add(r.t,"🎒",`${jo(s.name||k,"이","가")} '${r.name}' ${+r.n||1}${bagUnit(r.name)} 사용을 신청했어요.`,{tab:"teacher"})));
     Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.values(ps||{}).forEach(p=>{if(p&&!p.used&&!["lotto","pet","fx"].includes(p.kind))add(p.t,"🛍️",`${jo((STUDENTS[k]||{}).name||k,"이","가")} ${qj(p.name||"물건","을","를")} 샀어요. 건네주세요.`,{tab:"teacher"})}));
   }
   return out.sort((a,b)=>b.t-a.t).slice(0,40);
@@ -1175,13 +1265,14 @@ function renderTeacher(){
     <h3>건네줄 물건 (${pend.length})</h3>
     ${pend.length?`<ul class="receipts">${pend.map(p=>`<li><span class="rinfo"><b>${esc(p.who)} · ${esc(p.name)}</b><small>${whenKST(p.t)} · ${fmt(p.price)}코인</small></span><span class="rcode">${esc(p.code)}</span><button type="button" class="ghost" data-give="${esc(p.k)}|${esc(p.id)}">건네줬어요</button></li>`).join("")}</ul>`:`<p class="empty">아직 건네줄 물건이 없어요.</p>`}
   </article>
+  ${bagReqCardHtml()}
+  ${bagClassCardHtml()}
 
   <article class="card">
     <h3>학생 (${studs.length}명)</h3>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>학번</th><th>이름</th><th>지갑</th><th>은행</th><th>주식</th><th>퀴즈</th><th>오늘</th><th></th></tr></thead><tbody>
-    ${studs.map(([k,s])=>`<tr class="${k===selKey?"picked":""}"><td>${esc(k)}</td><td>${esc(s.name)}${timeX(s)!==1?` <small class="tx">${timeX(s)?`⏱×${timeX(s)}`:"⏱없음"}</small>`:""}</td><td>${fmt(s.wallet)}</td><td>${fmt(s.bank)}</td><td>${fmt(valueOf(s))}</td><td>${+s.qCount||0}회</td><td>${s.quiz&&s.quiz.date===today()?(s.quiz.state==="완료"?`${s.quiz.right}/${s.quiz.total}`:"푸는 중"):"-"}</td><td><button type="button" class="ghost" data-pick="${esc(k)}">${k===selKey?"선택됨":"수정·리셋"}</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">아직 들어온 학생이 없어요.</td></tr>`}
+    ${studs.map(([k,s])=>`<tr class="${k===selKey?"picked":""}"><td>${esc(k)}</td><td>${esc(s.name)}${timeX(s)!==1?` <small class="tx">${timeX(s)?`⏱×${timeX(s)}`:"⏱없음"}</small>`:""}</td><td>${fmt(s.wallet)}</td><td>${fmt(s.bank)}</td><td>${fmt(valueOf(s))}</td><td>${+s.qCount||0}회</td><td>${s.quiz&&s.quiz.date===today()?(s.quiz.state==="완료"?`${s.quiz.right}/${s.quiz.total}`:"푸는 중"):"-"}</td><td><button type="button" class="ghost" data-pick="${esc(k)}" aria-expanded="${k===selKey}">${k===selKey?"접기 ▲":"수정·리셋"}</button></td></tr>${k===selKey?`<tr class="edit-row"><td colspan="8">${editHtml(k,s)}</td></tr>`:""}`).join("")||`<tr><td colspan="8" class="empty">아직 들어온 학생이 없어요.</td></tr>`}
     </tbody></table></div>
-    ${selKey&&STUDENTS[selKey]?editHtml(selKey,STUDENTS[selKey]):""}
     <div class="t-sec"><h3>코인 직접 주기·빼기</h3>
       <div class="row2">
         <label class="t-field" for="gWho">학생${sel("gWho",studs.map(([k,s])=>[k,`${k} ${s.name}`]),"")}</label>
@@ -1210,6 +1301,7 @@ function renderTeacher(){
   document.querySelectorAll("[data-down]").forEach(b=>b.onclick=()=>mv(+b.dataset.down,1));
   $("#tShopSave").onclick=()=>{syncShop();const obj={};TSHOP.filter(it=>it.name.trim()).forEach((it,i)=>obj[it.id]={name:it.name.trim().slice(0,30),price:it.price,desc:(it.desc||"").trim().slice(0,60),on:true,order:i});
     act($("#tShopSave"),$("#tShopMsg"),async()=>{await R("shop").set(obj);TSHOP=null}).then(ok=>{if(ok){renderTeacher();$("#tShopMsg").textContent="상점을 저장했어요."}})};
+  bagBindTeacher();
   document.querySelectorAll("[data-bag-use],[data-bag-undo]").forEach(b=>b.onclick=()=>{const undo=!!b.dataset.bagUndo,[k,...rest]=(b.dataset.bagUse||b.dataset.bagUndo).split("|");act(b,null,()=>bagUse(k,rest.join("|"),undo)).then(()=>renderTeacher())});
   document.querySelectorAll("[data-give]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.give.split("|");act(b,null,()=>R(`purchases/${k}/${id}`).update({used:true,usedAt:SV.TIMESTAMP}))});
   document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{
