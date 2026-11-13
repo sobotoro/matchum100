@@ -150,6 +150,7 @@ function renderMyPage(){
     </div>
   </article>`;
   meMsg="";
+  if(typeof bagBindStudent==="function")bagBindStudent();
   const m=$("#meMsg");
   const cur=()=>{const a=(ME.avatar&&typeof ME.avatar==="object")?ME.avatar:{};return {g:a.g==="f"?"f":"m",hair:HAIRS[a.hair]?+a.hair:av.hair,skin:SKINS[a.skin]?+a.skin:0,slots:{...(a.slots||{})}}};
   const save=a=>act(null,m,()=>upd({avatar:a})).then(ok=>{if(ok)renderMyPage()});
@@ -275,7 +276,7 @@ function renderBoard(){
 let bulkSel=new Set(),bulkMsg="";
 function enhanceTeacher(){
   enhanceTeacherLotto();
-  const tbl=document.querySelector("#view-teacher .tbl:not(.lotto-tbl)");if(!tbl)return;
+  const tbl=document.querySelector("#view-teacher .tbl:not(.lotto-tbl):not(.bag-tbl)");if(!tbl)return;
   [...bulkSel].forEach(k=>{if(!STUDENTS[k])bulkSel.delete(k)});
   const keys=[...tbl.querySelectorAll("[data-pick]")].map(b=>b.dataset.pick);
   const hr=tbl.querySelector("thead tr");
