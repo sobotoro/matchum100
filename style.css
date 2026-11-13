@@ -444,3 +444,12 @@ body{margin:0}
 .bag-item .bx{grid-area:x;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:.78rem;color:var(--muted);margin-top:4px}
 .bag-item .bw{color:var(--pen)}
 .bag-item.none{opacity:.6}
+/* 가방 사용 신청 · 반 전체 가방 · 학생 줄 아래 정보창 */
+.bag-item .breq{grid-column:1/-1;justify-self:start;margin-top:6px}
+.bag-item .bp{color:var(--down);font-weight:700}
+.bag-tbl td .mini{padding:0 8px;font-size:.78rem;margin-left:4px}
+.bag-bulk{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.bag-bulk .t-field{min-width:0}
+.bag-bulk #bgN{width:6em}
+.tbl tr.edit-row>td{padding:0 0 14px;white-space:normal;border-bottom:2px solid var(--pen)}
+.tbl tr.edit-row .edit-card{margin-top:6px;position:sticky;left:0;max-width:calc(100vw - 72px);box-sizing:border-box;background:var(--sheet)}
