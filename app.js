@@ -17,6 +17,7 @@ document.getElementById("app").innerHTML=`
     <button type="button" role="tab" data-tab="shop" id="tab-shop">상점</button>
     <button type="button" role="tab" data-tab="class" id="tab-class">우리 반</button>
     <button type="button" role="tab" data-tab="board" id="tab-board">자유게시판</button>
+    <button type="button" role="tab" data-tab="rooms" id="tab-rooms">토의방</button>
     <button type="button" role="tab" data-tab="me" id="tab-me">마이페이지</button>
     <button type="button" role="tab" data-tab="teacher" id="tab-teacher" hidden>선생님</button>
   </nav>
@@ -32,6 +33,7 @@ document.getElementById("app").innerHTML=`
   <section class="view" id="view-shop" hidden></section>
   <section class="view" id="view-class" hidden></section>
   <section class="view" id="view-board" hidden></section>
+  <section class="view" id="view-rooms" hidden></section>
   <section class="view" id="view-me" hidden></section>
   <section class="view" id="view-teacher" hidden></section>
 `;
@@ -255,7 +257,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -586,12 +588,14 @@ function notiList(){
     (BUYS||[]).forEach(b=>{if(b.used&&b.usedAt&&!["lotto","pet","fx"].includes(b.kind))add(b.usedAt,"🛍️",`산 물건 ${qj(b.name||"물건","을","를")} 선생님이 건네줬어요. 내 가방에 들어갔어요.`,{tab:"me"});
       if(b.spentAt&&+b.spent>0&&!["lotto","pet","fx"].includes(b.kind)){const nm=bagSplit(b.name).base;add(b.spentAt,"🎒",`선생님이 가방의 '${nm}' 1${bagUnit(nm)}${bagUnit(nm)==="장"?"을":"를"} 사용 처리했어요.`,{tab:"me"})}});
     Object.values((ME.bagLog)||{}).forEach(x=>{if(x&&x.t)add(x.t,"🎒",x.text||"",{tab:"me"})});
+    if(typeof roomNoti==="function")roomNoti(add);
     const d=today(),dw=dowOf(d);
     if(dw>0&&dw<6&&nowHM()>="14:00"&&!(ME.quiz&&ME.quiz.date===d))add(kstAt(d,"14:00"),"📝","오늘의 도전을 아직 안 했어요. 오늘 안에 도전해 보세요!",{tab:"quiz"});
   }else if(role==="teacher"){
     Object.entries(posts).forEach(([pid,p])=>{if(p&&p.k&&p.k!=="T")add(p.t,"📝",`${jo(p.name||p.k,"이","가")} 새 글을 올렸어요: '${snip(p.text)}'`,{tab:"board",post:pid})});
     Object.entries(cmts).forEach(([pid,cs])=>{const p=posts[pid];if(p&&p.k==="T")Object.values(cs||{}).forEach(c=>{if(c&&c.k!=="T"&&!(c.re&&c.to==="T"))add(c.t,"💬",`${jo(c.name||c.k,"이","가")} 선생님 글 '${snip(p.text)}'에 댓글을 달았어요.`,{tab:"board",post:pid})})});
     Object.entries(cmts).forEach(([pid,cs])=>Object.values(cs||{}).forEach(c=>{if(c&&c.re&&c.to==="T"&&c.k!=="T")add(c.t,"↩️",`${jo(c.name||c.k,"이","가")} 선생님 댓글에 답글을 달았어요: '${snip(c.text)}'`,{tab:"board",post:pid,thread:c.re})}));
+    if(typeof roomNoti==="function")roomNoti(add);
     const d=today();
     Object.entries(STUDENTS||{}).forEach(([k,s])=>{const f=s&&s.mealFlag;if(f&&f.d===d&&f.k)Object.entries(f.k).forEach(([tk,v])=>{const who=(STUDENTS[tk]||{}).name||tk;add(+v>1?+v:kstAt(d,"12:30"),"🍚",`${jo(s.name||k,"이","가")} ${who}의 급식 완식 확인을 요청했어요.`,{tab:"quiz"})})});
     Object.entries(STUDENTS||{}).forEach(([k,s])=>bagReqs(s).forEach(r=>add(r.t,"🎒",`${jo(s.name||k,"이","가")} '${r.name}' ${+r.n||1}${bagUnit(r.name)} 사용을 신청했어요.`,{tab:"teacher"})));
@@ -617,6 +621,7 @@ function renderBell(){
     const x=list[+b.dataset.ni];bellOpen=false;renderBell();if(!x)return;
     if(x.go.post&&typeof openPost!=="undefined")openPost=x.go.post;
     if(x.go.thread&&typeof openReplies!=="undefined")openReplies.add(x.go.post+"|"+x.go.thread);
+    if(x.go.room&&typeof openRoom!=="undefined"){openRoom=x.go.room;roomMake=false;roomReply=null;roomDraft=""}
     if(location.hash!=="#"+x.go.tab)location.hash=x.go.tab;else showTab(x.go.tab);
     if(x.go.post)setTimeout(()=>{const el=document.getElementById("post-"+x.go.post);if(el)el.scrollIntoView({block:"start",behavior:"smooth"})},150);
   });
@@ -644,7 +649,7 @@ function renderMe(){
 }
 
 /* ---------- 로그인 화면 ---------- */
-const VIEWS=["login","quiz","bank","stock","shop","class","board","me","teacher"];
+const VIEWS=["login","quiz","bank","stock","shop","class","board","rooms","me","teacher"];
 let loginMode="student";
 function showLogin(msg){
   $("#tabs").hidden=true;VIEWS.forEach(x=>$("#view-"+x).hidden=x!=="login");
@@ -693,9 +698,9 @@ function showLogin(msg){
 }
 
 /* ---------- 탭 ---------- */
-const TABS=["quiz","bank","stock","shop","class","board","me","teacher"];
+const TABS=["quiz","bank","stock","shop","class","board","rooms","me","teacher"];
 let current="quiz";
-function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","teacher"]:["quiz","bank","stock","shop","class","board","me"]}
+function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","rooms","teacher"]:["quiz","bank","stock","shop","class","board","rooms","me"]}
 function showTab(t){
   if(!role){showLogin();return}
   if(role==="student"&&!ME)return;
@@ -704,7 +709,7 @@ function showTab(t){
   current=t;$("#tabs").hidden=false;
   TABS.forEach(x=>{$("#tab-"+x).hidden=!ok.includes(x);$("#tab-"+x).setAttribute("aria-selected",String(x===t))});
   VIEWS.forEach(x=>$("#view-"+x).hidden=x!==t);
-  ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,board:renderBoard,me:renderMyPage,teacher:renderTeacher})[t]();
+  ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,board:renderBoard,rooms:typeof renderRooms==="function"?renderRooms:()=>{$("#view-rooms").innerHTML=`<article class="card"><p class="empty">토의방을 불러오지 못했어요. 새로 고쳐 주세요.</p></article>`},me:renderMyPage,teacher:renderTeacher})[t]();
 }
 document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{
   const t=b.dataset.tab;if(location.hash!=="#"+t)location.hash=t;else showTab(t);
@@ -1422,6 +1427,7 @@ function setupData(user){
     on(R("purchases"),s=>{ALLBUYS=s.val()||{};renderBell();if(current==="teacher")rerender()});
   }
   on(R("board"),s=>{BRD=s.val()||{};renderBell();if(current==="board")rerender()});
+  if(typeof roomsLive==="function")on(R("rooms"),s=>{ROOMS=s.val()||{};renderBell();if(current==="rooms")roomsLive()});
   on(R("market"),s=>applyMarket(s.val()));
   if(role==="teacher")on(R("tmeta/notiSeen"),s=>{TSEEN=+s.val()||0;renderBell()});
 }
@@ -1431,7 +1437,7 @@ function boot(){
   firebase.initializeApp(fc);db=firebase.database();auth=firebase.auth();SV=firebase.database.ServerValue;
   $("#view-login").hidden=false;$("#view-login").innerHTML=`<article class="card"><p class="kind">불러오는 중</p><h2>우리 반 기록을 가져오고 있어요…</h2></article>`;
   auth.onAuthStateChanged(user=>{
-    offAll();ME=null;Q=null;STUDENTS={};bellOpen=false;TSEEN=0;LOGS=[];BUYS=[];TSHOP=null;
+    offAll();ME=null;Q=null;STUDENTS={};bellOpen=false;TSEEN=0;LOGS=[];BUYS=[];TSHOP=null;if(typeof roomsLive==="function"){ROOMS={};openRoom=null;roomMake=false;RSEEN=null;roomLastSend=0}
     if(!user){role=null;KEY=null;renderMe();showLogin();return}
     if((user.email||"").toLowerCase()===TEACHER()){role="teacher";KEY=null;renderMe();setupData(user);showTab(location.hash.slice(1)||"teacher");return}
     const k=keyOfEmail(user.email);
