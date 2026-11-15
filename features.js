@@ -195,7 +195,7 @@ function postHtml(p){
   const cm=Object.entries((BRD.comments||{})[p.id]||{}).map(([id,c])=>({id,...c})).filter(c=>c&&c.text).sort((a,b)=>a.t-b.t);
   const ids=new Set(cm.map(c=>c.id)),tops=cm.filter(c=>!c.re||!ids.has(c.re)),byRe={};
   cm.forEach(c=>{if(c.re&&ids.has(c.re))(byRe[c.re]=byRe[c.re]||[]).push(c)});
-  const mine=p.k===myKey()||isT(),open=CFG.boardOpen!==false||isT();
+  const mine=isT(),open=CFG.boardOpen!==false||isT();
   return `<article class="card post ${p.notice?"notice":""}" id="post-${esc(p.id)}">
     <div class="post-head">${whoHtml(p.k,p.name)}<span class="when">${p.notice?"공지 · ":""}${whenKST(p.t)}</span></div>
     <p class="post-text">${esc(p.text)}</p>
@@ -246,8 +246,8 @@ function renderBoard(){
   }));
   const arm=b=>{if(b.dataset.armed==="1")return true;b.dataset.armed="1";b.textContent="한 번 더 누르면 지워요";return false};
   document.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>{
-    if(!arm(b))return;const id=b.dataset.pdel;
-    act(b,m,()=>isT()?R("board").update({[`posts/${id}`]:null,[`comments/${id}`]:null,[`likes/${id}`]:null}):R(`board/posts/${id}`).remove()).then(ok=>{if(ok){boardMsg="글을 지웠어요.";renderBoard()}});
+    if(!isT()||!arm(b))return;const id=b.dataset.pdel;
+    act(b,m,()=>R("board").update({[`posts/${id}`]:null,[`comments/${id}`]:null,[`likes/${id}`]:null})).then(ok=>{if(ok){boardMsg="글을 지웠어요.";renderBoard()}});
   });
   document.querySelectorAll("[data-cdel]").forEach(b=>b.onclick=()=>{
     if(!isT())return;
