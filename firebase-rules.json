@@ -2,13 +2,24 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "rope8": { ".read": true, ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'" },
-    "dodge": { ".read": true, ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'" },
-    "solo":  { ".read": true, ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'" },
+    "rope8": {
+      ".read": true,
+      ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'"
+    },
+    "dodge": {
+      ".read": true,
+      ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'"
+    },
+    "solo": {
+      ".read": true,
+      ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'"
+    },
     "matchum": {
       ".read": "auth != null",
       ".write": "auth != null && auth.token.email === 'teacher@jumprope.board'",
-      "gens": { ".read": true },
+      "gens": {
+        ".read": true
+      },
       "students": {
         "$k": {
           ".write": "auth != null && auth.token.email.beginsWith('s' + $k + '-') && newData.child('uid').val() === auth.uid && (!data.exists() || !data.child('uid').exists() || data.child('uid').val() === auth.uid)"
@@ -24,7 +35,86 @@
       "purchases": {
         "$k": {
           "$id": {
-            ".write": "auth != null && !data.exists() && newData.child('used').val() === false && auth.token.email.beginsWith('s' + $k + '-') && root.child('matchum/students/' + $k + '/uid').val() === auth.uid"
+            ".write": "auth != null && auth.token.email.beginsWith('s' + $k + '-') && root.child('matchum/students/' + $k + '/uid').val() === auth.uid && ((!data.exists() && newData.child('used').val() === false) || (data.exists() && data.child('kind').val() === 'lotto' && data.child('used').val() === false && newData.child('kind').val() === 'lotto' && newData.child('used').val() === true && newData.child('name').val() === data.child('name').val() && newData.child('price').val() === data.child('price').val()))"
+          }
+        }
+      },
+      "board": {
+        "posts": {
+          "$id": {
+            ".write": "auth != null && root.child('matchum/config/boardOpen').val() !== false && !data.exists() && newData.exists() && !newData.child('notice').exists() && root.child('matchum/students/' + newData.child('k').val() + '/uid').val() === auth.uid",
+            ".validate": "newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 300"
+          }
+        },
+        "comments": {
+          "$pid": {
+            "$cid": {
+              ".write": "auth != null && root.child('matchum/config/boardOpen').val() !== false && !data.exists() && newData.exists() && !newData.child('notice').exists() && root.child('matchum/students/' + newData.child('k').val() + '/uid').val() === auth.uid",
+              ".validate": "newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 150"
+            }
+          }
+        },
+        "likes": {
+          "$pid": {
+            "$k": {
+              ".write": "auth != null && root.child('matchum/students/' + $k + '/uid').val() === auth.uid"
+            }
+          }
+        }
+      },
+      "lottoWeek": {
+        "$week": {
+          "$r": {
+            ".write": "auth != null && newData.isNumber() && ((!data.exists() && newData.val() === 1) || (data.exists() && newData.val() === data.val() + 1))"
+          }
+        }
+      },
+      "rooms": {
+        "list": {
+          "$rid": {
+            ".write": "auth != null && root.child('matchum/config/roomOn').val() !== false && !data.exists() && newData.exists() && !newData.child('closed').exists() && root.child('matchum/students/' + newData.child('k').val() + '/uid').val() === auth.uid",
+            ".validate": "newData.child('title').isString() && newData.child('title').val().length >= 1 && newData.child('title').val().length <= 40 && newData.child('k').isString()",
+            "closed": {
+              ".write": "auth != null && !data.exists() && newData.exists() && root.child('matchum/students/' + root.child('matchum/rooms/list/' + $rid + '/k').val() + '/uid').val() === auth.uid"
+            },
+            "closedBy": {
+              ".write": "auth != null && !data.exists() && newData.exists() && root.child('matchum/students/' + root.child('matchum/rooms/list/' + $rid + '/k').val() + '/uid').val() === auth.uid"
+            },
+            "summary": {
+              ".write": "auth != null && !data.exists() && newData.exists() && root.child('matchum/students/' + root.child('matchum/rooms/list/' + $rid + '/k').val() + '/uid').val() === auth.uid",
+              ".validate": "newData.isString() && newData.val().length <= 300"
+            }
+          }
+        },
+        "msgs": {
+          "$rid": {
+            "$mid": {
+              ".write": "auth != null && !data.exists() && newData.exists() && root.child('matchum/config/roomOn').val() !== false && root.child('matchum/rooms/list/' + $rid + '/title').exists() && !root.child('matchum/rooms/list/' + $rid + '/closed').exists() && root.child('matchum/rooms/mute/' + newData.child('k').val()).val() !== true && root.child('matchum/students/' + newData.child('k').val() + '/uid').val() === auth.uid",
+              ".validate": "newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 200"
+            }
+          }
+        },
+        "members": {
+          "$rid": {
+            "$k": {
+              ".write": "auth != null && newData.exists() && root.child('matchum/students/' + $k + '/uid').val() === auth.uid && !root.child('matchum/rooms/list/' + $rid + '/closed').exists()"
+            }
+          }
+        },
+        "votes": {
+          "$rid": {
+            "$k": {
+              ".write": "auth != null && newData.exists() && root.child('matchum/students/' + $k + '/uid').val() === auth.uid && !root.child('matchum/rooms/list/' + $rid + '/closed').exists() && root.child('matchum/rooms/list/' + $rid + '/opts/' + newData.val()).exists()"
+            }
+          }
+        },
+        "react": {
+          "$rid": {
+            "$mid": {
+              "$k": {
+                ".write": "auth != null && root.child('matchum/students/' + $k + '/uid').val() === auth.uid && !root.child('matchum/rooms/list/' + $rid + '/closed').exists()"
+              }
+            }
           }
         }
       }
