@@ -498,31 +498,22 @@ function bagReqCardHtml(){
     <p class="msg" id="bReqMsg" role="status"></p>
   </article>`;
 }
-let bagSelT=new Set(),bagItemT="",bagMsgT="";
+/* 반 전체 가방: 보유 개수만 보는 표예요. 사용 처리는 '가방 사용 신청' 카드나 학생 명단의 '수정·리셋' 정보창에서 해요. */
 function bagClassCardHtml(){
   const studs=Object.entries(STUDENTS||{}).sort((a,b)=>(a[1].grade-b[1].grade)||(a[1].cls-b[1].cls)||(a[1].num-b[1].num));
   const bags={},names=new Set();
-  studs.forEach(([k])=>{const items=bagOf(Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})));bags[k]={};items.forEach(e=>{if(e.have||e.used){bags[k][e.name]=e;names.add(e.name)}})});
+  shopList().forEach(it=>{if(!(typeof isLotto==="function"&&isLotto(it)))names.add(bagSplit(it.name).base)});
+  studs.forEach(([k])=>{const items=bagOf(Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})));bags[k]={};items.forEach(e=>{if(e.have||e.used){bags[k][e.name]=+e.have||0;names.add(e.name)}})});
   const cols=[...names].sort((a,b)=>/칭찬/.test(b)-/칭찬/.test(a)||a.localeCompare(b,"ko"));
-  if(!cols.length)return `<article class="card"><h3>반 전체 가방</h3><p class="empty">아직 학생에게 건네준 물건이 없어요.</p></article>`;
-  if(!cols.includes(bagItemT))bagItemT=cols[0];
-  const rows=studs.filter(([k])=>Object.keys(bags[k]).length);
   return `<article class="card" id="bagClassCard">
     <h3>반 전체 가방</h3>
-    <p class="t-help">학생을 고르고 물건과 개수를 정해 '사용 처리'를 누르면 한꺼번에 빠져요. 칸의 −1을 누르면 그 학생만 1개 빠져요.</p>
-    <div class="tbl-wrap"><table class="tbl bag-tbl"><thead><tr><th><input type="checkbox" id="bgAll" aria-label="모두 선택" ${rows.length&&rows.every(([k])=>bagSelT.has(k))?"checked":""}></th><th>학번</th><th>이름</th>${cols.map(c=>`<th>${bagIcon(c)} ${esc(c)}</th>`).join("")}</tr></thead><tbody>
-    ${rows.map(([k,s])=>`<tr class="${bagSelT.has(k)?"picked":""}"><td><input type="checkbox" data-bgsel="${esc(k)}" aria-label="${esc(k)} 선택" ${bagSelT.has(k)?"checked":""}></td><td>${esc(k)}</td><td>${esc(s.name)}</td>${cols.map(c=>{const e=bags[k][c];return `<td>${e?`<b>${e.have}</b>${e.have?` <button type="button" class="ghost mini" data-bg1="${esc(k)}|${esc(c)}" aria-label="${esc(s.name)} ${esc(c)} 1개 사용">−1</button>`:""}`:`<span class="lbl">-</span>`}</td>`}).join("")}</tr>`).join("")}
-    </tbody></table></div>
-    <div class="bag-bulk">
-      <label class="t-field" for="bgItem">물건<select id="bgItem">${cols.map(c=>`<option value="${esc(c)}" ${c===bagItemT?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
-      <label class="t-field" for="bgN">개수<input type="number" id="bgN" min="1" max="50" step="1" value="1"></label>
-      <button type="button" class="primary" id="bgGo" ${bagSelT.size?"":"disabled"}>선택한 ${bagSelT.size}명 사용 처리</button>
-    </div>
-    <p class="msg" id="bgMsg" role="status">${esc(bagMsgT)}</p>
+    <p class="t-help">학생들이 가방에 가진 물건 개수를 한눈에 봐요. 학생이 '사용 신청'을 누르면 위의 '가방 사용 신청' 카드에서 확인해요. 선생님이 바로 빼려면 아래 학생 명단의 '수정·리셋'에서 해요.</p>
+    ${studs.length?`<div class="tbl-wrap"><table class="tbl bag-tbl"><thead><tr><th>학번</th><th>이름</th>${cols.map(c=>`<th class="c">${bagIcon(c)} ${esc(c)}</th>`).join("")}</tr></thead><tbody>
+    ${studs.map(([k,s])=>`<tr><td>${esc(k)}</td><td><b>${esc(s.name||k)}</b></td>${cols.map(c=>{const n=bags[k][c]||0;return `<td class="c">${n?`<b class="bag-n">${n}</b>`:`<span class="bag-0">-</span>`}</td>`}).join("")}</tr>`).join("")}
+    </tbody></table></div>`:`<p class="empty">아직 등록된 학생이 없어요.</p>`}
   </article>`;
 }
 function bagBindTeacher(){
-  bagMsgT="";
   const msg=$("#bReqMsg");
   const approve=(list)=>{const up={},planned={},fail=[];
     list.forEach(r=>{if(bagPlan(up,planned,r.k,r.name,+r.n||1))up[`students/${r.k}/bagReq/${r.id}`]=null;else fail.push(r)});
@@ -535,18 +526,6 @@ function bagBindTeacher(){
     act(b,msg,()=>R("").update({[`students/${k}/bagReq/${id}`]:null,[`students/${k}/bagLog/${R("logs").push().key}`]:{t:SV.TIMESTAMP,text:`선생님이 '${r.name}' 사용 신청을 돌려보냈어요.`}})).then(()=>renderTeacher())});
   const all=$("#bReqAll");if(all)all.onclick=()=>{const list=[];Object.entries(STUDENTS||{}).forEach(([k,s])=>bagReqs(s).forEach(r=>list.push({k,...r})));
     const {up,fail}=approve(list);act(all,msg,()=>R("").update(up)).then(ok=>{renderTeacher();if(ok&&fail.length){const m=$("#bReqMsg");if(m)m.textContent=`${fail.length}건은 가방에 남은 물건이 없어서 그대로 두었어요.`}})};
-  const rowsKeys=[...document.querySelectorAll("[data-bgsel]")].map(c=>c.dataset.bgsel);
-  const ba=$("#bgAll");if(ba)ba.onchange=e=>{rowsKeys.forEach(k=>e.target.checked?bagSelT.add(k):bagSelT.delete(k));renderTeacher()};
-  document.querySelectorAll("[data-bgsel]").forEach(c=>c.onchange=()=>{c.checked?bagSelT.add(c.dataset.bgsel):bagSelT.delete(c.dataset.bgsel);renderTeacher()});
-  const it=$("#bgItem");if(it)it.onchange=()=>{bagItemT=it.value};
-  document.querySelectorAll("[data-bg1]").forEach(b=>b.onclick=()=>{const [k,...r]=b.dataset.bg1.split("|"),nm=r.join("|"),up={};
-    if(!bagPlan(up,{},k,nm,1))return;act(b,$("#bgMsg"),()=>R("").update(up)).then(ok=>{if(ok)bagMsgT=`${(STUDENTS[k]||{}).name||k}: ${nm} 1${bagUnit(nm)} 사용 처리했어요.`;renderTeacher()})});
-  const go=$("#bgGo");if(go)go.onclick=()=>{
-    const nm=$("#bgItem").value,n=Math.max(1,Math.min(50,Math.round(+$("#bgN").value||1))),up={},planned={},short=[];
-    [...bagSelT].forEach(k=>{if(!bagPlan(up,planned,k,nm,n))short.push((STUDENTS[k]||{}).name||k)});
-    if(short.length){$("#bgMsg").textContent=`${jo(short.join(", "),"은","는")} ${qj(nm,"이","가")} ${n}${bagUnit(nm)}보다 적어요. 개수를 줄이거나 선택을 빼 주세요.`;return}
-    act(go,$("#bgMsg"),()=>R("").update(up)).then(ok=>{if(ok){bagMsgT=`${bagSelT.size}명에게서 ${nm} ${n}${bagUnit(nm)}씩 사용 처리했어요.`;bagSelT.clear()}renderTeacher()});
-  };
 }
 function bagTeacherHtml(k){
   const list=Object.entries((ALLBUYS||{})[k]||{}).map(([id,p])=>({id,...p})),items=bagOf(list).filter(e=>e.have||e.used);

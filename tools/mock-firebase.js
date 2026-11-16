@@ -6,7 +6,7 @@
   const names=["강민준","김서연","김하늘","박지호","이도윤","이수아","정예린","최현우","한지민","홍길동","윤서준","장하은"];
   const students={};
   names.forEach((nm,i)=>{const n=i+5,k=`5-2-${n}`;students[k]={grade:5,cls:2,num:n,name:nm,uid:"u"+n,wallet:300+i*137,bank:1000+i*211,lastPaid:kst,stocks:i%2?{c005930:{qty:0.004+i*0.001,cost:600+i*90}}:null,qCount:12+i,qRight:9+i}});
-  Object.assign(students["5-2-7"],{wallet:1250,bank:3400,stocks:{c005930:{qty:0.006,cost:1250},c000660:{qty:0.0006,cost:820}},bagReq:{r1:{name:"칭찬 카드 1개",n:1,t:now-H}}});
+  Object.assign(students["5-2-7"],{wallet:1250,bank:3400,stocks:{c005930:{qty:0.006,cost:1250},c000660:{qty:0.0006,cost:820}},bagReq:{r1:{name:"칭찬 카드",n:1,t:now-H}}});
   students["5-2-5"].meal={d:kst,t:now-0.5*H,c:250};students["5-2-6"].meal={d:kst,t:now-0.4*H,c:250};
   students["5-2-6"].mealSeen={d:kst,k:{"5-2-5":1}};
   const DBROOT={matchum:{
