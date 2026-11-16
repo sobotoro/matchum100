@@ -1,26 +1,34 @@
 /* 맞춤법 100 퀴즈 · 학급 경제 (Firebase 실시간 데이터베이스 + GitHub Pages) */
 
 /* ---------- 화면 뼈대 ---------- */
+/* 메뉴 한 곳에서 관리: [탭 이름, 글자, 아이콘 선] */
+const NAV=[
+  ["quiz","오늘의 퀴즈",'<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'],
+  ["bank","지갑·은행",'<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z"/><path d="M16.5 14h.01"/>'],
+  ["stock","주식",'<path d="M4 19h16"/><path d="M5 15l5-5 3 3 6-7"/>'],
+  ["shop","상점",'<path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'],
+  ["class","우리 반",'<path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/><path d="M17.5 14a5 5 0 0 1 3.5 5"/>'],
+  ["board","자유게시판",'<path d="M4 5h16v11H9l-5 4V5z"/>'],
+  ["rooms","토의방",'<path d="M3 5h11v8H8l-3 3v-3H3V5z"/><path d="M17 9h4v7h-2v3l-3-3h-5"/>'],
+  ["me","마이페이지",'<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M4 20a8 8 0 0 1 16 0"/>'],
+  ["teacher","선생님",'<path d="M9 4h6v3H9z"/><path d="M9 5.5H6v15h12v-15h-3"/><path d="M9 13l2 2 4-4"/>']
+];
+const navIco=d=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 document.getElementById("app").innerHTML=`
   <header class="top">
     <div class="brand">
       <p class="eyebrow" id="brandTag">우리 반 실험실</p>
-      <h1 class="brand-h"><button type="button" class="home-btn" id="homeBtn" aria-label="홈으로"><span class="flask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 15H17.4L19.4 18.4A1.8 1.8 0 0 1 17.8 21H6.2A1.8 1.8 0 0 1 4.6 18.4Z" fill="var(--pen)"/><path d="M9 3h6M10 3v6.2L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9.2V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="12.4" r=".9" fill="var(--pen)"/><circle cx="13.4" cy="10.9" r=".6" fill="var(--pen)"/></svg></span><span id="brandName">CLASS <em>LAB</em></span></button><span class="cls-tag" id="clsTag" hidden></span><button type="button" class="lab-q" id="labQ" aria-expanded="false" aria-controls="labTip">LAB이 뭐예요?</button></h1>
+      <h1 class="brand-h"><button type="button" class="home-btn" id="homeBtn" aria-label="홈으로"><span class="flask"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 15H17.4L19.4 18.4A1.8 1.8 0 0 1 17.8 21H6.2A1.8 1.8 0 0 1 4.6 18.4Z" fill="var(--accent)"/><path d="M9 3h6M10 3v6.2L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9.2V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="12.4" r=".9" fill="var(--accent)"/><circle cx="13.4" cy="10.9" r=".6" fill="var(--accent)"/></svg></span><span id="brandName">CLASS <em>LAB</em></span></button><span class="cls-tag" id="clsTag" hidden></span><button type="button" class="lab-q" id="labQ" aria-expanded="false" aria-controls="labTip">LAB이 뭐예요?</button></h1>
       <p class="lab-tip" id="labTip" hidden>LAB(랩)은 영어 <b>laboratory</b>의 줄임말로 <b>실험실</b>이라는 뜻이에요. 노래하는 랩(rap)과는 철자도 뜻도 달라요. 우리 반은 매일 배우고, 모으고, 함께 자라는 실험실이에요!</p>
     </div>
     <div class="me" id="me"></div>
   </header>
   <nav class="tabs" id="tabs" role="tablist" aria-label="메뉴" hidden>
-    <button type="button" role="tab" data-tab="quiz" id="tab-quiz">오늘의 퀴즈</button>
-    <button type="button" role="tab" data-tab="bank" id="tab-bank">지갑·은행</button>
-    <button type="button" role="tab" data-tab="stock" id="tab-stock">주식</button>
-    <button type="button" role="tab" data-tab="shop" id="tab-shop">상점</button>
-    <button type="button" role="tab" data-tab="class" id="tab-class">우리 반</button>
-    <button type="button" role="tab" data-tab="board" id="tab-board">자유게시판</button>
-    <button type="button" role="tab" data-tab="rooms" id="tab-rooms">토의방</button>
-    <button type="button" role="tab" data-tab="me" id="tab-me">마이페이지</button>
-    <button type="button" role="tab" data-tab="teacher" id="tab-teacher" hidden>선생님</button>
+    ${NAV.map(([t,label,d])=>`<button type="button" role="tab" data-tab="${t}" id="tab-${t}"${t==="teacher"?" hidden":""}>${navIco(d)}<span>${label}</span></button>`).join("")}
   </nav>
+  <nav class="qnav" id="qnav" aria-label="빠른 메뉴" hidden><div class="qnav-in">
+    ${NAV.map(([t,label,d])=>`<button type="button" data-tab="${t}" id="qtab-${t}" aria-label="${label}" title="${label}"${t==="teacher"?" hidden":""}>${navIco(d)}<span aria-hidden="true">${label}</span></button>`).join("")}
+  </div></nav>
   <section class="view" id="view-login" hidden></section>
   <section class="view" id="view-quiz" hidden>
     <section class="tbanner" id="tbanner" hidden></section>
@@ -607,7 +615,7 @@ const notiSeen=()=>role==="teacher"?TSEEN:(+(ME&&ME.notiSeen)||0);
 function renderBell(){
   const slot=$("#bellSlot");if(!slot)return;
   const list=notiList(),seen=notiSeen(),n=list.filter(x=>x.t>seen).length;
-  slot.innerHTML=`<button type="button" class="bell" id="bellBtn" aria-expanded="${!!bellOpen}" aria-controls="bellPanel" aria-label="알림${n?` ${n}개 새로 왔어요`:""}"><span aria-hidden="true">🔔</span>${n?`<b class="bell-n">${n>99?"99+":n}</b>`:""}</button>
+  slot.innerHTML=`<button type="button" class="bell" id="bellBtn" aria-expanded="${!!bellOpen}" aria-controls="bellPanel" aria-label="알림${n?` ${n}개 새로 왔어요`:""}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>${n?`<b class="bell-n">${n>99?"99+":n}</b>`:""}</button>
     ${bellOpen?`<div class="bell-panel" id="bellPanel" role="dialog" aria-label="알림">
       <div class="bell-head"><b>알림</b><button type="button" class="link" id="bellClose">닫기</button></div>
       ${list.length?`<ul class="bell-list">${list.map((x,i)=>`<li class="${x.t>(bellOpen.seen??seen)?"new":""}"><button type="button" data-ni="${i}"><span class="ni" aria-hidden="true">${x.ico}</span><span class="nt">${esc(x.text)}<small>${whenKST(x.t)}</small></span></button></li>`).join("")}</ul>`:`<p class="empty">최근 ${NOTI_DAYS}일 동안 알림이 없어요.</p>`}
@@ -637,12 +645,12 @@ function renderMe(){
   if(role==="teacher"){$("#me").innerHTML=`<div class="me-id"><b>선생님</b><span>${esc(TEACHER())}</span><button type="button" class="link" id="logoutBtn">로그아웃</button><span class="bell-slot" id="bellSlot"></span></div>`;$("#logoutBtn").onclick=()=>auth.signOut();renderBell();return}
   if(!ME){$("#me").innerHTML="";return}
   const v=valueOf(ME),total=(+ME.wallet||0)+(+ME.bank||0)+v;
-  $("#me").innerHTML=`<div class="me-id"><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><b>${esc(ME.name)}</b><button type="button" class="link" id="logoutBtn">로그아웃</button><span class="bell-slot" id="bellSlot"></span></div>
+  $("#me").innerHTML=`<div class="me-id"><b>${esc(ME.name)}</b><span>${esc(ME.grade)}학년 ${esc(ME.cls)}반 ${esc(ME.num)}번</span><button type="button" class="link" id="logoutBtn">로그아웃</button><span class="bell-slot" id="bellSlot"></span></div>
     <div class="bal">
+      <span class="pill total"><i>내 코인 모두</i><b>${fmt(total)}<small>코인</small></b></span>
       <span class="pill"><i>지갑</i><b>${fmt(ME.wallet)}</b></span>
       <span class="pill"><i>은행</i><b>${fmt(ME.bank)}</b></span>
       <span class="pill"><i>주식</i><b>${fmt(v)}</b></span>
-      <span class="pill total"><i>모두 (코인)</i><b>${fmt(total)}</b></span>
     </div>`;
   $("#logoutBtn").onclick=()=>auth.signOut();
   renderBell();
@@ -652,7 +660,7 @@ function renderMe(){
 const VIEWS=["login","quiz","bank","stock","shop","class","board","rooms","me","teacher"];
 let loginMode="student";
 function showLogin(msg){
-  $("#tabs").hidden=true;VIEWS.forEach(x=>$("#view-"+x).hidden=x!=="login");
+  $("#tabs").hidden=true;$("#qnav").hidden=true;VIEWS.forEach(x=>$("#view-"+x).hidden=x!=="login");
   const last=store.get("mc100-last",{});
   if(loginMode==="teacher"){
     $("#view-login").innerHTML=`<article class="card">
@@ -707,12 +715,20 @@ function showTab(t){
   const ok=allowedTabs();
   if(!ok.includes(t))t=role==="teacher"?"teacher":"quiz";
   current=t;$("#tabs").hidden=false;
-  TABS.forEach(x=>{$("#tab-"+x).hidden=!ok.includes(x);$("#tab-"+x).setAttribute("aria-selected",String(x===t))});
+  TABS.forEach(x=>{$("#tab-"+x).hidden=!ok.includes(x);$("#tab-"+x).setAttribute("aria-selected",String(x===t));
+    const q=$("#qtab-"+x);q.hidden=!ok.includes(x);if(x===t)q.setAttribute("aria-current","page");else q.removeAttribute("aria-current")});
   VIEWS.forEach(x=>$("#view-"+x).hidden=x!==t);
   ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,board:renderBoard,rooms:typeof renderRooms==="function"?renderRooms:()=>{$("#view-rooms").innerHTML=`<article class="card"><p class="empty">토의방을 불러오지 못했어요. 새로 고쳐 주세요.</p></article>`},me:renderMyPage,teacher:renderTeacher})[t]();
+  if(qJump){qJump=false;const q=$("#qnav"),y=$("#view-"+t).getBoundingClientRect().top+window.scrollY-(q.hidden?0:q.offsetHeight)-12;window.scrollTo({top:Math.max(0,y)})}
+  syncQnav();
 }
+/* 따라오는 메뉴: 큰 메뉴가 화면 위로 사라지면 얇은 메뉴가 위에 붙어요. 여기서 누르면 새 화면의 맨 위부터 보여요. */
+let qJump=false;
+function syncQnav(){const tabs=$("#tabs"),q=$("#qnav");if(!tabs||!q)return;const show=!tabs.hidden&&tabs.getBoundingClientRect().bottom<60;if(q.hidden===show)q.hidden=!show}
+window.addEventListener("scroll",syncQnav,{passive:true});
+window.addEventListener("resize",syncQnav);
 document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{
-  const t=b.dataset.tab;if(location.hash!=="#"+t)location.hash=t;else showTab(t);
+  const t=b.dataset.tab;if(b.closest("#qnav"))qJump=true;if(location.hash!=="#"+t)location.hash=t;else showTab(t);
 }));
 window.addEventListener("hashchange",()=>{if(role)showTab(location.hash.slice(1))});
 $("#homeBtn").addEventListener("click",()=>{if(!role)return;const h=role==="teacher"?"teacher":"quiz";if(h==="quiz"&&Q&&Q.finished)Q=null;if(location.hash!=="#"+h)location.hash=h;else showTab(h);window.scrollTo({top:0})});
@@ -1206,7 +1222,7 @@ function renderTeacher(){
         <label class="t-field" for="cTag">반 표시<input type="text" id="cTag" maxlength="12" value="${esc(c.classTag||"")}" placeholder="비우면 자동 (${esc(autoTag()||"예: 5-1")})"></label>
         <label class="t-field" for="cTagline">제목 위 한 줄 문구<input type="text" id="cTagline" maxlength="40" value="${esc(c.tagline||"")}" placeholder="예: 우리 반 실험실"></label>
       </div>
-      <p class="t-help">화면 맨 위 제목과 브라우저 탭 이름이 바뀌어요. 사이트 이름의 마지막 낱말은 빨간색으로 강조돼요.</p>
+      <p class="t-help">화면 맨 위 제목과 브라우저 탭 이름이 바뀌어요. 사이트 이름의 마지막 낱말은 파란색으로 강조돼요.</p>
     </div>
     <div class="t-sec"><h3>오늘의 퀴즈</h3>
       <div class="row2">
