@@ -11,6 +11,7 @@
 | 파일 | 하는 일 |
 |---|---|
 | `index.html`, `style.css`, `app.js` | 화면과 동작 |
+| `sokdam.js` | 속담 100 문제 자료 (속담·뜻풀이·보기·상황 예시문). 고친 뒤에는 `node tools/check-sokdam.js`로 검사해요. 속담과 일차는 교재 순서를 따랐고, 뜻풀이·보기·예시문은 우리 반용으로 새로 쓴 것이에요. |
 | `config.js` | Firebase 연결 설정, 선생님 이메일, 주가 파일 주소 |
 | `scripts/prices.py` | 네이버 시세를 가져와 market.json을 만듦 |
 | `firebase-rules.json` | Firebase 실시간 데이터베이스 규칙 (콘솔 > Realtime Database > 규칙에 적용된 내용) |

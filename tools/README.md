@@ -21,3 +21,13 @@ node tools/shot.js '' /tmp/shots        # 저장할 폴더 정하기 (기본: to
 ## 준비물
 - Node와 Playwright, 크롬. (Claude 작업 공간에는 이미 있어요.)
 - 실제 글꼴로 찍으려면 이 폴더에서 `npm i @fontsource/ibm-plex-sans-kr`. 없어도 기본 글꼴로 찍혀요.
+
+## 속담 자료 검사
+```
+node tools/check-sokdam.js
+```
+`sokdam.js`를 고친 뒤에 돌려요. 빈칸에 정답을 넣으면 속담이 되는지, 보기와 예시문이 겹치지 않는지, 헷갈리는 속담 묶음이 양쪽에 다 적혀 있는지 봐요.
+
+- 속담 문제 화면 보기: `PRE="CFG={...CFG,subject:'속담'};startPractice([BY_ID['pm-1'],BY_ID['ps-1'],BY_ID['pc-1']])" node tools/shot.js 'phone-student-quiz$'`
+- 문제 이름: `pc-번호`(완성하기), `pm-번호`(뜻 고르기), `ps-번호`(상황에 맞는 속담 고르기)
+

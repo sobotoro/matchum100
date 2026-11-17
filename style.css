@@ -742,3 +742,10 @@ button.secondary{font-size:1rem;background:var(--accent-soft);color:var(--accent
 }
 /* 마이페이지 주소(#me)가 머리말의 코인 카드(id="me")로 화면을 끌어내리지 않게 */
 #me{scroll-margin-top:240px}
+/* 속담 퀴즈: 긴 보기(뜻·속담)는 한 줄에 하나씩 글로 보여 줘요 */
+.opts.long{grid-template-columns:1fr;gap:10px}
+.opts.long .opt{flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;padding:14px 16px;text-align:left}
+.opts.long .opt .key{flex:none}
+.otxt{min-width:0;font-size:1.05rem;line-height:1.5}
+.q .situ{display:block;background:var(--tile);border-radius:14px;padding:12px 14px;margin-bottom:10px;line-height:1.65}
+.review .rq{line-height:1.7}

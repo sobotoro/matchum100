@@ -232,10 +232,12 @@ const BY_ID=Object.fromEntries(ALL.map(q=>[q.id,q]));
 /* ---------- 예시문 여러 개 (examples.js) ---------- */
 const EXS=typeof EX==="object"&&EX?EX:{};
 ALL.forEach(q=>{if(q.type!=="sent")return;q.vars=[[q.sent,q.opts[0],q.opts[1]],...(EXS[q.id]||[]).map(x=>typeof x==="string"?[x,q.opts[0],q.opts[1]]:x)]});
-function withVar(q,v){const x=q&&q.vars&&q.vars[v];if(!x)return q;return {...q,sent:x[0],ans:x[1],opts:[x[1],x[2]],vi:v}}
+function withVar(q,v){
+  if(q&&q.type==="sd"){if(q.sits){const i=q.sits[v]?v:0;q={...q,situ:q.sits[i],vi:i}}return q.pick?{...q,opts:sdOpts(q)}:q}
+  const x=q&&q.vars&&q.vars[v];if(!x)return q;return {...q,sent:x[0],ans:x[1],opts:[x[1],x[2]],vi:v}}
 const qHist=id=>{const h=ME&&ME.qh&&ME.qh[id];if(!h)return null;const t=String(h);return {d:`20${t.slice(0,2)}-${t.slice(2,4)}-${t.slice(4,6)}`,ok:t[6]==="1",v:+t.slice(7)||0}};
 function pickVar(q){
-  const n=q.vars?q.vars.length:0;if(n<2)return 0;
+  const n=q.vars?q.vars.length:q.sits?q.sits.length:0;if(n<2)return 0;
   const h=qHist(q.id),last=h?h.v:-1,c=[...Array(n).keys()].filter(i=>i!==last);
   return c[Math.floor(Math.random()*c.length)];
 }
@@ -265,7 +267,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",sRange:"1-25",sTimer:30,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -298,6 +300,26 @@ function rangeText(days){
 }
 const sk=c=>"c"+c; // 주식 코드 키 (숫자 키가 배열로 바뀌지 않게)
 
+/* ---------- 속담 100 (sokdam.js) ----------
+   속담마다 문제가 3개예요: 완성하기(pc), 뜻 고르기(pm), 상황에 맞는 속담 고르기(ps, 예시문 4개 중 하나).
+   보기는 4개. 뜻·상황 문제의 틀린 보기는 다른 속담에서 뽑고, 뜻이 비슷해 헷갈리는 속담(x)은 빼요. */
+const SDS=typeof SD==="object"&&Array.isArray(SD)?SD:[];
+const SD_BY={};
+SDS.forEach(([n,p,m,q,a,w,s,x])=>{
+  const d=Math.ceil(n/4),base={d,n,sd:n,type:"sd",e:`<b>${esc(p)}</b>: ${esc(m)}`};
+  SD_BY[n]={n,d,p,m,x:new Set(x||[])};
+  [{...base,id:`pc-${n}`,kind:"속담 완성하기",sent:q,opts:[a,...w],ans:a},
+   {...base,id:`pm-${n}`,kind:"속담 뜻 고르기",mean:p,prompt:"이 속담은 어떤 뜻일까요?",ans:m,long:true,pick:"m"},
+   {...base,id:`ps-${n}`,kind:"상황에 맞는 속담 고르기",sits:s,prompt:"이럴 때 어울리는 속담은 무엇일까요?",ans:p,long:true,pick:"p"}
+  ].forEach(x=>{ALL.push(x);BY_ID[x.id]=x});
+});
+/* 틀린 보기 3개: 지금 배우는 범위의 속담에서 먼저 뽑고, 모자라면 나머지에서 채워요. */
+function sdOpts(q){
+  const me=SD_BY[q.sd],c=cfg(),inR=new Set(c.random?[]:c.sdays);
+  const ok=shuffle(Object.values(SD_BY).filter(o=>o.n!==me.n&&!me.x.has(o.n)));
+  return [q.ans,...[...ok.filter(o=>inR.has(o.d)),...ok.filter(o=>!inR.has(o.d))].slice(0,3).map(o=>o[q.pick])];
+}
+
 /* ---------- Firebase ---------- */
 let db=null,auth=null,SV=null;
 const R=p=>db.ref("matchum/"+p);
@@ -309,7 +331,8 @@ function offAll(){subs.forEach(r=>r.off());subs=[]}
 const TEACHER=()=>(window.EDITOR_EMAIL||"").toLowerCase();
 const emailOf=(g,c,n,gen)=>`s${+g}-${+c}-${+n}-${+gen||0}@matchum100.class`;
 const keyOfEmail=e=>{const m=String(e||"").match(/^s(\d+)-(\d+)-(\d+)-\d+@/);return m?`${+m[1]}-${+m[2]}-${+m[3]}`:null};
-const cfg=()=>({...CFG,days:parseDays(CFG.range),spell:CFG.type!=="빈칸",sent:CFG.type!=="고르기"});
+const SUBJ_NAME={"맞춤법":"맞춤법","속담":"속담","섞기":"맞춤법·속담"};
+const cfg=()=>({...CFG,days:parseDays(CFG.range),sdays:parseDays(CFG.sRange),subj:SDS.length&&SUBJ_NAME[CFG.subject]?CFG.subject:"맞춤법",spell:CFG.type!=="빈칸",sent:CFG.type!=="고르기"});
 const byOrder=(a,b)=>((a.order??1e9)-(b.order??1e9));
 const shopList=()=>Object.entries(SHOP||{}).filter(([,it])=>it&&it.name&&it.on!==false).map(([id,it])=>({id,...it,price:Math.max(0,Math.round(+it.price||0))})).sort(byOrder);
 
@@ -778,15 +801,31 @@ function renderMeal(){
 /* ---------- 오늘의 퀴즈 ---------- */
 let wrongNote=store.get("mc100-wrong",{});
 let Q=null;
-function pool(){
-  const c=cfg(),ds=new Set(c.random?Array.from({length:25},(_,i)=>i+1):c.days);
-  return ALL.filter(q=>ds.has(q.d)&&((q.type==="spell"&&c.spell)||(q.type==="sent"&&c.sent)));
+function pools(){
+  const c=cfg(),all=Array.from({length:25},(_,i)=>i+1),ds=new Set(c.random?all:c.days),ss=new Set(c.random?all:c.sdays);
+  return {sp:c.subj==="속담"?[]:ALL.filter(q=>ds.has(q.d)&&((q.type==="spell"&&c.spell)||(q.type==="sent"&&c.sent))),
+          sd:c.subj==="맞춤법"?[]:ALL.filter(q=>q.type==="sd"&&ss.has(q.d))};
 }
+function pool(){const p=pools();return [...p.sp,...p.sd]}
 const takeN=()=>{const n=pool().length,k=+CFG.count||0;return k&&k<n?k:n};
+/* 오늘 낼 문제: 속담은 되도록 서로 다른 속담에서 뽑고, '섞기'는 맞춤법과 속담을 반반 내요. */
+function pickToday(){
+  const p=pools(),n=takeN();
+  const sdPick=k=>{const seen=new Set(),first=[],rest=[];pickQs(p.sd,p.sd.length).forEach(q=>{if(seen.has(q.sd))rest.push(q);else{seen.add(q.sd);first.push(q)}});return [...first,...rest].slice(0,k)};
+  if(!p.sd.length)return pickQs(p.sp,n);
+  if(!p.sp.length)return sdPick(n);
+  const half=Math.min(p.sd.length,Math.max(n-p.sp.length,Math.round(n/2)));
+  return [...sdPick(half),...pickQs(p.sp,n-half)];
+}
+const qTag=q=>`${q.type==="sd"?"속담 ":""}${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽`;
+function quizScope(){
+  const c=cfg(),r=d=>c.random?"전체 무작위":rangeText(d);
+  return c.subj==="맞춤법"?r(c.days):c.subj==="속담"?`속담 ${r(c.sdays)}`:c.random?"맞춤법 + 속담 전체 무작위":`맞춤법 ${r(c.days)} + 속담 ${r(c.sdays)}`;
+}
 function applyBanner(){
   const tb=$("#tbanner"),c=cfg();
   tb.hidden=false;
-  tb.innerHTML=`<span class="tb-label">선생님이 정한 오늘의 퀴즈</span><strong>${esc(c.random?"전체 무작위":rangeText(c.days))} · ${takeN()}문제</strong>${CFG.note?`<p>${esc(CFG.note)}</p>`:""}`;
+  tb.innerHTML=`<span class="tb-label">선생님이 정한 오늘의 퀴즈</span><strong>${esc(quizScope())} · ${takeN()}문제</strong>${CFG.note?`<p>${esc(CFG.note)}</p>`:""}`;
 }
 function renderNotes(){
   const ids=Object.keys(wrongNote).filter(id=>BY_ID[id]);
@@ -802,8 +841,9 @@ function renderNotes(){
 /* ---------- 제한 시간 ---------- */
 const TIMEOUT="(시간 초과)";
 const timeX=s=>{const v=s&&s.timeX;return v==null||v===""||isNaN(+v)?1:+v};
+const baseSec=q=>q&&q.type==="sd"?(+CFG.sTimer||0):(+CFG.timer||0);
 function limitSec(){
-  const base=+CFG.timer||0;if(!base||!Q)return 0;
+  const base=Q?baseSec(Q.qs[Q.i]):0;if(!base)return 0;
   if(Q.mode==="challenge")return Math.round(base*timeX(ME));
   return role==="teacher"?base:0;
 }
@@ -833,7 +873,7 @@ function renderQuizTab(){
   if(Q&&Q.finished){renderEnd();renderNotes();return}
   if(role==="teacher"){
     $("#stage").innerHTML=`<article class="card"><p class="kind">선생님 미리보기</p><h2>지금 설정으로 ${takeN()}문제 풀어 보기</h2><p class="t-help">선생님 화면에서는 코인이 쌓이지 않아요.</p><div class="actions"><button type="button" class="primary" id="tryBtn">미리 풀어 보기</button></div></article>`;
-    $("#tryBtn").onclick=()=>startPractice(pickQs(pool(),takeN()));renderNotes();return;
+    $("#tryBtn").onclick=()=>startPractice(pickToday());renderNotes();return;
   }
   const qz=ME.quiz||{};
   if(qz.date===today()&&qz.state==="시작"&&qz.qids){resumeChallenge(qz);renderNotes();return}
@@ -841,17 +881,18 @@ function renderQuizTab(){
   renderStart();renderNotes();
 }
 function renderStart(){
-  const n=takeN(),tl=(+CFG.timer||0)?Math.round((+CFG.timer)*timeX(ME)):0;
+  const n=takeN(),c=cfg(),tx=timeX(ME),t1=c.subj!=="속담"&&+CFG.timer?Math.round(CFG.timer*tx):0,t2=c.subj!=="맞춤법"&&+CFG.sTimer?Math.round(CFG.sTimer*tx):0,tl=t1||t2;
+  const tline=c.subj==="섞기"&&t1!==t2?[t1?`맞춤법 문제는 <b>${t1}초</b>`:"",t2?`속담 문제는 <b>${t2}초</b>`:""].filter(Boolean).join(", "):tl?`문제마다 <b>${tl}초</b>`:"";
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">오늘의 도전 · ${md(today())}</p>
-    <h2>맞춤법 퀴즈 ${n}문제</h2>
+    <h2>${SUBJ_NAME[c.subj]} 퀴즈 ${n}문제</h2>
     <p class="t-help">하루에 한 번만 도전할 수 있어요. 시작하면 끝까지 풀어야 해요.</p>
-    <ul class="rules">${tl?`<li>문제마다 <b>${tl}초</b> 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li><li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
+    <ul class="rules">${tline?`<li>${tline} 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li><li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
     <p class="msg" id="startMsg" role="status"></p>
     <div class="actions"><button type="button" class="primary" id="goBtn" ${n?"":"disabled"}>도전 시작</button></div>
   </article>`;
   $("#goBtn").onclick=()=>{
-    const qs=shuffle(pickQs(pool(),takeN())).map(q=>withVar(q,pickVar(q)));
+    const qs=shuffle(pickToday()).map(q=>withVar(q,pickVar(q)));
     const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),shown:qs.map(q=>shuffle(q.opts)),vi:qs.map(q=>q.vi||0),picks:[]};
     act($("#goBtn"),$("#startMsg"),async()=>{
       const cur=(await R(`students/${KEY}/quiz`).once("value")).val()||{};
@@ -886,6 +927,7 @@ const SLASH=`<svg class="mark" viewBox="0 0 100 100" preserveAspectRatio="none" 
 function qText(q,filled){
   if(q.sent){const blank=filled?`<span class="blank filled">${esc(q.ans)}</span>`:`<span class="blank">?</span>`;return esc(q.sent).replace("___",blank)}
   if(q.mean) return `<span class="mean">‘${esc(q.mean)}’</span>${esc(q.prompt)}`;
+  if(q.situ) return `<span class="situ">${esc(q.situ)}</span>${esc(q.prompt)}`;
   return esc(q.prompt);
 }
 function renderQ(){
@@ -894,12 +936,12 @@ function renderQ(){
   $("#stage").innerHTML=`<article class="card">
     <div class="meta"><span class="prog">${Q.i+1} / ${Q.qs.length}</span>
       <span class="tag">${lab}</span>
-      <span class="tag">${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽</span>
+      <span class="tag">${qTag(q)}</span>
       <div class="bar"><i style="width:${(Q.i/Q.qs.length)*100}%"></i></div></div>
     ${limitSec()?`<div class="tbar" id="tbar" role="timer" aria-label="남은 시간"><span class="tlbl" aria-hidden="true">⏱</span><span class="track"><i></i></span><span class="sec">${limitSec()}초</span></div>`:""}
     <p class="kind">${q.kind}</p>
     <p class="q" id="qText">${qText(q,false)}</p>
-    <div class="opts">${q.shown.map((o,k)=>`<button type="button" class="opt" id="opt-${k}" data-k="${k}"><span class="key">${k+1}번</span>${boxes(o)}</button>`).join("")}</div>
+    <div class="opts${q.long?" long":""}">${q.shown.map((o,k)=>`<button type="button" class="opt" id="opt-${k}" data-k="${k}"><span class="key">${k+1}번</span>${q.long?`<span class="otxt">${esc(o)}</span>`:boxes(o)}</button>`).join("")}</div>
     <div class="feedback" id="fb" hidden></div>
   </article>`;
   document.querySelectorAll(".opt").forEach(b=>b.addEventListener("click",()=>choose(+b.dataset.k)));
@@ -926,7 +968,7 @@ function choose(k){
   const last=Q.i===Q.qs.length-1;
   const fb=$("#fb");fb.hidden=false;
   const gain=Q.mode==="challenge"&&ok?` +${fmt(CFG.coinPer)}코인${fast?` · 번개 +${fmt(CFG.fastBonus)}`:""}`:"";
-  fb.innerHTML=`<p class="verdict ${ok?"":"no"}">${ok?pick(YES)+gain:(late?"시간이 다 됐어요!":pick(NO))+` 정답은 ‘${esc(q.ans)}’`}</p>
+  fb.innerHTML=`<p class="verdict ${ok?"":"no"}">${ok?pick(YES)+gain:(late?"시간이 다 됐어요!":pick(NO))+(q.long?` 정답은 ${q.shown.indexOf(q.ans)+1}번이에요.`:` 정답은 ‘${esc(q.ans)}’`)}</p>
     <p class="why">${q.e}</p>
     <div class="next-row"><button type="button" class="primary" id="nextBtn">${last?"채점 결과 보기":"다음 문제 →"}</button></div>`;
   $("#nextBtn").addEventListener("click",next);$("#nextBtn").focus({preventScroll:true});
@@ -945,7 +987,7 @@ function finishChallenge(){
     const qz=cur.quiz||{};
     if(qz.state==="완료"){Q.coins=qz.coins||0;return}
     const msAll={...(qz.ms||{}),...(Q.ms||{})},fs=(+CFG.fastSec||5)*1000;
-    const fast=(+CFG.timer||0)&&+CFG.fastBonus>0?Q.res.filter((r,i)=>r.ok&&msAll[i]!=null&&+msAll[i]<=fs).length:0;
+    const fast=+CFG.fastBonus>0?Q.res.filter((r,i)=>r.ok&&baseSec(r.q)>0&&msAll[i]!=null&&+msAll[i]<=fs).length:0;
     const coins=right*(+CFG.coinPer||0)+(right===total&&total>0?(+CFG.bonus||0):0)+fast*(+CFG.fastBonus||0);
     await upd({wallet:r2((+cur.wallet||0)+coins),qCount:(+cur.qCount||0)+1,qRight:(+cur.qRight||0)+right,
       quiz:{date:qz.date||today(),state:"완료",right,total,coins,fast}});
@@ -959,10 +1001,10 @@ function renderEnd(){
   const wrong=Q.res.filter(r=>!r.ok),ch=Q.mode==="challenge";
   const mv=Object.values(Q.ms||{}).map(Number).filter(x=>x>0),avg=mv.length?mv.reduce((a,b)=>a+b,0)/mv.length/1000:0,lateN=Q.res.filter(r=>r.picked===TIMEOUT).length;
   const list=wrong.length?`<ul class="review">${wrong.map(({q,picked})=>`<li>
-      <span class="tag" style="align-self:flex-start">${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽</span>
-      <p class="rq">${q.sent?qText(q,true):(q.mean?`‘${esc(q.mean)}’ → <span class="blank filled">${esc(q.ans)}</span>`:`바른 말: <span class="blank filled">${esc(q.ans)}</span>`)}</p>
+      <span class="tag" style="align-self:flex-start">${qTag(q)}</span>
+      <p class="rq">${q.sent?qText(q,true):q.situ?`${esc(q.situ)} → <span class="blank filled">${esc(q.ans)}</span>`:(q.mean?`‘${esc(q.mean)}’ → <span class="blank filled">${esc(q.ans)}</span>`:`바른 말: <span class="blank filled">${esc(q.ans)}</span>`)}</p>
       <p class="rmine">${picked===TIMEOUT?"시간이 다 돼서 못 골랐어요":`내가 고른 답: <s>${esc(picked)}</s>`}</p>
-      <p class="rwhy">${q.e}</p></li>`).join("")}</ul>`:`<p class="allright">하나도 안 틀렸어요! 맞춤법 박사네요.</p>`;
+      <p class="rwhy">${q.e}</p></li>`).join("")}</ul>`:`<p class="allright">하나도 안 틀렸어요! ${Q.res.every(r=>r.q.type==="sd")?"속담":Q.res.some(r=>r.q.type==="sd")?"우리말":"맞춤법"} 박사네요.</p>`;
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">${ch?`오늘의 도전 결과 · ${md(today())}`:"연습 결과 · 코인 없음"}</p>
     <div class="score"><div class="score-num">${score}점${score>=80?CIRCLE.replace('class="mark"','class=""'):""}</div>
@@ -981,7 +1023,7 @@ function renderEnd(){
 }
 document.addEventListener("keydown",e=>{
   if(current!=="quiz"||!Q||Q.finished||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
-  if(!Q.locked&&(e.key==="1"||e.key==="2")){choose(+e.key-1)}
+  if(!Q.locked&&/^[1-9]$/.test(e.key)&&+e.key<=Q.qs[Q.i].shown.length){choose(+e.key-1)}
   else if(Q.locked&&(e.key==="Enter"||e.key==="ArrowRight")&&e.target.id!=="nextBtn"){e.preventDefault();next()}
 });
 
@@ -1205,13 +1247,19 @@ function renderTeacher(){
     </div>
     <div class="t-sec"><h3>오늘의 퀴즈</h3>
       <div class="row2">
-        <label class="t-field" for="cRange">범위 (일차)<input type="text" id="cRange" value="${esc(c.range)}" placeholder="예: 1-5 또는 1,3,6-8"></label>
+        <label class="t-field" for="cSubject">과목${sel("cSubject",[["맞춤법","맞춤법"],["속담","속담"],["섞기","맞춤법 + 속담 섞기 (반반)"]],cfg().subj)}</label>
+        <label class="t-field" for="cRange">맞춤법 범위 (일차)<input type="text" id="cRange" value="${esc(c.range)}" placeholder="예: 1-5 또는 1,3,6-8"></label>
+        <label class="t-field" for="cSRange">속담 범위 (일차)<input type="text" id="cSRange" value="${esc(c.sRange||"1-25")}" placeholder="예: 1-5 또는 1,3,6-8"></label>
+      </div>
+      <p class="t-help">과목을 바꿔도 코인이 걸린 도전은 하루 1번이에요. 속담 문제는 완성하기, 뜻 고르기, 상황에 맞는 속담 고르기 세 가지가 섞여 나오고 보기는 4개예요. 속담도 교재처럼 하루 4개씩 25일차예요.</p>
+      <div class="row2">
         <label class="t-field" for="cCount">하루 문제 수${sel("cCount",[[10,"10문제"],[20,"20문제"],[30,"30문제"],[0,"범위 안 모든 문제"]],c.count)}</label>
-        <label class="t-field" for="cType">문제 유형${sel("cType",[["둘다","고르기 + 빈칸"],["고르기","바른 말·뜻 고르기만"],["빈칸","문장 빈칸만"]],c.type)}</label>
-        <label class="t-field" for="cRandom">출제 방식${sel("cRandom",[["0","범위 안에서"],["1","100개 낱말 전체에서 무작위"]],c.random?1:0)}</label>
+        <label class="t-field" for="cType">맞춤법 문제 유형${sel("cType",[["둘다","고르기 + 빈칸"],["고르기","바른 말·뜻 고르기만"],["빈칸","문장 빈칸만"]],c.type)}</label>
+        <label class="t-field" for="cRandom">출제 방식${sel("cRandom",[["0","범위 안에서"],["1","범위 없이 전체에서 무작위"]],c.random?1:0)}</label>
       </div>
       <div class="row2">
-        <label class="t-field" for="cTimer">문제당 제한 시간${sel("cTimer",[[0,"없음"],[10,"10초"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"]],+c.timer||0)}</label>
+        <label class="t-field" for="cTimer">맞춤법 문제당 제한 시간${sel("cTimer",[[0,"없음"],[10,"10초"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"]],+c.timer||0)}</label>
+        <label class="t-field" for="cSTimer">속담 문제당 제한 시간${sel("cSTimer",[[0,"없음"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"],[90,"90초"]],+c.sTimer||0)}</label>
         <label class="t-field" for="cFastB">번개 보너스 (코인, 0이면 끔)<input type="number" id="cFastB" min="0" step="1" value="${esc(+c.fastBonus||0)}"></label>
         <label class="t-field" for="cFastS">번개 기준${sel("cFastS",[[3,"3초 안에 맞히면"],[5,"5초 안에 맞히면"],[7,"7초 안에 맞히면"],[10,"10초 안에 맞히면"]],+c.fastSec||5)}</label>
       </div>
@@ -1286,12 +1334,12 @@ function renderTeacher(){
   <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. 구글 Apps Script(CLASS LAB 주가 갱신)가 평일 장중 10분마다 네이버 시세를 가져와 Firebase에 넣어요. GitHub도 예비로 시세 파일을 올려요. 둘 중 더 새 시세를 써요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
   tMsgTxt="";
   $("#cSave").onclick=()=>{
-    const v={range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
+    const v={subject:$("#cSubject").value,sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
       className:$("#cClass").value.trim()||"우리 반",siteName:$("#cSite").value.trim().slice(0,20)||"CLASS LAB",classTag:$("#cTag").value.trim().slice(0,12),tagline:$("#cTagline").value.trim().slice(0,40),board:$("#cBoard").value,boardName:$("#cBName").value,
       mealOn:$("#cMealOn").value==="1",mealLink:$("#cMealLink").value==="1",mealCoins:Math.max(0,Math.round(+$("#cMealCoins").value||0)),
       mealFrom:$("#cMealFrom").value||"12:30",mealTo:$("#cMealTo").value||"13:40",mealSeen:$("#cMealSeen").value==="1"};
-    act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);tMsgTxt=`저장했어요. 퀴즈 범위: ${rangeText(parseDays(v.range))}`}).then(ok=>ok&&renderTeacher());
+    act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);CFG={...CFG,...v};tMsgTxt=`저장했어요. 오늘의 퀴즈: ${quizScope()}`}).then(ok=>ok&&renderTeacher());
   };
   const syncShop=()=>TSHOP.forEach((it,i)=>{it.name=$("#ts-name-"+i).value;it.price=Math.max(0,Math.round(+$("#ts-price-"+i).value||0));it.desc=$("#ts-desc-"+i).value});
   $("#tAdd").onclick=()=>{syncShop();TSHOP.push({id:"p"+Date.now().toString(36),name:"",price:100,desc:"",on:true});renderTeacher();$("#ts-name-"+(TSHOP.length-1)).focus()};
