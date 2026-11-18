@@ -7,6 +7,7 @@ const NAV=[
   ["bank","지갑·은행",'<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z"/><path d="M16.5 14h.01"/>'],
   ["stock","주식",'<path d="M4 19h16"/><path d="M5 15l5-5 3 3 6-7"/>'],
   ["shop","상점",'<path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'],
+  ["arcade","아케이드",'<path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>'],
   ["class","우리 반",'<path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/><path d="M17.5 14a5 5 0 0 1 3.5 5"/>'],
   ["board","자유게시판",'<path d="M4 5h16v11H9l-5 4V5z"/>'],
   ["rooms","토의방",'<path d="M3 5h11v8H8l-3 3v-3H3V5z"/><path d="M17 9h4v7h-2v3l-3-3h-5"/>'],
@@ -39,6 +40,7 @@ document.getElementById("app").innerHTML=`
   <section class="view" id="view-bank" hidden></section>
   <section class="view" id="view-stock" hidden></section>
   <section class="view" id="view-shop" hidden></section>
+  <section class="view" id="view-arcade" hidden></section>
   <section class="view" id="view-class" hidden></section>
   <section class="view" id="view-board" hidden></section>
   <section class="view" id="view-rooms" hidden></section>
@@ -1680,4 +1682,16 @@ function renderGameArcadeTab() {
         </div>
     </div>
     `;
+}
+// 아케이드 탭 화면 연결
+if (typeof currentTab !== 'undefined' && currentTab === 'arcade') {
+    const contentArea = document.getElementById("content");
+    if (contentArea) {
+        contentArea.innerHTML = renderGameArcadeTab();
+        setTimeout(() => {
+            if (typeof initArcadeGameLoop === 'function') {
+                initArcadeGameLoop();
+            }
+        }, 100);
+    }
 }
