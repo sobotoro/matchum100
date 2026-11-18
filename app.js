@@ -267,7 +267,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",sRange:"1-25",sTimer:30,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",sRange:"1-25",sTimer:30,feeRate:0,feeMin:1,shortDays:3,shortRate:0,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -323,7 +323,7 @@ function sdOpts(q){
 /* ---------- Firebase ---------- */
 let db=null,auth=null,SV=null;
 const R=p=>db.ref("matchum/"+p);
-let CFG={...DEF_CFG},SHOP={...DEF_SHOP},MARKET=SEED_MARKET,STUDENTS={},ME=null,KEY=null,LOGS=[],BUYS=[],ALLBUYS={};
+let FUND={},CFG={...DEF_CFG},SHOP={...DEF_SHOP},MARKET=SEED_MARKET,STUDENTS={},ME=null,KEY=null,LOGS=[],BUYS=[],ALLBUYS={};
 let role=null; // "student" | "teacher"
 let subs=[];
 function on(ref,fn){ref.on("value",fn,err=>console.warn(err));subs.push(ref)}
@@ -600,6 +600,7 @@ function notiList(){
     Object.values((ME.bagLog)||{}).forEach(x=>{if(x&&x.t)add(x.t,"🎒",x.text||"",{tab:"me"})});
     if(typeof roomNoti==="function")roomNoti(add);
     const d=today(),dw=dowOf(d);
+    {const p=popCfg();if(p.on)add(p.ver,"📣",`선생님 알림: ${p.title||snip(p.body)}`,{tab:"",popup:true})}
     if(dw>0&&dw<6&&nowHM()>="14:00"&&!(ME.quiz&&ME.quiz.date===d))add(kstAt(d,"14:00"),"📝","오늘의 도전을 아직 안 했어요. 오늘 안에 도전해 보세요!",{tab:"quiz"});
   }else if(role==="teacher"){
     Object.entries(posts).forEach(([pid,p])=>{if(p&&p.k&&p.k!=="T")add(p.t,"📝",`${jo(p.name||p.k,"이","가")} 새 글을 올렸어요: '${snip(p.text)}'`,{tab:"board",post:pid})});
@@ -629,6 +630,7 @@ function renderBell(){
   const c=$("#bellClose");if(c)c.onclick=()=>{bellOpen=false;renderBell()};
   document.querySelectorAll("[data-ni]").forEach(b=>b.onclick=()=>{
     const x=list[+b.dataset.ni];bellOpen=false;renderBell();if(!x)return;
+    if(x.go.popup){popShow(true);return}
     if(x.go.post&&typeof openPost!=="undefined")openPost=x.go.post;
     if(x.go.thread&&typeof openReplies!=="undefined")openReplies.add(x.go.post+"|"+x.go.thread);
     if(x.go.room&&typeof openRoom!=="undefined"){openRoom=x.go.room;roomMake=false;roomReply=null;roomDraft=""}
@@ -1116,6 +1118,43 @@ function rowHtml(s){
     ${openCode===c&&ME?tradeHtml(c):""}
   </li>`;
 }
+/* ---------- 주식 수수료 · 반 기금 ----------
+   사고팔 때 거래 금액의 feeRate%(최소 feeMin코인). 산 날부터 shortDays일 안에 팔면 shortRate%를 더 내요.
+   낸 수수료는 학생 기록 fee에 쌓이고, 반 기금 = 모든 학생 fee 합 + fund/carry(삭제된 학생 몫) - fund/used 합. */
+const clampN=(v,a,b)=>Math.min(b,Math.max(a,+v||0));
+const feeCfg=()=>({rate:clampN(CFG.feeRate,0,10),min:clampN(CFG.feeMin,0,1e6),days:Math.round(clampN(CFG.shortDays,0,30)),srate:clampN(CFG.shortRate,0,10)});
+const feeOn=()=>{const f=feeCfg();return f.rate>0||(f.srate>0&&f.days>0)};
+const daysSince=ds=>ds?Math.round((Date.parse(today())-Date.parse(ds))/864e5):99;
+function tradeFee(amount,kind,h){
+  const f=feeCfg(),a=+amount||0;if(!(a>0))return {fee:0,short:false,held:0};
+  let fee=f.rate>0?Math.max(a*f.rate/100,f.min):0;
+  const held=h&&h.t?daysSince(h.t):99,short=kind==="sell"&&f.srate>0&&f.days>0&&held<f.days;
+  if(short)fee+=a*f.srate/100;
+  return {fee:r2(Math.min(a,fee)),short,held};
+}
+function feeRuleText(){
+  const f=feeCfg(),out=[];
+  if(f.rate>0)out.push(`사고팔 때마다 ${fmt(f.rate)}%${f.min>0?` (최소 ${fmt(f.min)}코인)`:""}`);
+  if(f.srate>0&&f.days>0)out.push(`산 날부터 ${f.days}일 안에 팔면 ${fmt(f.srate)}% 더`);
+  return out.join(" · ");
+}
+function tradeCount(s,fee){const wk=weekOf(today()),t=(s&&s.tr&&s.tr.w===wk)?s.tr:{w:wk,n:0,f:0};return {w:wk,n:(+t.n||0)+1,f:r2((+t.f||0)+fee)}}
+function fundInfo(){
+  const studs=Object.values(STUDENTS||{}),wk=weekOf(today());
+  const fees=r2(studs.reduce((t,s)=>t+(+(s&&s.fee)||0),0)),carry=r2(+FUND.carry||0);
+  const used=Object.entries(FUND.used||{}).map(([id,u])=>({id,...u})).filter(u=>u&&u.t).sort((a,b)=>b.t-a.t);
+  const usedSum=r2(used.reduce((t,u)=>t+(+u.amount||0),0));
+  const week=r2(studs.reduce((t,s)=>t+(s&&s.tr&&s.tr.w===wk?+s.tr.f||0:0),0));
+  return {balance:r2(fees+carry-usedSum),fees:r2(fees+carry),used,usedSum,week};
+}
+function fundCardHtml(){
+  const fi=fundInfo();if(!feeOn()&&!fi.fees&&!fi.used.length)return "";
+  return `<article class="card fund">
+    <div class="t-head"><h3>우리 반 기금</h3><b class="fund-n">${fmt(fi.balance)}코인</b></div>
+    <p class="t-help">친구들이 주식을 사고팔 때 낸 수수료가 모인 돈이에요. 어디에 쓸지는 선생님과 함께 정해요.${feeOn()?` 수수료: ${esc(feeRuleText())}.`:""}</p>
+    ${fi.used.length?`<ul class="log">${fi.used.slice(0,5).map(u=>`<li><span>${esc(u.memo||"기금 사용")}<span class="when">${whenKST(u.t)}</span></span><span class="amt down">-${fmt(u.amount)}</span></li>`).join("")}</ul>`:""}
+  </article>`;
+}
 function tradeHtml(c){
   const cp=coinPrice(c),h=(ME.stocks||{})[sk(c)]||{qty:0,cost:0},v=h.qty*cp,pl=v-h.cost;
   return `<div class="trade">
@@ -1127,6 +1166,7 @@ function tradeHtml(c){
       <button type="button" class="ghost" data-tfill="50">50</button>
       <button type="button" class="ghost" data-tfill="wallet">지갑 전부</button>
     </div>
+    ${feeOn()?`<p class="fee-rule">수수료: ${esc(feeRuleText())}. 낸 수수료는 우리 반 기금으로 모여요.</p><p class="fee-line" id="feeLine" aria-live="polite"></p>`:""}
     <div class="actions">
       <button type="button" class="primary" id="buyBtn" ${cp?"":"disabled"}>사기</button>
       <button type="button" class="secondary" id="sellBtn" ${h.qty>1e-6?"":"disabled"}>팔기</button>
@@ -1137,21 +1177,31 @@ function tradeHtml(c){
 }
 function bindTrade(c){
   const inp=$("#tradeAmt"),m=$("#tradeMsg"),name=STOCKS.find(s=>s[0]===c)[1],k=sk(c);
-  document.querySelectorAll("[data-tfill]").forEach(x=>x.onclick=()=>{inp.value=x.dataset.tfill==="wallet"?r2(ME.wallet):x.dataset.tfill});
+  const maxBuy=()=>{const w=+ME.wallet||0,f=feeCfg();if(!(f.rate>0))return Math.floor(w*100)/100;return Math.max(0,Math.floor(Math.min(w/(1+f.rate/100),w-f.min)*100)/100)};
+  const preview=()=>{const el=$("#feeLine");if(!el)return;const a=r2(parseFloat(inp.value)),h=(ME.stocks||{})[k],cp=coinPrice(c);
+    if(!(a>0)){el.textContent="";return}
+    const b=tradeFee(a,"buy",h),lines=[`사면: ${fmt(a)}코인어치 + 수수료 ${fmt(b.fee)}코인 = ${fmt(r2(a+b.fee))}코인이 빠져요.`];
+    if(h&&h.qty>1e-6){const sa=Math.min(a,r2(h.qty*cp)),sf=tradeFee(sa,"sell",h);lines.push(`팔면: ${fmt(sa)}코인 - 수수료 ${fmt(sf.fee)}코인 = ${fmt(r2(sa-sf.fee))}코인을 받아요.${sf.short?` (${sf.held?`산 지 ${sf.held}일 된`:"오늘 산"} 주식이라 단기 매매 수수료가 붙어요)`:""}`)}
+    el.innerHTML=lines.map(t=>`<span>${esc(t)}</span>`).join("")};
+  inp.oninput=preview;
+  document.querySelectorAll("[data-tfill]").forEach(x=>x.onclick=()=>{inp.value=x.dataset.tfill==="wallet"?maxBuy():x.dataset.tfill;preview()});
   const done=ok=>{if(ok)renderStock()};
   $("#buyBtn").onclick=()=>{const a=r2(parseFloat(inp.value)),cp=coinPrice(c);if(!(a>0))return m.textContent="살 만큼의 코인을 적어 주세요.";
     act($("#buyBtn"),m,async()=>{
-      if(a>(+ME.wallet||0)+1e-9)throw new Error(`지갑에 ${fmt(ME.wallet)}코인밖에 없어요.`);
+      const {fee}=tradeFee(a,"buy");
+      if(a+fee>(+ME.wallet||0)+1e-9)throw new Error(fee?`수수료 ${fmt(fee)}코인까지 ${fmt(r2(a+fee))}코인이 필요해요. 지갑에는 ${fmt(ME.wallet)}코인이 있어요.`:`지갑에 ${fmt(ME.wallet)}코인밖에 없어요.`);
       const qty=Math.round(a/cp*1e6)/1e6,h=(ME.stocks||{})[k]||{qty:0,cost:0};
-      await upd({wallet:r2(ME.wallet-a),[`stocks/${k}`]:{qty:Math.round((h.qty+qty)*1e6)/1e6,cost:r2(h.cost+a)}});
-      await log(`${name} ${fmtQ(qty)}주 사기`,-a);tradeMsg=`${name} ${fmtQ(qty)}주를 ${fmt(a)}코인에 샀어요.`;
+      await upd({wallet:r2(ME.wallet-a-fee),[`stocks/${k}`]:{qty:Math.round((h.qty+qty)*1e6)/1e6,cost:r2(h.cost+a),t:today()},...(fee?{fee:r2((+ME.fee||0)+fee)}:{}),tr:tradeCount(ME,fee)});
+      await log(`${name} ${fmtQ(qty)}주 사기`,-a);if(fee)await log(`주식 수수료 (${name} 사기)`,-fee);
+      tradeMsg=`${name} ${fmtQ(qty)}주를 ${fmt(a)}코인에 샀어요.${fee?` 수수료 ${fmt(fee)}코인은 반 기금으로 갔어요.`:""}`;
     }).then(done)};
   const sell=qty=>act(null,m,async()=>{
     const h=(ME.stocks||{})[k],cp=coinPrice(c);if(!h||h.qty<=1e-6)throw new Error("가진 주식이 없어요.");
     qty=Math.min(qty,h.qty);
-    const money=r2(qty*cp),costPart=r2(h.cost*qty/h.qty),left=Math.round((h.qty-qty)*1e6)/1e6;
-    await upd({wallet:r2((+ME.wallet||0)+money),[`stocks/${k}`]:left>1e-6?{qty:left,cost:r2(h.cost-costPart)}:null});
-    await log(`${name} ${fmtQ(qty)}주 팔기`,money);tradeMsg=`${name} ${fmtQ(qty)}주를 팔아서 ${fmt(money)}코인을 받았어요.`;
+    const money=r2(qty*cp),costPart=r2(h.cost*qty/h.qty),left=Math.round((h.qty-qty)*1e6)/1e6,{fee,short}=tradeFee(money,"sell",h);
+    await upd({wallet:r2((+ME.wallet||0)+money-fee),[`stocks/${k}`]:left>1e-6?{qty:left,cost:r2(h.cost-costPart),...(h.t?{t:h.t}:{})}:null,...(fee?{fee:r2((+ME.fee||0)+fee)}:{}),tr:tradeCount(ME,fee)});
+    await log(`${name} ${fmtQ(qty)}주 팔기`,money);if(fee)await log(`주식 수수료 (${name} 팔기${short?", 단기 매매":""})`,-fee);
+    tradeMsg=`${name} ${fmtQ(qty)}주를 팔아서 ${fmt(money)}코인을 받았어요.${fee?` 수수료 ${fmt(fee)}코인${short?"(단기 매매 포함)":""}을 빼고 ${fmt(r2(money-fee))}코인이 지갑에 들어갔어요.`:""}`;
   }).then(done);
   $("#sellBtn").onclick=()=>{const a=r2(parseFloat(inp.value)),cp=coinPrice(c),h=(ME.stocks||{})[k];if(!(a>0))return m.textContent="팔 만큼의 코인을 적어 주세요.";
     if(!h)return;if(a>h.qty*cp+0.01)return m.textContent=`가진 주식은 지금 ${fmt(h.qty*cp)}코인어치예요.`;sell(a/cp)};
@@ -1222,10 +1272,84 @@ function renderClass(){
     <article class="card"><h3>저축왕</h3>${rows(savers,x=>fmt(x.bank),"코인")}</article>
     <article class="card"><h3>꾸준히 도전왕</h3>${rows(quizzers,x=>x.quiz,"번")}</article>
   </div>`}
+  ${fundCardHtml()}
   <p class="mkt-note">친구들 기록은 실시간으로 바뀌어요. 주식은 지금 시세로 계산해요.${mode==="숨김"&&role==="teacher"?" (학생 화면에서는 순위가 숨겨져 있어요.)":""}</p>`;
 }
 
-/* ---------- 선생님 ---------- */
+/* ---------- 알림 팝업 ----------
+   선생님이 '저장하고 띄우기'를 누를 때마다 config/popup.ver가 새 시각이 되고,
+   학생의 popSeen이 그보다 작으면 들어올 때(또는 들어와 있을 때 바로) 한 번 떠요. */
+const POP_TABS=[["","없음"],["quiz","오늘의 퀴즈"],["bank","지갑·은행"],["stock","주식"],["shop","상점"],["class","우리 반"],["board","자유게시판"],["rooms","토의방"],["me","마이페이지"]];
+const popCfg=()=>{const p=CFG.popup||{};return {on:!!p.on&&!!+p.ver,ver:+p.ver||0,title:String(p.title||""),body:String(p.body||""),tab:POP_TABS.some(t=>t[0]===p.tab)?p.tab:""}};
+let popOpen=0;
+function popShow(preview){
+  const p=popCfg(),old=$("#popOverlay");if(old)old.remove();
+  if(!preview&&(!p.on||role!=="student"||!ME||(+ME.popSeen||0)>=p.ver))return;
+  const tabName=(POP_TABS.find(t=>t[0]===p.tab)||[])[1];
+  document.body.insertAdjacentHTML("beforeend",`<div class="pop-overlay" id="popOverlay" role="dialog" aria-modal="true" aria-labelledby="popTitle">
+    <div class="pop-card"><p class="kind">${preview?"미리 보기 · ":""}선생님 알림</p>
+      <h2 id="popTitle">${esc(p.title||"새 소식이 있어요")}</h2>
+      ${p.body?`<p class="pop-body">${esc(p.body)}</p>`:""}
+      <div class="actions">${p.tab?`<button type="button" class="primary" id="popGo">${esc(tabName)} 바로 가기</button>`:""}<button type="button" class="${p.tab?"secondary":"primary"}" id="popOk">확인했어요</button></div>
+    </div></div>`);
+  popOpen=p.ver;
+  const close=go=>{const el=$("#popOverlay");if(el)el.remove();popOpen=0;
+    if(!preview&&ME&&(+ME.popSeen||0)<p.ver){ME.popSeen=p.ver;upd({popSeen:p.ver}).catch(()=>{})}
+    if(go&&p.tab&&!preview){if(location.hash!=="#"+p.tab)location.hash=p.tab;else showTab(p.tab);window.scrollTo({top:0})}};
+  $("#popOk").onclick=()=>close(false);if($("#popGo"))$("#popGo").onclick=()=>close(true);
+  $("#popOverlay").onkeydown=e=>{if(e.key==="Escape")close(false)};
+  ($("#popGo")||$("#popOk")).focus();
+}
+function popCheck(){const p=popCfg();if(role==="student"&&ME&&p.on&&(+ME.popSeen||0)<p.ver&&popOpen!==p.ver)popShow(false);if(!p.on&&popOpen&&role==="student"){const el=$("#popOverlay");if(el)el.remove();popOpen=0}}
+let popMsg="";
+function popTeacherHtml(){
+  const p=popCfg(),studs=Object.values(STUDENTS||{}),seen=studs.filter(s=>(+s.popSeen||0)>=p.ver),not=studs.filter(s=>(+s.popSeen||0)<p.ver).sort((a,b)=>(a.num||0)-(b.num||0));
+  return `<article class="card" id="popCard">
+    <div class="t-head"><h2>학생 알림 팝업</h2>${p.on?`<span class="rstate on">떠 있어요</span>`:`<span class="rstate">꺼져 있어요</span>`}</div>
+    <p class="t-help">'저장하고 띄우기'를 누르면 그 뒤로 학생이 들어올 때 한 번 떠요. 학생이 '확인했어요'를 누르면 다시 뜨지 않고, 다시 저장하면 모두에게 다시 떠요.</p>
+    ${p.on?`<p class="t-status">${md(new Date(p.ver).toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}))} ${new Date(p.ver).toLocaleTimeString("ko-KR",{timeZone:"Asia/Seoul",hour:"numeric",minute:"2-digit"})}에 띄움 · 확인한 학생 ${seen.length}/${studs.length}명</p>${not.length&&seen.length?`<details class="pop-not"><summary>아직 안 본 학생 ${not.length}명</summary><p>${not.map(s=>esc(s.name||"")).join(", ")}</p></details>`:""}`:""}
+    <label class="t-field" for="popTitleIn">제목<input type="text" id="popTitleIn" maxlength="40" value="${esc(p.title)}" placeholder="예: 오늘은 받아쓰기가 있어요"></label>
+    <label class="t-field" for="popBodyIn">내용<textarea id="popBodyIn" maxlength="400" rows="4" placeholder="학생들에게 알릴 내용을 적어요. 줄을 바꿀 수 있어요.">${esc(p.body)}</textarea></label>
+    <div class="row2"><label class="t-field" for="popTabIn">바로 가기 버튼${`<select id="popTabIn">${POP_TABS.map(([v,l])=>`<option value="${v}" ${p.tab===v?"selected":""}>${l}</option>`).join("")}</select>`}</label></div>
+    <div class="actions"><button type="button" class="primary" id="popSave">저장하고 띄우기</button><button type="button" class="secondary" id="popPrev">미리 보기</button>${p.on?`<button type="button" class="ghost" id="popOff">팝업 끄기</button>`:""}</div>
+    <p class="msg" id="popMsg" role="status">${esc(popMsg)}</p>
+  </article>`;
+}
+function popTeacherBind(){
+  const m=$("#popMsg");if(!m)return;
+  const val=()=>({title:$("#popTitleIn").value.trim().slice(0,40),body:$("#popBodyIn").value.trim().slice(0,400),tab:$("#popTabIn").value});
+  $("#popSave").onclick=()=>{popMsg="";const v=val();if(!v.title&&!v.body)return m.textContent="제목이나 내용을 적어 주세요.";
+    act($("#popSave"),m,()=>R("config/popup").set({...v,on:true,ver:SV.TIMESTAMP})).then(ok=>{if(ok){popMsg="저장했어요. 학생들이 들어오면 팝업이 떠요.";renderTeacher()}})};
+  $("#popPrev").onclick=()=>{const keep=CFG.popup;CFG={...CFG,popup:{...val(),on:true,ver:1}};popShow(true);CFG={...CFG,popup:keep}};
+  if($("#popOff"))$("#popOff").onclick=()=>act($("#popOff"),m,()=>R("config/popup/on").set(false)).then(ok=>{if(ok){popMsg="팝업을 껐어요.";renderTeacher()}});
+}
+let fundMsg="";
+function fundTeacherHtml(){
+  const fi=fundInfo(),wk=weekOf(today());
+  const tr=Object.entries(STUDENTS||{}).map(([k,s])=>({k,name:s.name||k,n:s.tr&&s.tr.w===wk?+s.tr.n||0:0,f:s.tr&&s.tr.w===wk?+s.tr.f||0:0,all:+s.fee||0})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n||b.f-a.f);
+  return `<article class="card" id="fundCard">
+    <div class="t-head"><h3>반 기금 (주식 수수료)</h3><b class="fund-n">${fmt(fi.balance)}코인</b></div>
+    <p class="t-help">지금까지 모인 수수료 ${fmt(fi.fees)}코인 · 이번 주(${md(wk)}~) ${fmt(fi.week)}코인 · 쓴 돈 ${fmt(fi.usedSum)}코인. 학생 '우리 반' 화면에도 기금이 보여요.${feeOn()?"":" 지금은 수수료가 꺼져 있어요(선생님 설정의 '주식 수수료')."}</p>
+    ${tr.length?`<h3>이번 주 많이 거래한 학생</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>이름</th><th>거래</th><th>이번 주 수수료</th><th>모두 낸 수수료</th></tr></thead><tbody>${tr.slice(0,10).map(x=>`<tr><td>${esc(x.name)}</td><td>${x.n}번</td><td>${fmt(x.f)}</td><td>${fmt(x.all)}</td></tr>`).join("")}</tbody></table></div>`:`<p class="empty">이번 주에는 아직 주식을 거래한 학생이 없어요.</p>`}
+    <div class="t-sec"><h3>기금 쓴 곳 기록하기</h3>
+      <div class="row2">
+        <label class="t-field" for="fdAmt">코인<input type="number" id="fdAmt" min="0" step="1" inputmode="decimal" placeholder="예: 300"></label>
+        <label class="t-field" for="fdMemo">어디에 썼나요<input type="text" id="fdMemo" maxlength="40" placeholder="예: 학급 간식 파티"></label>
+      </div>
+      <div class="actions"><button type="button" class="primary" id="fdGo">기록하기</button></div>
+      <p class="msg" id="fdMsg" role="status">${esc(fundMsg)}</p>
+      ${fi.used.length?`<ul class="log">${fi.used.slice(0,10).map(u=>`<li><span>${esc(u.memo||"기금 사용")}<span class="when">${whenKST(u.t)}</span></span><span class="amt down">-${fmt(u.amount)} <button type="button" class="link" data-fdel="${esc(u.id)}">지우기</button></span></li>`).join("")}</ul>`:""}
+    </div>
+  </article>`;
+}
+function fundBind(){
+  const m=$("#fdMsg"),go=$("#fdGo");if(!go)return;
+  go.onclick=()=>{fundMsg="";const a=r2(+$("#fdAmt").value||0),memo=$("#fdMemo").value.trim().slice(0,40);
+    if(!(a>0))return m.textContent="쓴 코인을 적어 주세요.";if(!memo)return m.textContent="어디에 썼는지 적어 주세요.";
+    act(go,m,()=>R("fund/used").push({t:SV.TIMESTAMP,amount:a,memo})).then(ok=>{if(ok){fundMsg=`기금에서 ${fmt(a)}코인을 '${memo}'에 쓴 것으로 기록했어요.`;renderTeacher()}})};
+  document.querySelectorAll("[data-fdel]").forEach(b=>b.onclick=()=>{if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="한 번 더 누르면 지워요";return}
+    act(b,m,()=>R("fund/used/"+b.dataset.fdel).remove()).then(ok=>{if(ok){fundMsg="기록을 지웠어요. 기금이 다시 늘었어요.";renderTeacher()}})});
+}
 let TSHOP=null,tMsgTxt="";
 function renderTeacher(){
   const c=CFG;
@@ -1234,7 +1358,7 @@ function renderTeacher(){
   const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used&&p.kind!=="lotto")pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
   pend.sort((a,b)=>a.t-b.t);
   const sel=(id,opts,v)=>`<select id="${id}">${opts.map(o=>`<option value="${esc(o[0])}" ${String(v)===String(o[0])?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`;
-  $("#view-teacher").innerHTML=`<article class="card">
+  $("#view-teacher").innerHTML=`${popTeacherHtml()}<article class="card">
     <div class="t-head"><h2>선생님 설정</h2><span class="t-only">선생님 계정에만 보여요</span></div>
     <p class="t-help">'저장'을 누르면 모든 학생 화면에 바로 반영돼요.</p>
     <div class="t-sec"><h3>사이트 이름</h3>
@@ -1273,6 +1397,17 @@ function renderTeacher(){
         <label class="t-field" for="cRate">은행 금리 (1주일 이율 %)<input type="number" id="cRate" min="0" max="50" step="0.05" value="${esc(c.rate)}"></label>
       </div>
       <p class="t-help">한국은행 기준금리는 연 3.00%예요(2026년 10월 22일 동결, 다음 결정 11월 26일). 바뀌면 숫자만 고쳐 저장하세요.</p>
+    </div>
+    <div class="t-sec"><h3>주식 수수료</h3>
+      <div class="row2">
+        <label class="t-field" for="cFeeRate">수수료율 (%, 0~10)<input type="number" id="cFeeRate" min="0" max="10" step="0.1" inputmode="decimal" value="${esc(+c.feeRate||0)}"></label>
+        <label class="t-field" for="cFeeMin">최소 수수료 (코인)<input type="number" id="cFeeMin" min="0" step="0.5" inputmode="decimal" value="${esc(c.feeMin??1)}"></label>
+      </div>
+      <div class="row2">
+        <label class="t-field" for="cShortDays">단기 매매 기준${sel("cShortDays",[[0,"쓰지 않기"],[1,"산 날 바로 팔면"],[2,"산 날부터 2일 안"],[3,"산 날부터 3일 안"],[5,"산 날부터 5일 안"],[7,"산 날부터 7일 안"]],Math.round(+c.shortDays||0))}</label>
+        <label class="t-field" for="cShortRate">단기 매매 추가 수수료 (%, 0~10)<input type="number" id="cShortRate" min="0" max="10" step="0.1" inputmode="decimal" value="${esc(+c.shortRate||0)}"></label>
+      </div>
+      <p class="t-help">사고팔 때마다 거래 금액의 수수료율만큼 내요(최소 수수료보다 적으면 최소 수수료). 단기 매매 기준 안에 팔면 추가 수수료를 더 내요. 수수료율을 0으로 두면 수수료가 없어요. 걷힌 수수료는 '반 기금'에 모여요.</p>
     </div>
     <div class="t-sec"><h3>급식 완식 보상</h3>
       <div class="row2">
@@ -1331,10 +1466,11 @@ function renderTeacher(){
       <p class="msg" id="gMsg" role="status"></p>
     </div>
   </article>
+  ${fundTeacherHtml()}
   <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. 구글 Apps Script(CLASS LAB 주가 갱신)가 평일 장중 10분마다 네이버 시세를 가져와 Firebase에 넣어요. GitHub도 예비로 시세 파일을 올려요. 둘 중 더 새 시세를 써요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
   tMsgTxt="";
   $("#cSave").onclick=()=>{
-    const v={subject:$("#cSubject").value,sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
+    const v={feeRate:r2(clampN($("#cFeeRate").value,0,10)),feeMin:r2(clampN($("#cFeeMin").value,0,1e6)),shortDays:+$("#cShortDays").value||0,shortRate:r2(clampN($("#cShortRate").value,0,10)),subject:$("#cSubject").value,sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
       className:$("#cClass").value.trim()||"우리 반",siteName:$("#cSite").value.trim().slice(0,20)||"CLASS LAB",classTag:$("#cTag").value.trim().slice(0,12),tagline:$("#cTagline").value.trim().slice(0,40),board:$("#cBoard").value,boardName:$("#cBName").value,
       mealOn:$("#cMealOn").value==="1",mealLink:$("#cMealLink").value==="1",mealCoins:Math.max(0,Math.round(+$("#cMealCoins").value||0)),
@@ -1357,7 +1493,7 @@ function renderTeacher(){
     if(selKey){const c=$("#editCard");if(c)c.scrollIntoView({block:"nearest"})}
   });
   if(selKey&&$("#editCard"))bindEdit(selKey);
-  enhanceTeacher();
+  enhanceTeacher();fundBind();popTeacherBind();
   $("#gGo").onclick=()=>{const k=$("#gWho").value,a=r2(+$("#gAmt").value||0),why=$("#gWhy").value.trim()||"선생님";
     if(!k||!a)return $("#gMsg").textContent="학생과 코인을 정해 주세요.";
     act($("#gGo"),$("#gMsg"),async()=>{const cur=(await R(`students/${k}/wallet`).once("value")).val()||0;
@@ -1451,7 +1587,7 @@ function bindEdit(k){
       else if(op==="sell"){up[`students/${k}/wallet`]=r2((+s.wallet||0)+sv);up[`students/${k}/stocks`]=null;L("선생님: 주식 모두 팔기",sv)}
       else if(op==="zero"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/accr`]:null,[`students/${k}/accrAt`]:null,[`students/${k}/stocks`]:null});if(total)L("선생님: 코인 초기화",-total)}
       else if(op==="full"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/accr`]:null,[`students/${k}/accrAt`]:null,[`students/${k}/stocks`]:null,[`students/${k}/quiz`]:null,[`students/${k}/qh`]:null,[`students/${k}/qCount`]:0,[`students/${k}/qRight`]:0,[`logs/${k}`]:null,[`purchases/${k}`]:null})}
-      else if(op==="del"){Object.assign(up,{[`students/${k}`]:null,[`logs/${k}`]:null,[`purchases/${k}`]:null,[`gens/${k}`]:await bumpGen(k)})}
+      else if(op==="del"){Object.assign(up,{[`fund/carry`]:r2((+FUND.carry||0)+(+s.fee||0)),[`students/${k}`]:null,[`logs/${k}`]:null,[`purchases/${k}`]:null,[`gens/${k}`]:await bumpGen(k)})}
       await db.ref("matchum").update(up);
     }).then(done(b.dataset.ok,op!=="del"));
   });
@@ -1460,9 +1596,9 @@ function bindEdit(k){
 /* ---------- 시작 ---------- */
 function setupData(user){
   offAll();
-  on(R("config"),s=>{CFG={...DEF_CFG,...(s.val()||{})};renderBrand();rerender()});
+  on(R("config"),s=>{CFG={...DEF_CFG,...(s.val()||{})};renderBrand();rerender();popCheck()});
   on(R("shop"),s=>{SHOP=s.exists()?s.val():DEF_SHOP;if(role==="teacher"&&current==="teacher"&&!typing())TSHOP=null;rerender()});
-  on(R("students"),s=>{STUDENTS=s.val()||{};renderBrand();if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender()}}else rerender()});
+  on(R("students"),s=>{STUDENTS=s.val()||{};renderBrand();if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender();popCheck()}}else rerender()});
   if(role==="student"){
     on(R("logs/"+KEY).limitToLast(25),s=>{LOGS=Object.values(s.val()||{}).sort((a,b)=>b.t-a.t);renderBell();if(current==="bank")rerender()});
     on(R("purchases/"+KEY),s=>{BUYS=Object.entries(s.val()||{}).map(([id,v])=>({id,...v})).sort((a,b)=>b.t-a.t);renderBell();if(current==="shop")rerender()});
@@ -1472,6 +1608,7 @@ function setupData(user){
   on(R("board"),s=>{BRD=s.val()||{};renderBell();if(current==="board")rerender()});
   if(typeof roomsLive==="function")on(R("rooms"),s=>{ROOMS=s.val()||{};renderBell();if(current==="rooms")roomsLive()});
   on(R("market"),s=>applyMarket(s.val()));
+  on(R("fund"),s=>{FUND=s.val()||{};if(current==="class"||current==="teacher")rerender()});
   if(role==="teacher")on(R("tmeta/notiSeen"),s=>{TSEEN=+s.val()||0;renderBell()});
 }
 function boot(){
@@ -1480,7 +1617,7 @@ function boot(){
   firebase.initializeApp(fc);db=firebase.database();auth=firebase.auth();SV=firebase.database.ServerValue;
   $("#view-login").hidden=false;$("#view-login").innerHTML=`<article class="card"><p class="kind">불러오는 중</p><h2>우리 반 기록을 가져오고 있어요…</h2></article>`;
   auth.onAuthStateChanged(user=>{
-    offAll();ME=null;Q=null;STUDENTS={};bellOpen=false;TSEEN=0;LOGS=[];BUYS=[];TSHOP=null;if(typeof roomsLive==="function"){ROOMS={};openRoom=null;roomMake=false;RSEEN=null;roomLastSend=0}
+    offAll();ME=null;Q=null;STUDENTS={};FUND={};{const el=document.getElementById("popOverlay");if(el)el.remove();popOpen=0}bellOpen=false;TSEEN=0;LOGS=[];BUYS=[];TSHOP=null;if(typeof roomsLive==="function"){ROOMS={};openRoom=null;roomMake=false;RSEEN=null;roomLastSend=0}
     if(!user){role=null;KEY=null;renderMe();showLogin();return}
     if((user.email||"").toLowerCase()===TEACHER()){role="teacher";KEY=null;renderMe();setupData(user);showTab(location.hash.slice(1)||"teacher");return}
     const k=keyOfEmail(user.email);

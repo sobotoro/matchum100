@@ -16,6 +16,7 @@ node tools/shot.js '' /tmp/shots        # 저장할 폴더 정하기 (기본: to
 ## 더 자세히 보기
 - 누른 뒤의 화면: `PRE="document.querySelector('#goBtn').click()" node tools/shot.js 'phone-student-quiz$'`
 - 내린 뒤의 화면(따라오는 메뉴): `FULL=0 PRE="window.scrollTo(0,650)" node tools/shot.js 'phone-student-board$'`
+- 선생님 알림 팝업이 떠 있는 상태로 찍기: `QS=pop=1 node tools/shot.js 'phone-student-quiz$'`
 - 가짜 데이터 고치기: `mock-firebase.js` 위쪽의 학생·게시판·토의방 데이터를 고쳐요. 주소 뒤 `?as=student`, `?as=teacher`, `?as=none`으로 역할을 골라요.
 
 ## 준비물

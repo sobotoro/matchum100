@@ -337,7 +337,7 @@ function enhanceTeacher(){
         else if(op==="sell"){if(sv>0){up[`students/${k}/wallet`]=r2((+s.wallet||0)+sv);up[`students/${k}/stocks`]=null;L(up,k,"선생님: 주식 모두 팔기",sv)}}
         else if(op==="zero"){Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null});if(total)L(up,k,"선생님: 코인 초기화",-total)}
         else if(op==="full")Object.assign(up,{[`students/${k}/wallet`]:0,[`students/${k}/bank`]:0,[`students/${k}/lastPaid`]:"",[`students/${k}/stocks`]:null,[`students/${k}/quiz`]:null,[`students/${k}/qCount`]:0,[`students/${k}/qRight`]:0,[`logs/${k}`]:null,[`purchases/${k}`]:null});
-        else if(op==="del")Object.assign(up,{[`students/${k}`]:null,[`logs/${k}`]:null,[`purchases/${k}`]:null,[`gens/${k}`]:await bumpGen(k)});
+        else if(op==="del")Object.assign(up,{[`fund/carry`]:r2((+(up["fund/carry"]??(+FUND.carry||0)))+(+s.fee||0)),[`students/${k}`]:null,[`logs/${k}`]:null,[`purchases/${k}`]:null,[`gens/${k}`]:await bumpGen(k)});
       }
       if(Object.keys(up).length)await db.ref("matchum").update(up);
     }).then(ok=>{if(ok){bulkMsg=`${ks.length}명: ${LABEL[op]}.`;if(op==="del"){ks.forEach(k=>bulkSel.delete(k));if(ks.includes(selKey))selKey=null}renderTeacher()}});

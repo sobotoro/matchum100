@@ -1,6 +1,6 @@
 // 화면 확인 도구: 가짜 Firebase를 끼워 학생·선생님의 모든 메뉴를 휴대폰·태블릿·PC 폭으로 찍어요.
 // 사용: node tools/shot.js [이름 필터(정규식)] [출력 폴더]      예) node tools/shot.js 'phone-student'
-// 환경 변수: PRE="찍기 전에 화면에서 실행할 자바스크립트", FULL=0 (보이는 부분만 찍기)
+// 환경 변수: QS="pop=1" (주소에 덧붙일 값), PRE="찍기 전에 화면에서 실행할 자바스크립트", FULL=0 (보이는 부분만 찍기)
 const http=require('http'),fs=require('fs'),path=require('path');
 let pw;try{pw=require('playwright')}catch(_){pw=require('/opt/npm-tools/node_modules/playwright')}
 const {chromium}=pw;
@@ -45,7 +45,7 @@ const srv=http.createServer((q,s)=>{
       if(/gstatic\.com\/firebasejs/.test(u))return r.fulfill({contentType:'text/javascript',body:''});
       if(/fonts\.googleapis\.com/.test(u))return r.fulfill({contentType:'text/css',body:fontCss});
       return r.abort()});
-    await page.goto(`${base}?as=${j.as}#${j.tab==="login"?"":j.tab}`);
+    await page.goto(`${base}?as=${j.as}${process.env.QS?'&'+process.env.QS:''}#${j.tab==="login"?"":j.tab}`);
     await page.waitForTimeout(500);
     if(process.env.PRE)await page.evaluate(process.env.PRE).catch(e=>errs.push(name+' pre: '+e.message));
     await page.waitForTimeout(250);

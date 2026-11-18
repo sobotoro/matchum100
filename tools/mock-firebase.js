@@ -25,6 +25,8 @@
       votes:{r3:{"5-2-7":"o1","5-2-8":"o1","5-2-9":"o2"}},react:{r1:{m1:{"5-2-8":true,"5-2-9":true}}}},
     market:null
   }};
+  // ?pop=1 이면 선생님 알림 팝업이 떠 있는 상태로 시작해요
+  if(new URLSearchParams(location.search).get("pop")==="1")DBROOT.matchum.config.popup={title:"오늘은 받아쓰기 날!",body:"3교시에 받아쓰기를 봐요.\n토의방에 소풍 장소 투표도 열렸어요.",tab:"rooms",on:true,ver:now-60e3};
   const parts=p=>String(p).split("/").filter(Boolean);
   const clone=v=>v===undefined?null:JSON.parse(JSON.stringify(v));
   const get=p=>{let o=DBROOT;for(const k of parts(p)){if(o==null||typeof o!=="object")return null;o=o[k]}return o===undefined?null:o};
