@@ -663,7 +663,7 @@ function renderMe(){
 }
 
 /* ---------- 로그인 화면 ---------- */
-const VIEWS=["login","quiz","bank","stock","shop","class","board","rooms","me","teacher"];
+const VIEWS=["login","quiz","bank","stock","shop","arcade","class","board","rooms","me","teacher"];
 let loginMode="student";
 function showLogin(msg){
   $("#tabs").hidden=true;$("#qnav").hidden=true;VIEWS.forEach(x=>$("#view-"+x).hidden=x!=="login");
@@ -712,9 +712,9 @@ function showLogin(msg){
 }
 
 /* ---------- 탭 ---------- */
-const TABS=["quiz","bank","stock","shop","class","board","rooms","me","teacher"];
+const TABS=["quiz","bank","stock","shop","arcade","class","board","rooms","me","teacher"];
 let current="quiz";
-function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","rooms","teacher"]:["quiz","bank","stock","shop","class","board","rooms","me"]}
+function allowedTabs(){return role==="teacher"?["quiz","stock","arcade","class","board","rooms","teacher"]:["quiz","bank","stock","shop","arcade","class","board","rooms","me"]}
 function showTab(t){
   if(!role){showLogin();return}
   if(role==="student"&&!ME)return;
@@ -724,7 +724,7 @@ function showTab(t){
   TABS.forEach(x=>{$("#tab-"+x).hidden=!ok.includes(x);$("#tab-"+x).setAttribute("aria-selected",String(x===t));
     const q=$("#qtab-"+x);q.hidden=!ok.includes(x);if(x===t)q.setAttribute("aria-current","page");else q.removeAttribute("aria-current")});
   VIEWS.forEach(x=>$("#view-"+x).hidden=x!==t);
-  ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,board:renderBoard,rooms:typeof renderRooms==="function"?renderRooms:()=>{$("#view-rooms").innerHTML=`<article class="card"><p class="empty">토의방을 불러오지 못했어요. 새로 고쳐 주세요.</p></article>`},me:renderMyPage,teacher:renderTeacher})[t]();
+  ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,arcade:renderArcade,class:renderClass,board:renderBoard,rooms:typeof renderRooms==="function"?renderRooms:()=>{$("#view-rooms").innerHTML=`<article class="card"><p class="empty">토의방을 불러오지 못했어요. 새로 고쳐 주세요.</p></article>`},me:renderMyPage,teacher:renderTeacher})[t]();
   if(qJump){qJump=false;const q=$("#qnav"),y=$("#view-"+t).getBoundingClientRect().top+window.scrollY-(q.hidden?0:q.offsetHeight)-12;window.scrollTo({top:Math.max(0,y)})}
   syncQnav();
 }
@@ -1281,7 +1281,7 @@ function renderClass(){
 /* ---------- 알림 팝업 ----------
    선생님이 '저장하고 띄우기'를 누를 때마다 config/popup.ver가 새 시각이 되고,
    학생의 popSeen이 그보다 작으면 들어올 때(또는 들어와 있을 때 바로) 한 번 떠요. */
-const POP_TABS=[["","없음"],["quiz","오늘의 퀴즈"],["bank","지갑·은행"],["stock","주식"],["shop","상점"],["class","우리 반"],["board","자유게시판"],["rooms","토의방"],["me","마이페이지"]];
+const POP_TABS=[["","없음"],["quiz","오늘의 퀴즈"],["bank","지갑·은행"],["stock","주식"],["shop","상점"],["arcade","아케이드"],["class","우리 반"],["board","자유게시판"],["rooms","토의방"],["me","마이페이지"]];
 const popCfg=()=>{const p=CFG.popup||{};return {on:!!p.on&&!!+p.ver,ver:+p.ver||0,title:String(p.title||""),body:String(p.body||""),tab:POP_TABS.some(t=>t[0]===p.tab)?p.tab:""}};
 let popOpen=0;
 function popShow(preview){
@@ -1629,69 +1629,384 @@ function boot(){
   loadMarket();setInterval(loadMarket,120000);
 }
 boot();
-// --- [1단계] 클래식 RPG 캐릭터 및 장비 시스템 상태 ---
-let playerState = {
-    job: 'Knight', // 기본 직업
-    equipped: {
-        hat: null,      // 모자
-        armor: null,    // 갑옷
-        weapon: null,   // 무기
-        pet: null       // 펫
-    },
-    inventory: []       // 구매한 아이템 목록
-};
+/* ---------- 클래식 RPG 아케이드 & 장비 시스템 ---------- */
+let playerState = store.get("mc100-arcade", {
+    job: 'Knight',
+    equipped: { hat: null, armor: null, weapon: null, pet: null },
+    inventory: [],
+    highScore: 0
+});
 
-// 상점 아이템 데이터 예시
+function saveArcadeState() {
+    store.set("mc100-arcade", playerState);
+}
+
 const GAME_SHOP_ITEMS = [
-    { id: 'h1', type: 'hat', name: '용사의 투구', price: 100, bonus: '퀴즈 코인 +5%' },
-    { id: 'a1', type: 'armor', name: '미스릴 갑옷', price: 250, bonus: '점프력 강화' },
-    { id: 'w1', type: 'weapon', name: '화염의 검', price: 300, bonus: '몬스터 사냥 점수 x2' },
-    { id: 'p1', type: 'pet', name: '아기 펫 드래곤', price: 500, bonus: '자동 코인 획득' }
+    { id: 'h1', type: 'hat', name: '용사의 투구', price: 100, color: '#ef4444', bonus: '모자 장착 (빨간 투구)' },
+    { id: 'a1', type: 'armor', name: '미스릴 갑옷', price: 250, color: '#38bdf8', bonus: '점프력 강화' },
+    { id: 'w1', type: 'weapon', name: '화염의 검', price: 300, color: '#f97316', bonus: '몬스터 처치 점수 2배' },
+    { id: 'p1', type: 'pet', name: '아기 펫 드래곤', price: 500, color: '#10b981', bonus: '함께 달리는 단짝 펫' }
 ];
 
-// 게임 화면을 보여주는 HTML 생성 함수
+function renderArcade() {
+    const vArc = $("#view-arcade");
+    if (!vArc) return;
+    vArc.innerHTML = renderGameArcadeTab();
+    setTimeout(() => {
+        if (typeof initArcadeGameLoop === 'function') {
+            initArcadeGameLoop();
+        }
+    }, 50);
+}
+
 function renderGameArcadeTab() {
+    const walletCoins = (role === "student" && ME) ? fmt(ME.wallet) : "선생님 체험 모드";
     return `
     <div class="arcade-container">
         <!-- 왼쪽: 게임 화면 -->
-        <div class="game-screen-card">
-            <h3 style="margin-bottom: 5px;">⚔️ 클래식 RPG 아케이드</h3>
-            <p style="font-size: 13px; color: var(--muted, #666); margin-bottom: 15px;">
-                장비를 장착하고 캐릭터가 잘 나타나는지 확인해보세요!
+        <div class="game-screen-card card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <h3 style="margin:0;">⚔️ 클래식 RPG 아케이드</h3>
+                <span class="lbl">최고 기록: <b id="arcadeHighScore">${playerState.highScore || 0}</b>점</span>
+            </div>
+            <p style="font-size: 13px; color: var(--muted, #666); margin-bottom: 12px; text-align:left;">
+                다가오는 슬라임과 장애물을 점프(SPACE)로 피하거나 공격(X)으로 물리치세요!
             </p>
             
-            <div class="canvas-wrapper">
-                <canvas id="arcadeCanvas" width="560" height="320"></canvas>
+            <div class="canvas-wrapper" style="position:relative; width:100%; height:320px; background:linear-gradient(to bottom, #1e293b, #0f172a); border-radius:16px; overflow:hidden;">
+                <canvas id="arcadeCanvas" width="560" height="320" style="width:100%; height:100%; display:block;"></canvas>
+            </div>
+            
+            <div style="margin-top: 14px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                <button type="button" class="primary" onclick="arcadeJump()" style="min-width:130px;">점프 (SPACE / ↑)</button>
+                <button type="button" class="secondary" onclick="arcadeAttack()" style="min-width:130px; background:#ef4444; color:#fff; border:none;">공격 (X / Z)</button>
+                <button type="button" class="ghost" onclick="arcadeRestart()">다시 시작</button>
             </div>
         </div>
 
-        <!-- 오른쪽: 내 장비 슬롯 -->
-        <div class="shop-inventory-card">
-            <h4 style="margin-top:0; margin-bottom:12px;">🛡️ 내 장비 슬롯</h4>
-            <div class="equipment-slots">
+        <!-- 오른쪽: 내 장비 슬롯 및 상점 -->
+        <div class="shop-inventory-card card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h4 style="margin:0;">🛡️ 내 장비 슬롯</h4>
+                <small style="color:var(--muted);">보유: <b>${walletCoins}</b></small>
+            </div>
+            <div class="equipment-slots" style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:16px;">
                 <div class="equip-slot ${playerState.equipped.hat ? 'equipped' : ''}">
-                    ${playerState.equipped.hat ? playerState.equipped.hat.name : '모자 없음'}
+                    👒 ${playerState.equipped.hat ? esc(playerState.equipped.hat.name) : '모자 없음'}
                 </div>
                 <div class="equip-slot ${playerState.equipped.armor ? 'equipped' : ''}">
-                    ${playerState.equipped.armor ? playerState.equipped.armor.name : '갑옷 없음'}
+                    👕 ${playerState.equipped.armor ? esc(playerState.equipped.armor.name) : '갑옷 없음'}
                 </div>
                 <div class="equip-slot ${playerState.equipped.weapon ? 'equipped' : ''}">
-                    ${playerState.equipped.weapon ? playerState.equipped.weapon.name : '무기 없음'}
+                    🗡️ ${playerState.equipped.weapon ? esc(playerState.equipped.weapon.name) : '무기 없음'}
+                </div>
+                <div class="equip-slot ${playerState.equipped.pet ? 'equipped' : ''}">
+                    🐉 ${playerState.equipped.pet ? esc(playerState.equipped.pet.name) : '펫 없음'}
                 </div>
             </div>
+
+            <h4 style="margin-top:16px; margin-bottom:10px;">🏪 아케이드 장비 상점</h4>
+            <div class="shop-item-list" style="display:flex; flex-direction:column; gap:10px;">
+                ${GAME_SHOP_ITEMS.map(item => {
+                    const owned = playerState.inventory.some(i => i.id === item.id);
+                    const isEquipped = playerState.equipped[item.type] && playerState.equipped[item.type].id === item.id;
+                    return `
+                    <div class="shop-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:12px; background:var(--tile, #f8fafc);">
+                        <div style="text-align:left;">
+                            <strong style="font-size:14px;">${esc(item.name)}</strong><br>
+                            <small style="color:var(--muted, #64748b); font-size:12px;">${esc(item.bonus)}</small>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            ${!owned ? `<span style="font-weight:bold; color:var(--accent, #2456e6); font-size:13px;">${item.price}코인</span>` : ''}
+                            <button type="button" class="${isEquipped ? 'ghost' : 'primary'}" onclick="buyAndEquipGameItem('${item.id}')" style="padding:6px 12px; font-size:12px;">
+                                ${isEquipped ? '장착 해제' : (owned ? '장착하기' : '구매/장착')}
+                            </button>
+                        </div>
+                    </div>
+                    `;
+                }).join('')}
+            </div>
+            <p id="arcadeShopMsg" class="msg" style="margin-top:10px;"></p>
         </div>
     </div>
     `;
 }
-// 아케이드 탭 화면 연결
-if (typeof currentTab !== 'undefined' && currentTab === 'arcade') {
-    const contentArea = document.getElementById("content");
-    if (contentArea) {
-        contentArea.innerHTML = renderGameArcadeTab();
-        setTimeout(() => {
-            if (typeof initArcadeGameLoop === 'function') {
-                initArcadeGameLoop();
-            }
-        }, 100);
+
+async function buyAndEquipGameItem(itemId) {
+    const item = GAME_SHOP_ITEMS.find(i => i.id === itemId);
+    if (!item) return;
+    const msgEl = $("#arcadeShopMsg");
+
+    const owned = playerState.inventory.some(i => i.id === item.id);
+    if (owned) {
+        if (playerState.equipped[item.type] && playerState.equipped[item.type].id === item.id) {
+            playerState.equipped[item.type] = null;
+        } else {
+            playerState.equipped[item.type] = item;
+        }
+        saveArcadeState();
+        renderArcade();
+        return;
     }
+
+    if (role === "student" && ME) {
+        if ((+ME.wallet || 0) < item.price) {
+            if (msgEl) msgEl.textContent = `지갑에 코인이 부족해요! (${item.price}코인 필요)`;
+            return;
+        }
+        try {
+            const newWallet = r2((+ME.wallet || 0) - item.price);
+            await upd({ wallet: newWallet });
+            await log(`아케이드 장비: ${item.name}`, -item.price);
+            ME.wallet = newWallet;
+            renderMe();
+        } catch (e) {
+            if (msgEl) msgEl.textContent = "구매 중 오류가 발생했어요.";
+            return;
+        }
+    }
+
+    playerState.inventory.push(item);
+    playerState.equipped[item.type] = item;
+    saveArcadeState();
+    renderArcade();
+}
+
+let arcadeAnimId = null;
+let arcadeGame = {
+    x: 80,
+    y: 212,
+    dy: 0,
+    isJumping: false,
+    isAttacking: false,
+    attackTimer: 0,
+    score: 0,
+    gameOver: false,
+    monsters: [],
+    spawnTimer: 0
+};
+
+function arcadeRestart() {
+    arcadeGame.y = 212;
+    arcadeGame.dy = 0;
+    arcadeGame.isJumping = false;
+    arcadeGame.isAttacking = false;
+    arcadeGame.attackTimer = 0;
+    arcadeGame.score = 0;
+    arcadeGame.gameOver = false;
+    arcadeGame.monsters = [];
+    arcadeGame.spawnTimer = 0;
+}
+
+function arcadeJump() {
+    if (arcadeGame.gameOver) {
+        arcadeRestart();
+        return;
+    }
+    if (!arcadeGame.isJumping) {
+        arcadeGame.isJumping = true;
+        arcadeGame.dy = playerState.equipped.armor ? -12.5 : -10.8;
+    }
+}
+
+function arcadeAttack() {
+    if (arcadeGame.gameOver) {
+        arcadeRestart();
+        return;
+    }
+    if (!arcadeGame.isAttacking) {
+        arcadeGame.isAttacking = true;
+        arcadeGame.attackTimer = 15;
+    }
+}
+
+document.addEventListener("keydown", e => {
+    if (current !== "arcade" || typing()) return;
+    if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        arcadeJump();
+    } else if (e.key === "x" || e.key === "X" || e.key === "z" || e.key === "Z") {
+        e.preventDefault();
+        arcadeAttack();
+    }
+});
+
+function initArcadeGameLoop() {
+    if (arcadeAnimId) {
+        cancelAnimationFrame(arcadeAnimId);
+        arcadeAnimId = null;
+    }
+    const canvas = document.getElementById("arcadeCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    function update() {
+        if (arcadeGame.gameOver) return;
+
+        arcadeGame.score += 1;
+        if (arcadeGame.score % 10 === 0 && arcadeGame.score / 10 > (playerState.highScore || 0)) {
+            playerState.highScore = Math.floor(arcadeGame.score / 10);
+            saveArcadeState();
+            const hsEl = document.getElementById("arcadeHighScore");
+            if (hsEl) hsEl.textContent = playerState.highScore;
+        }
+
+        if (arcadeGame.isJumping) {
+            arcadeGame.dy += 0.55;
+            arcadeGame.y += arcadeGame.dy;
+            if (arcadeGame.y >= 212) {
+                arcadeGame.y = 212;
+                arcadeGame.isJumping = false;
+                arcadeGame.dy = 0;
+            }
+        }
+
+        if (arcadeGame.isAttacking) {
+            arcadeGame.attackTimer--;
+            if (arcadeGame.attackTimer <= 0) {
+                arcadeGame.isAttacking = false;
+            }
+        }
+
+        arcadeGame.spawnTimer--;
+        if (arcadeGame.spawnTimer <= 0) {
+            arcadeGame.monsters.push({
+                x: canvas.width + 20,
+                y: 232,
+                w: 28,
+                h: 28,
+                speed: 4 + Math.min(4, arcadeGame.score / 800),
+                color: Math.random() > 0.5 ? "#ec4899" : "#a855f7"
+            });
+            arcadeGame.spawnTimer = Math.floor(65 + Math.random() * 65);
+        }
+
+        for (let i = arcadeGame.monsters.length - 1; i >= 0; i--) {
+            const m = arcadeGame.monsters[i];
+            m.x -= m.speed;
+
+            // 공격 판정
+            const reach = playerState.equipped.weapon ? 52 : 34;
+            if (
+                arcadeGame.isAttacking &&
+                m.x < arcadeGame.x + 32 + reach &&
+                m.x + m.w > arcadeGame.x &&
+                arcadeGame.y + 48 > m.y
+            ) {
+                arcadeGame.monsters.splice(i, 1);
+                arcadeGame.score += playerState.equipped.weapon ? 200 : 100;
+                continue;
+            }
+
+            // 충돌 판정
+            if (
+                m.x < arcadeGame.x + 26 &&
+                m.x + m.w > arcadeGame.x + 6 &&
+                arcadeGame.y + 48 > m.y + 4
+            ) {
+                arcadeGame.gameOver = true;
+            }
+
+            if (m.x + m.w < -20) {
+                arcadeGame.monsters.splice(i, 1);
+            }
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 바닥
+        ctx.fillStyle = "#334155";
+        ctx.fillRect(0, 260, canvas.width, 60);
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 260);
+        ctx.lineTo(canvas.width, 260);
+        ctx.stroke();
+
+        // 점수 표시
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillText(`SCORE: ${Math.floor(arcadeGame.score / 10)}`, 20, 32);
+
+        const px = arcadeGame.x;
+        const py = arcadeGame.y;
+
+        // 펫
+        if (playerState.equipped.pet) {
+            const bounce = Math.sin(Date.now() / 150) * 4;
+            ctx.fillStyle = "#10b981";
+            ctx.beginPath();
+            ctx.arc(px - 24, py + 24 + bounce, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(px - 22, py + 20 + bounce, 3, 3);
+        }
+
+        // 캐릭터 몸통 (갑옷 착용 시 하늘색 미스릴 컬러)
+        ctx.fillStyle = playerState.equipped.armor ? "#38bdf8" : "#6366f1";
+        ctx.fillRect(px, py + 14, 32, 34);
+
+        // 캐릭터 얼굴
+        ctx.fillStyle = "#fde047";
+        ctx.fillRect(px + 4, py, 24, 16);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(px + 20, py + 5, 4, 4);
+
+        // 모자
+        if (playerState.equipped.hat) {
+            ctx.fillStyle = "#ef4444";
+            ctx.fillRect(px + 2, py - 8, 28, 10);
+            ctx.fillStyle = "#fbbf24";
+            ctx.fillRect(px + 12, py - 12, 8, 4);
+        }
+
+        // 무기 및 공격 이펙트
+        if (arcadeGame.isAttacking) {
+            ctx.fillStyle = playerState.equipped.weapon ? "#f97316" : "#e2e8f0";
+            const reach = playerState.equipped.weapon ? 48 : 30;
+            ctx.fillRect(px + 32, py + 18, reach, 8);
+        } else if (playerState.equipped.weapon) {
+            ctx.fillStyle = "#f97316";
+            ctx.fillRect(px + 30, py + 6, 6, 26);
+        }
+
+        // 몬스터 (슬라임)
+        arcadeGame.monsters.forEach(m => {
+            ctx.fillStyle = m.color;
+            ctx.beginPath();
+            ctx.arc(m.x + m.w / 2, m.y + m.h / 2 + 4, m.w / 2, Math.PI, 0);
+            ctx.lineTo(m.x + m.w, m.y + m.h);
+            ctx.lineTo(m.x, m.y + m.h);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(m.x + 6, m.y + 10, 4, 4);
+            ctx.fillRect(m.x + 16, m.y + 10, 4, 4);
+        });
+
+        if (arcadeGame.gameOver) {
+            ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 24px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("GAME OVER!", canvas.width / 2, canvas.height / 2 - 10);
+            ctx.font = "14px sans-serif";
+            ctx.fillStyle = "#cbd5e1";
+            ctx.fillText("점프 버튼이나 스페이스바를 누르면 다시 시작해요", canvas.width / 2, canvas.height / 2 + 20);
+            ctx.textAlign = "left";
+        }
+    }
+
+    function loop() {
+        if (!document.getElementById("arcadeCanvas")) return;
+        update();
+        draw();
+        arcadeAnimId = requestAnimationFrame(loop);
+    }
+    loop();
 }
