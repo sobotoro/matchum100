@@ -1627,3 +1627,57 @@ function boot(){
   loadMarket();setInterval(loadMarket,120000);
 }
 boot();
+// --- [1단계] 클래식 RPG 캐릭터 및 장비 시스템 상태 ---
+let playerState = {
+    job: 'Knight', // 기본 직업
+    equipped: {
+        hat: null,      // 모자
+        armor: null,    // 갑옷
+        weapon: null,   // 무기
+        pet: null       // 펫
+    },
+    inventory: []       // 구매한 아이템 목록
+};
+
+// 상점 아이템 데이터 예시
+const GAME_SHOP_ITEMS = [
+    { id: 'h1', type: 'hat', name: '용사의 투구', price: 100, bonus: '퀴즈 코인 +5%' },
+    { id: 'a1', type: 'armor', name: '미스릴 갑옷', price: 250, bonus: '점프력 강화' },
+    { id: 'w1', type: 'weapon', name: '화염의 검', price: 300, bonus: '몬스터 사냥 점수 x2' },
+    { id: 'p1', type: 'pet', name: '아기 펫 드래곤', price: 500, bonus: '자동 코인 획득' }
+];
+
+// 게임 화면을 보여주는 HTML 생성 함수
+function renderGameArcadeTab() {
+    return `
+    <div class="arcade-container">
+        <!-- 왼쪽: 게임 화면 -->
+        <div class="game-screen-card">
+            <h3 style="margin-bottom: 5px;">⚔️ 클래식 RPG 아케이드</h3>
+            <p style="font-size: 13px; color: var(--muted, #666); margin-bottom: 15px;">
+                장비를 장착하고 캐릭터가 잘 나타나는지 확인해보세요!
+            </p>
+            
+            <div class="canvas-wrapper">
+                <canvas id="arcadeCanvas" width="560" height="320"></canvas>
+            </div>
+        </div>
+
+        <!-- 오른쪽: 내 장비 슬롯 -->
+        <div class="shop-inventory-card">
+            <h4 style="margin-top:0; margin-bottom:12px;">🛡️ 내 장비 슬롯</h4>
+            <div class="equipment-slots">
+                <div class="equip-slot ${playerState.equipped.hat ? 'equipped' : ''}">
+                    ${playerState.equipped.hat ? playerState.equipped.hat.name : '모자 없음'}
+                </div>
+                <div class="equip-slot ${playerState.equipped.armor ? 'equipped' : ''}">
+                    ${playerState.equipped.armor ? playerState.equipped.armor.name : '갑옷 없음'}
+                </div>
+                <div class="equip-slot ${playerState.equipped.weapon ? 'equipped' : ''}">
+                    ${playerState.equipped.weapon ? playerState.equipped.weapon.name : '무기 없음'}
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+}
