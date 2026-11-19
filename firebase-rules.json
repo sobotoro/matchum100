@@ -117,6 +117,13 @@
             }
           }
         }
+      },
+      "race": {
+        "p": {
+          "$k": {
+            ".write": "auth != null && auth.token.email.beginsWith('s' + $k + '-') && root.child('matchum/students/' + $k + '/uid').val() === auth.uid && (!newData.exists() || newData.child('rid').val() === root.child('matchum/race/state/rid').val())"
+          }
+        }
       }
     }
   }

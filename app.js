@@ -4,6 +4,7 @@
 /* 메뉴 한 곳에서 관리: [탭 이름, 글자, 아이콘 선] */
 const NAV=[
   ["quiz","오늘의 퀴즈",'<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'],
+  ["run","달리기",'<circle cx="15" cy="4.5" r="2"/><path d="M7 21l3.5-6 3 2.5V22"/><path d="M5.5 11.5L9 8.5h4.5l3 4 3.5 1"/><path d="M10.5 15l2-5"/>'],
   ["bank","지갑·은행",'<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z"/><path d="M16.5 14h.01"/>'],
   ["stock","주식",'<path d="M4 19h16"/><path d="M5 15l5-5 3 3 6-7"/>'],
   ["shop","상점",'<path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'],
@@ -36,6 +37,7 @@ document.getElementById("app").innerHTML=`
     <main id="stage" aria-live="polite"></main>
     <section id="meal"></section>
   </section>
+  <section class="view" id="view-run" hidden></section>
   <section class="view" id="view-bank" hidden></section>
   <section class="view" id="view-stock" hidden></section>
   <section class="view" id="view-shop" hidden></section>
@@ -661,7 +663,7 @@ function renderMe(){
 }
 
 /* ---------- 로그인 화면 ---------- */
-const VIEWS=["login","quiz","bank","stock","shop","class","board","rooms","me","teacher"];
+const VIEWS=["login","quiz","run","bank","stock","shop","class","board","rooms","me","teacher"];
 let loginMode="student";
 function showLogin(msg){
   $("#tabs").hidden=true;$("#qnav").hidden=true;VIEWS.forEach(x=>$("#view-"+x).hidden=x!=="login");
@@ -710,9 +712,9 @@ function showLogin(msg){
 }
 
 /* ---------- 탭 ---------- */
-const TABS=["quiz","bank","stock","shop","class","board","rooms","me","teacher"];
+const TABS=["quiz","run","bank","stock","shop","class","board","rooms","me","teacher"];
 let current="quiz";
-function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","rooms","teacher"]:["quiz","bank","stock","shop","class","board","rooms","me"]}
+function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","rooms","teacher"]:["quiz","run","bank","stock","shop","class","board","rooms","me"]}
 function showTab(t){
   if(!role){showLogin();return}
   if(role==="student"&&!ME)return;
@@ -722,7 +724,7 @@ function showTab(t){
   TABS.forEach(x=>{$("#tab-"+x).hidden=!ok.includes(x);$("#tab-"+x).setAttribute("aria-selected",String(x===t));
     const q=$("#qtab-"+x);q.hidden=!ok.includes(x);if(x===t)q.setAttribute("aria-current","page");else q.removeAttribute("aria-current")});
   VIEWS.forEach(x=>$("#view-"+x).hidden=x!==t);
-  ({quiz:renderQuizTab,bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,board:renderBoard,rooms:typeof renderRooms==="function"?renderRooms:()=>{$("#view-rooms").innerHTML=`<article class="card"><p class="empty">토의방을 불러오지 못했어요. 새로 고쳐 주세요.</p></article>`},me:renderMyPage,teacher:renderTeacher})[t]();
+  ({quiz:renderQuizTab,run:typeof renderRun==="function"?renderRun:()=>{$("#view-run").innerHTML=`<article class="card"><p class="empty">달리기를 불러오지 못했어요. 새로 고쳐 주세요.</p></article>`},bank:renderBank,stock:renderStock,shop:renderShop,class:renderClass,board:renderBoard,rooms:typeof renderRooms==="function"?renderRooms:()=>{$("#view-rooms").innerHTML=`<article class="card"><p class="empty">토의방을 불러오지 못했어요. 새로 고쳐 주세요.</p></article>`},me:renderMyPage,teacher:renderTeacher})[t]();
   if(qJump){qJump=false;const q=$("#qnav"),y=$("#view-"+t).getBoundingClientRect().top+window.scrollY-(q.hidden?0:q.offsetHeight)-12;window.scrollTo({top:Math.max(0,y)})}
   syncQnav();
 }
@@ -1012,7 +1014,7 @@ function renderEnd(){
     <div class="score"><div class="score-num">${score}점${score>=80?CIRCLE.replace('class="mark"','class=""'):""}</div>
       <div class="score-txt"><strong>${total}문제 중 ${right}문제 맞혔어요</strong>
       ${avg?`<span class="empty">한 문제 평균 ${avg.toFixed(1)}초${lateN?` · 시간 초과 ${lateN}문제`:""}</span>`:""}
-      ${ch?`<p class="earned">+${fmt(Q.coins||0)}코인을 지갑에 넣었어요</p><span class="empty">내일 또 도전할 수 있어요.</span>`:""}</div></div>
+      ${ch?`<p class="earned">+${fmt(Q.coins||0)}코인을 지갑에 넣었어요</p><span class="empty">내일 또 도전할 수 있어요.</span>${typeof runLeft==="function"&&runLeft()>0?`<p class="run-ticket">🎫 달리기 티켓 ${runLeft()}장을 받았어요! <a href="#run">달리러 가기 →</a></p>`:""}`:""}</div></div>
     ${wrong.length?`<p class="kind">다시 보기</p>`:""}
     ${list}
     <div class="actions">
@@ -1279,7 +1281,7 @@ function renderClass(){
 /* ---------- 알림 팝업 ----------
    선생님이 '저장하고 띄우기'를 누를 때마다 config/popup.ver가 새 시각이 되고,
    학생의 popSeen이 그보다 작으면 들어올 때(또는 들어와 있을 때 바로) 한 번 떠요. */
-const POP_TABS=[["","없음"],["quiz","오늘의 퀴즈"],["bank","지갑·은행"],["stock","주식"],["shop","상점"],["class","우리 반"],["board","자유게시판"],["rooms","토의방"],["me","마이페이지"]];
+const POP_TABS=[["","없음"],["quiz","오늘의 퀴즈"],["run","달리기"],["bank","지갑·은행"],["stock","주식"],["shop","상점"],["class","우리 반"],["board","자유게시판"],["rooms","토의방"],["me","마이페이지"]];
 const popCfg=()=>{const p=CFG.popup||{};return {on:!!p.on&&!!+p.ver,ver:+p.ver||0,title:String(p.title||""),body:String(p.body||""),tab:POP_TABS.some(t=>t[0]===p.tab)?p.tab:""}};
 let popOpen=0;
 function popShow(preview){
@@ -1358,7 +1360,7 @@ function renderTeacher(){
   const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used&&p.kind!=="lotto")pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
   pend.sort((a,b)=>a.t-b.t);
   const sel=(id,opts,v)=>`<select id="${id}">${opts.map(o=>`<option value="${esc(o[0])}" ${String(v)===String(o[0])?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`;
-  $("#view-teacher").innerHTML=`${popTeacherHtml()}<article class="card">
+  $("#view-teacher").innerHTML=`${popTeacherHtml()}${typeof runTeacherHtml==="function"?runTeacherHtml():""}<article class="card">
     <div class="t-head"><h2>선생님 설정</h2><span class="t-only">선생님 계정에만 보여요</span></div>
     <p class="t-help">'저장'을 누르면 모든 학생 화면에 바로 반영돼요.</p>
     <div class="t-sec"><h3>사이트 이름</h3>
@@ -1493,7 +1495,7 @@ function renderTeacher(){
     if(selKey){const c=$("#editCard");if(c)c.scrollIntoView({block:"nearest"})}
   });
   if(selKey&&$("#editCard"))bindEdit(selKey);
-  enhanceTeacher();fundBind();popTeacherBind();
+  enhanceTeacher();fundBind();popTeacherBind();if(typeof runTeacherBind==="function")runTeacherBind();
   $("#gGo").onclick=()=>{const k=$("#gWho").value,a=r2(+$("#gAmt").value||0),why=$("#gWhy").value.trim()||"선생님";
     if(!k||!a)return $("#gMsg").textContent="학생과 코인을 정해 주세요.";
     act($("#gGo"),$("#gMsg"),async()=>{const cur=(await R(`students/${k}/wallet`).once("value")).val()||0;
@@ -1609,6 +1611,7 @@ function setupData(user){
   if(typeof roomsLive==="function")on(R("rooms"),s=>{ROOMS=s.val()||{};renderBell();if(current==="rooms")roomsLive()});
   on(R("market"),s=>applyMarket(s.val()));
   on(R("fund"),s=>{FUND=s.val()||{};if(current==="class"||current==="teacher")rerender()});
+  if(typeof runRaceLive==="function"){on(R("race"),s=>{RACE=s.val()||{};runRaceLive()});on(db.ref(".info/serverTimeOffset"),s=>{RUN_OFF=+s.val()||0})}
   if(role==="teacher")on(R("tmeta/notiSeen"),s=>{TSEEN=+s.val()||0;renderBell()});
 }
 function boot(){

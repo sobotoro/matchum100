@@ -773,3 +773,23 @@ input[type=time]::-webkit-date-and-time-value,input[type=date]::-webkit-date-and
 #popBodyIn{resize:vertical;font:inherit;font-size:1rem;padding:10px 12px;line-height:1.55;background:var(--tile);color:var(--ink);border:1.5px solid var(--line-2);border-radius:12px}
 @keyframes popfade{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){.pop-overlay{animation:none}}
+
+/* ---------- 달리기 (run.js) ---------- */
+.run-card .t-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#runMount{width:100%;max-width:880px;margin:10px auto 6px}
+.run-credit{margin:4px 0 0;font-size:.75rem;color:var(--muted)}
+.run-ticket{margin:8px 0 0;font-weight:700;color:#8a5a00}
+.run-ticket a{color:var(--accent)}
+.run-h{font-size:1rem;margin:16px 0 6px}
+.run-set{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px 12px}
+.run-set .run-wide{grid-column:1/-1}
+.t-check{display:flex;align-items:center;gap:8px;font-size:.95rem;min-height:44px}
+.t-check input{width:20px;height:20px;accent-color:var(--accent)}
+.run-prize{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.run-prize input{font:inherit;font-size:16px;padding:8px 4px;text-align:center;border:1.5px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);min-width:0;width:100%}
+.run-names{margin:4px 0;color:var(--muted);font-size:.9rem;line-height:1.6}
+.run-tbl{width:100%;border-collapse:collapse;margin-top:6px;font-size:.92rem}
+.run-tbl th,.run-tbl td{padding:6px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.run-tbl th{font-size:.8rem;color:var(--muted);font-weight:600}
+.run-tbl .run-going td{color:var(--muted)}
+#runLive{overflow-x:auto}

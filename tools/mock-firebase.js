@@ -9,8 +9,9 @@
   Object.assign(students["5-2-7"],{wallet:1250,bank:3400,stocks:{c005930:{qty:0.006,cost:1250},c000660:{qty:0.0006,cost:820}},bagReq:{r1:{name:"칭찬 카드",n:1,t:now-H}}});
   students["5-2-5"].meal={d:kst,t:now-0.5*H,c:250};students["5-2-6"].meal={d:kst,t:now-0.4*H,c:250};
   students["5-2-6"].mealSeen={d:kst,k:{"5-2-5":1}};
+  students["5-2-7"].quiz={date:kst,state:"완료",right:8,total:10,coins:80};students["5-2-7"].run={d:kst,used:0,coin:0,best:132};
   const DBROOT={matchum:{
-    config:{siteName:"CLASS LAB",tagline:"우리 반 실험실",board:"전체",roomWeekend:true,roomFrom:"00:00",roomTo:"23:59",mealFrom:"00:00",mealTo:"23:59"},
+    config:{siteName:"CLASS LAB",tagline:"우리 반 실험실",board:"전체",roomWeekend:true,roomFrom:"00:00",roomTo:"23:59",mealFrom:"00:00",mealTo:"23:59",runLock:false},
     students,
     logs:{"5-2-7":{l1:{t:now-30*H,text:"오늘의 도전 8문제 맞힘",amount:80},l2:{t:now-28*H,text:"은행에 저금",amount:-500},l3:{t:now-5*H,text:"은행 이자",amount:12.5},l4:{t:now-2*H,text:"선생님이 준 코인: 발표 잘했어요",amount:100}}},
     purchases:{"5-2-7":{p1:{t:now-50*H,name:"칭찬 카드 1개",price:100,code:"4821",used:true,usedAt:now-40*H},p2:{t:now-20*H,name:"칭찬 카드 2개",price:190,code:"7730",used:false},p3:{t:now-3*H,name:"코인 복권",price:50,code:"1193",used:false,kind:"lotto"}},
