@@ -139,8 +139,10 @@ async function soloStart(){
   if(starting)return;if(host.soloBlock()){menu();return}
   starting=true;let ok=false;try{ok=await host.useTicket()}catch(e){ok=false}starting=false;
   if(!ok){showBox(`<h2>🏃 혼자 연습</h2><p>티켓을 쓰지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요.</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()};return}
-  state='play';clearWorld();speed=100;hearts=3;newBest=false;nextObs=240;nextCoin=0.8;hideBox();hud();
+  state='scount';scT=3;clearWorld();speed=100;hearts=3;newBest=false;nextObs=240;nextCoin=0.8;hideBox();hud();
+  const cn=$('rgCount');cn.textContent='3';cn.classList.remove('rg-hidden');fitView();
 }
+let scT=0,cntHide=0;
 
 // ── 입력 ──
 // 점프: 공중에 약 1.1초, 높이 약 52. 짧게 누르면 낮게. 공중에서 한 번 더 = 2단 점프.
@@ -261,7 +263,7 @@ function makeCourse(seed){
 }
 const COLORS=['#e8590c','#2f9e44','#9c36b5','#1098ad','#d6336c','#5c940d','#f08c00','#1c7ed6','#c2255c','#087f5b','#5f3dc4','#e67700'];
 let course=null,ci=0,cci=0,gci=0,meX=0,raceT=0,meDone=false,meTime=0,cnt=0,ghosts={},rid=null,startLocal=0,sendT=0,sendNow=false,resultShown=false;
-function raceOff(){$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
+function raceOff(){cntHide=0;$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
 function raceLobby(){
   const rs=host.race();if(!rs||rs.st!=='lobby'){menu();return}
   mode='race';state='lobby';clearWorld();rid=rs.rid;course=makeCourse(rs.seed);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
@@ -370,7 +372,10 @@ function endAnim(dt){
 
 // ── 업데이트 ──
 function update(dt){
-  if(state==='play'){
+  if(state==='scount'){
+    scT-=dt;hero.key=idleKey();$('rgCount').textContent=scT>0?Math.ceil(scT):'출발!';if(scT<=0){state='play';cntHide=0.7}
+  }else if(state==='play'){
+    if(cntHide>0){cntHide-=dt;if(cntHide<=0)$('rgCount').classList.add('rg-hidden')}
     if(!asking)t+=dt;speed=baseSpeed(t);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;
     heroStep(dt,asking?0:speed);if(asking&&hero.ground)hero.key=idleKey();
     if(!asking){nextObs-=dx;if(nextObs<=0)spawnObs();
@@ -381,7 +386,7 @@ function update(dt){
   }else if(state==='lobby'){
     hero.key=idleKey();raceWatch();
   }else if(state==='count'){
-    const left=(startLocal-host.now())/1000;$('rgCount').textContent=left>0?Math.ceil(left):'출발!';hero.key=idleKey();
+    const left=(startLocal-host.now())/1000;$('rgCount').textContent=left>3?'준비!':left>0?Math.ceil(left):'출발!';hero.key=idleKey();
     if(left<=0&&state==='count'){state='race';raceT=Math.max(0,-left);sendNow=true}
     raceWatch();
   }else if(state==='race'||state==='result'){
@@ -412,7 +417,7 @@ function hit(o){
   hearts--;inv=1.4;hud();if(hearts<=0)gameOver();
 }
 async function gameOver(){
-  state='over';overT=0;const d=Math.floor(dist);
+  state='over';overT=0;cntHide=0;$('rgCount').classList.add('rg-hidden');const d=Math.floor(dist);
   let res={reward:0,best:host.best(),newBest:false,today:0};
   try{res=await host.soloEnd({dist:d,right:qRight,all:qAll})}catch(e){}
   newBest=res.newBest;

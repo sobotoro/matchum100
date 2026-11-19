@@ -714,7 +714,7 @@ function showLogin(msg){
 /* ---------- 탭 ---------- */
 const TABS=["quiz","run","bank","stock","shop","class","board","rooms","me","teacher"];
 let current="quiz";
-function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","rooms","teacher"]:["quiz","run","bank","stock","shop","class","board","rooms","me"]}
+function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","rooms","teacher"]:["quiz",...(typeof runCfg!=="function"||runCfg().open?["run"]:[]),"bank","stock","shop","class","board","rooms","me"]}
 function showTab(t){
   if(!role){showLogin();return}
   if(role==="student"&&!ME)return;
