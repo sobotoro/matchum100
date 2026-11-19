@@ -124,6 +124,76 @@
             ".write": "auth != null && auth.token.email.beginsWith('s' + $k + '-') && root.child('matchum/students/' + $k + '/uid').val() === auth.uid && (!newData.exists() || newData.child('rid').val() === root.child('matchum/race/state/rid').val())"
           }
         }
+      },
+      "rblob": {
+        "$mid": {
+          ".write": "auth != null && !data.exists() && newData.exists() && root.child('matchum/students/' + newData.child('k').val() + '/uid').val() === auth.uid && root.child('matchum/config/roomOn').val() !== false && root.child('matchum/rooms/list/' + newData.child('rid').val() + '/title').exists() && !root.child('matchum/rooms/list/' + newData.child('rid').val() + '/closed').exists() && root.child('matchum/rooms/mute/' + newData.child('k').val()).val() !== true && ((newData.child('kind').val() === 'img' && root.child('matchum/config/roomPhoto').val() !== false) || (newData.child('kind').val() === 'vid' && root.child('matchum/config/roomVideo').val() !== false))",
+          ".validate": "newData.hasChildren(['k', 'rid', 'kind', 'mime', 'c'])",
+          "k": {
+            ".validate": "newData.isString()"
+          },
+          "rid": {
+            ".validate": "newData.isString()"
+          },
+          "kind": {
+            ".validate": "newData.val() === 'img' || newData.val() === 'vid'"
+          },
+          "mime": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
+          },
+          "c": {
+            "$i": {
+              ".validate": "$i.matches(/^[0-9]$/) && newData.isString() && newData.val().length <= 600000"
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "rmeta": {
+        "$rid": {
+          "$mid": {
+            ".write": "auth != null && !data.exists() && newData.exists() && root.child('matchum/students/' + newData.child('k').val() + '/uid').val() === auth.uid && root.child('matchum/rblob/' + $mid + '/k').val() === newData.child('k').val() && root.child('matchum/rblob/' + $mid + '/rid').val() === $rid && root.child('matchum/rblob/' + $mid + '/kind').val() === newData.child('kind').val() && root.child('matchum/config/roomOn').val() !== false && root.child('matchum/rooms/list/' + $rid + '/title').exists() && !root.child('matchum/rooms/list/' + $rid + '/closed').exists() && root.child('matchum/rooms/mute/' + newData.child('k').val()).val() !== true && (root.child('matchum/config/roomReview').val() !== true || newData.child('ok').val() === false) && !newData.child('fl').exists()",
+            ".validate": "newData.hasChildren(['k', 'kind', 'th'])",
+            "kind": {
+              ".validate": "newData.val() === 'img' || newData.val() === 'vid'"
+            },
+            "th": {
+              ".validate": "newData.isString() && newData.val().length <= 60000 && newData.val().beginsWith('data:image/')"
+            },
+            "ok": {
+              ".validate": "newData.val() === false"
+            },
+            "size": {
+              ".validate": "newData.isNumber()"
+            },
+            "fl": {
+              "$k": {
+                ".write": "auth != null && root.child('matchum/students/' + $k + '/uid').val() === auth.uid && root.child('matchum/rmeta/' + $rid + '/' + $mid + '/kind').exists()",
+                ".validate": "newData.isNumber()"
+              }
+            }
+          }
+        }
+      },
+      "rsize": {
+        "$mid": {
+          ".write": "auth != null && !data.exists() && newData.exists() && root.child('matchum/students/' + root.child('matchum/rblob/' + $mid + '/k').val() + '/uid').val() === auth.uid",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 7000000"
+        }
+      },
+      "rcover": {
+        "$rid": {
+          ".write": "auth != null && root.child('matchum/students/' + root.child('matchum/rooms/list/' + $rid + '/k').val() + '/uid').val() === auth.uid && root.child('matchum/config/roomOn').val() !== false && root.child('matchum/rooms/list/' + $rid + '/title').exists() && !root.child('matchum/rooms/list/' + $rid + '/closed').exists() && (!newData.exists() || (root.child('matchum/config/roomPhoto').val() !== false && newData.child('k').val() === root.child('matchum/rooms/list/' + $rid + '/k').val() && (root.child('matchum/config/roomReview').val() !== true || newData.child('ok').val() === false)))",
+          ".validate": "newData.hasChildren(['k', 'd'])",
+          "d": {
+            ".validate": "newData.isString() && newData.val().length <= 120000 && newData.val().beginsWith('data:image/')"
+          },
+          "ok": {
+            ".validate": "newData.val() === false"
+          }
+        }
       }
     }
   }

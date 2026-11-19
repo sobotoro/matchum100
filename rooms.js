@@ -59,6 +59,7 @@ const rUnread=r=>{const s=rSeen()[r.id]||0;return rMsgs(r.id).filter(m=>m.t>s&&m
 function renderRooms(){
   const v=$("#view-rooms");if(!v)return;
   if(openRoom&&!rRoom(openRoom))openRoom=null;
+  if(typeof mdWatch==="function")mdWatch();
   const L=$("#rmList"),stick=!L||L.scrollHeight-L.scrollTop-L.clientHeight<80,top=L?L.scrollTop:0,wasIn=!!L;
   v.classList.toggle("in-room",!!openRoom);
   v.innerHTML=openRoom?roomViewHtml(rRoom(openRoom)):roomListHtml();
@@ -66,18 +67,19 @@ function renderRooms(){
     bindRoom(openRoom);
     const N=$("#rmList");if(N)N.scrollTop=stick||!wasIn?N.scrollHeight:top;
     seeRoom(openRoom);
-  }else bindRoomList();
+    if(typeof mdBindRoom==="function")mdBindRoom(openRoom);
+  }else{bindRoomList();if(typeof mdBindList==="function")mdBindList()}
   roomMsg="";
 }
 /* 입력하는 중에도 새 이야기는 바로 보여요 (입력칸은 그대로) */
 function roomsLive(){
   if(current!=="rooms"||!$("#view-rooms")||$("#view-rooms").hidden)return;
   const r=openRoom&&rRoom(openRoom);
-  if(r&&$("#rmList")&&typing()&&!(r.closed&&$("#rmForm"))){
+  if(r&&$("#rmList")&&(typing()||(typeof mdHold==="function"&&mdHold()))&&!(r.closed&&$("#rmForm"))){
     const L=$("#rmList"),stick=L.scrollHeight-L.scrollTop-L.clientHeight<80;
     L.innerHTML=msgsHtml(r);const P=$("#rmPanel");if(P)P.innerHTML=panelHtml(r);
     if(stick)L.scrollTop=L.scrollHeight;
-    bindMsgs(r.id);bindPanel(r.id);seeRoom(r.id);return;
+    bindMsgs(r.id);bindPanel(r.id);seeRoom(r.id);if(typeof mdBindCommon==="function")mdBindCommon($("#rmMsg"));return;
   }
   rerender();
 }
@@ -112,7 +114,7 @@ function roomListHtml(){
   const myOpen=role==="student"&&all.find(r=>r.k===KEY&&!r.closed);
   const canMake=role==="teacher"||(h.open&&!rMuted(KEY)&&!myOpen);
   const seg=[["open","진행 중"],["closed","끝난 방"],["mine",role==="teacher"?"선생님 방":"내가 참여한 방"]];
-  return `${hoursHtml()}
+  return `${hoursHtml()}${typeof mdTeacherHtml==="function"?mdTeacherHtml():""}
   <article class="card room-top">
     <div class="t-head"><h2>토의방</h2>${roomMake?"":`<button type="button" class="primary" id="rmNew" ${canMake?"":"disabled"}>+ 방 만들기</button>`}</div>
     ${myOpen&&!roomMake?`<p class="t-help">이미 연 방이 있어요. 그 방을 정리하고 닫으면 새 방을 열 수 있어요.</p>`:""}
@@ -125,7 +127,7 @@ function roomListHtml(){
 function roomCardHtml(r){
   const [ico,nm]=RTYPES[r.type]||RTYPES.talk,n=rPeople(r.id).length,cnt=rMsgs(r.id).filter(m=>!m.sys).length,un=r.closed?0:rUnread(r);
   return `<li><button type="button" class="room-card ${r.closed?"closed":""}" data-room="${esc(r.id)}">
-    <span class="rc-top"><span class="rbadge t-${esc(r.type)}">${ico} ${nm}</span>${r.anon?`<span class="rbadge">익명방</span>`:""}${r.closed?`<span class="rbadge done">끝남</span>`:""}${un?`<b class="rc-new">새 이야기 ${un}</b>`:""}</span>
+    ${typeof mdCardCover==="function"?mdCardCover(r):""}<span class="rc-top"><span class="rbadge t-${esc(r.type)}">${ico} ${nm}</span>${r.anon?`<span class="rbadge">익명방</span>`:""}${r.closed?`<span class="rbadge done">끝남</span>`:""}${un?`<b class="rc-new">새 이야기 ${un}</b>`:""}</span>
     <b class="rc-title">${esc(r.title)}</b>
     ${r.q?`<span class="rc-q">${esc(r.q)}</span>`:""}
     <small>${esc(ownerTxt(r))} · ${n}명 참여 · 이야기 ${cnt}개 · ${rTime(rLastT(r))}</small>
@@ -143,6 +145,7 @@ function makeHtml(){
       <div id="rmOptList">${[1,2].map(i=>`<input type="text" class="rm-opt" maxlength="20" placeholder="보기 ${i}" aria-label="보기 ${i}">`).join("")}</div>
       <button type="button" class="ghost" id="rmOptAdd">+ 보기 추가</button>
     </div>
+    ${typeof mdMakeHtml==="function"?mdMakeHtml():""}
     <label class="inline rm-anon" for="rmAnon"><input type="checkbox" id="rmAnon"> 익명방으로 열기</label>
     <p class="t-help" id="rmAnonHelp">익명방에서는 이름 대신 '익명 1, 익명 2…'로 보여요. 선생님은 누가 썼는지 볼 수 있어요.</p>
     <div class="actions"><button type="submit" class="primary" id="rmMakeGo">방 열기</button><button type="button" class="secondary" id="rmMakeX">취소</button></div>
@@ -154,6 +157,7 @@ function roomViewHtml(r){
   return `<div class="room-side">
     <article class="card room-head">
       <button type="button" class="link rm-back" id="rmBack">← 방 목록</button>
+      ${typeof mdHeadCover==="function"?mdHeadCover(r):""}
       <div id="rmPanel">${panelHtml(r)}</div>
       ${!closed&&(own||T)?(roomClosing?`<form id="rmCloseF" class="rm-close" novalidate>
           <label class="t-field" for="rmSum">정리글 · 우리가 이야기한 것<textarea id="rmSum" maxlength="300" rows="3" placeholder="예: 쉬는 시간은 그대로 두고, 점심시간에 놀이 시간을 늘리자는 의견이 많았어요."></textarea></label>
@@ -222,6 +226,7 @@ function msgHtml(r,m,am,byId){
   return `<div class="rm ${mine?"me":""} ${m.k==="T"?"tch":""} ${m.side?"s-"+esc(m.side):""} ${m.hid?"hid":""}" id="rm-${esc(m.id)}">
     <div class="rm-who"><b>${esc(nm)}</b>${m.k===r.k?`<span class="rchip">방장</span>`:""}${m.side&&SIDES[m.side]?`<span class="rchip c-${esc(m.side)}">${SIDES[m.side]}</span>`:""}<small>${rTime(m.t)}</small></div>
     ${par&&!hidden?`<div class="rm-quote">↩ ${esc(rName(r,par.k,am))} · ${esc(snip(par.hid?"가린 말":par.text))}</div>`:""}
+    ${!hidden&&m.md&&typeof mdMsgHtml==="function"?mdMsgHtml(r,m):""}
     <p class="rm-text">${hidden?`<i>선생님이 가린 말이에요.</i>`:`${m.tag?`<b class="rm-tag">${esc(m.tag)}</b> `:""}${esc(m.text)}`}</p>
     ${hidden?"":`<div class="rm-acts">
       <button type="button" class="rm-like ${on?"on":""}" data-rlike="${esc(m.id)}" aria-pressed="${on}" aria-label="공감 ${n}개" ${live?"":"disabled"}>👍${n?` ${n}`:""}</button>
@@ -240,7 +245,9 @@ function composerHtml(r){
   return `<form id="rmForm" class="rm-form" novalidate>
     ${tags.length?`<div class="rm-tags" role="group" aria-label="말머리 (누르면 문장 앞에 붙어요)">${tags.map(t=>`<button type="button" class="rm-chip" data-rtag="${esc(t)}" aria-pressed="${roomTag===t}">${esc(t)}</button>`).join("")}</div>`:""}
     ${roomReply?`<div class="rm-replying">↩ <b>${esc(rName(r,roomReply.k,am))}</b>에게 답장 <button type="button" class="link" id="rmReX">취소</button></div>`:""}
-    <div class="rm-in"><textarea id="rmText" maxlength="200" rows="2" placeholder="${ph}" aria-label="보낼 말">${esc(roomDraft)}</textarea><button type="submit" class="primary" id="rmGo">${r.type==="idea"?"붙이기":"보내기"}</button></div>
+    ${typeof mdBoxHtml==="function"?mdBoxHtml(r):""}
+    <div class="rm-in"><textarea id="rmText" maxlength="200" rows="2" placeholder="${typeof MDA!=="undefined"&&MDA?"사진·동영상 설명 (안 써도 돼요)":ph}" aria-label="보낼 말">${esc(roomDraft)}</textarea><button type="submit" class="primary" id="rmGo" ${typeof mdBusy!=="undefined"&&mdBusy?"disabled":""}>${typeof mdBusy!=="undefined"&&mdBusy?"올리는 중…":typeof MDA!=="undefined"&&MDA?"올리기":r.type==="idea"?"붙이기":"보내기"}</button></div>
+    ${typeof mdTools==="function"&&r.type!=="idea"?mdTools(r):""}
     <span class="lbl" id="rmCount">${roomDraft.length}/200 · Enter로 보내요 (줄 바꿈은 Shift+Enter)</span>
   </form>`;
 }
@@ -256,7 +263,7 @@ function bindRoomList(){
   const sync=()=>{const t=(f.querySelector("[name=rmType]:checked")||{}).value;$("#rmOpts").hidden=t!=="poll"};
   f.querySelectorAll("[name=rmType]").forEach(x=>x.onchange=sync);sync();
   $("#rmOptAdd").onclick=()=>{const L=$("#rmOptList"),n=L.querySelectorAll("input").length;if(n>=6)return;L.insertAdjacentHTML("beforeend",`<input type="text" class="rm-opt" maxlength="20" placeholder="보기 ${n+1}" aria-label="보기 ${n+1}">`);L.lastElementChild.focus();if(n+1>=6)$("#rmOptAdd").hidden=true};
-  $("#rmMakeX").onclick=()=>{roomMake=false;renderRooms()};
+  $("#rmMakeX").onclick=()=>{roomMake=false;if(typeof MDCOVER!=="undefined")MDCOVER=null;renderRooms()};
   f.addEventListener("submit",e=>{
     e.preventDefault();
     const type=(f.querySelector("[name=rmType]:checked")||{}).value||"talk",title=$("#rmTitle").value.trim().slice(0,40),q=$("#rmQ").value.trim().slice(0,150),anon=$("#rmAnon").checked;
@@ -272,7 +279,8 @@ function bindRoomList(){
     }
     const id=R("rooms/list").push().key,up={[`list/${id}`]:room};
     if(role==="student")up[`members/${id}/${KEY}`]={t:SV.TIMESTAMP};
-    act($("#rmMakeGo"),m,()=>R("rooms").update(up)).then(ok=>{if(ok){roomMake=false;openRoom=id;roomDraft="";roomTag="";roomReply=null;roomMsg="방을 열었어요. 친구들이 들어오면 이야기를 시작해요.";document.activeElement&&document.activeElement.blur();renderRooms()}});
+    const cv=typeof MDCOVER!=="undefined"&&MDCOVER;
+    act($("#rmMakeGo"),m,async()=>{await R("rooms").update(up);if(cv)try{await mdCoverSave(id,cv)}catch(e){console.warn(e)}MDCOVER=null}).then(ok=>{if(ok){roomMake=false;openRoom=id;roomDraft="";roomTag="";roomReply=null;roomMsg="방을 열었어요. 친구들이 들어오면 이야기를 시작해요.";document.activeElement&&document.activeElement.blur();renderRooms()}});
   });
 }
 function bindHours(){
@@ -288,7 +296,7 @@ function bindHours(){
 }
 function bindRoom(id){
   const m=$("#rmMsg"),r=rRoom(id);if(!r)return;
-  $("#rmBack").onclick=()=>{openRoom=null;roomReply=null;roomDraft="";roomClosing=false;renderRooms();window.scrollTo({top:0})};
+  $("#rmBack").onclick=()=>{if(typeof mdBusy!=="undefined"&&mdBusy&&!confirm("올리는 중이에요. 나가면 멈춰요. 나갈까요?"))return;if(typeof mdClear==="function"){mdClear();mdMsg=""}openRoom=null;roomReply=null;roomDraft="";roomClosing=false;renderRooms();window.scrollTo({top:0})};
   if($("#rmClose"))$("#rmClose").onclick=()=>{roomClosing=true;renderRooms();const s=$("#rmSum");if(s)s.focus()};
   if($("#rmCloseX"))$("#rmCloseX").onclick=()=>{roomClosing=false;renderRooms()};
   if($("#rmCloseF"))$("#rmCloseF").addEventListener("submit",e=>{
@@ -299,7 +307,9 @@ function bindRoom(id){
   if($("#rmReopen"))$("#rmReopen").onclick=()=>act($("#rmReopen"),m,()=>R(`rooms/list/${id}`).update({closed:null,closedBy:null,summary:null})).then(ok=>{if(ok){roomMsg="방을 다시 열었어요.";renderRooms()}});
   if($("#rmDel"))$("#rmDel").onclick=e=>{const b=e.currentTarget;
     if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="한 번 더 누르면 방과 이야기가 모두 지워져요";return}
-    act(b,m,()=>R("rooms").update({[`list/${id}`]:null,[`msgs/${id}`]:null,[`members/${id}`]:null,[`votes/${id}`]:null,[`react/${id}`]:null})).then(ok=>{if(ok){openRoom=null;roomMsg="방을 지웠어요.";renderRooms()}});
+    const up={[`rooms/list/${id}`]:null,[`rooms/msgs/${id}`]:null,[`rooms/members/${id}`]:null,[`rooms/votes/${id}`]:null,[`rooms/react/${id}`]:null};
+    if(typeof mdRoomDelPaths==="function")mdRoomDelPaths(id,up);
+    act(b,m,()=>R("").update(up)).then(ok=>{if(ok){openRoom=null;roomMsg="방을 지웠어요.";renderRooms()}});
   };
   document.querySelectorAll("[data-isort]").forEach(b=>b.onclick=()=>{ideaSort=b.dataset.isort;renderRooms()});
   bindPanel(id);bindMsgs(id);
@@ -311,6 +321,16 @@ function bindRoom(id){
   if($("#rmReX"))$("#rmReX").onclick=()=>{roomReply=null;renderRooms();const t=$("#rmText");if(t)t.focus()};
   f.addEventListener("submit",e=>{
     e.preventDefault();const text=ta.value.trim().slice(0,200),cur=rRoom(id);
+    if(cur&&typeof MDA!=="undefined"&&MDA){
+      if(role==="student"&&!roomHours().open)return m.textContent=roomHours().why;
+      const side=(rMembers(id)[KEY]||{}).side;
+      mdSend(id,(mid,kind)=>{
+        const msg={k:rmK(),text:text||(kind==="vid"?"🎬 동영상":"📷 사진"),t:SV.TIMESTAMP,md:mid,mk:kind,...(roomTag?{tag:roomTag}:{}),...(roomReply?{re:roomReply.id,toK:roomReply.k}:{}),...(cur.type==="vote"&&side?{side}:{})};
+        const up={[`msgs/${id}/${mid}`]:msg};if(role==="student"&&!rMembers(id)[KEY])up[`members/${id}/${KEY}`]={t:SV.TIMESTAMP};
+        return R("rooms").update(up);
+      }).then(ok=>{if(!ok)return;roomLastSend=Date.now();roomDraft="";roomTag="";roomReply=null;roomMsg="";renderRooms();const N=$("#rmList");if(N)N.scrollTop=N.scrollHeight});
+      return;
+    }
     if(!text||!cur)return;
     if(role==="student"&&Date.now()-roomLastSend<5000)return m.textContent="조금 천천히! 5초 뒤에 다시 보낼 수 있어요.";
     const side=(rMembers(id)[KEY]||{}).side,mid=R(`rooms/msgs/${id}`).push().key;
@@ -352,7 +372,8 @@ function bindMsgs(id){
     act(null,m,()=>R(`rooms/msgs/${id}/${mid}/hid`).set(x&&x.hid?null:true)).then(ok=>{if(ok)renderRooms()})});
   document.querySelectorAll("[data-rdel]").forEach(b=>b.onclick=()=>{
     if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="한 번 더 누르면 지워요";return}
-    const mid=b.dataset.rdel;act(b,m,()=>R("rooms").update({[`msgs/${id}/${mid}`]:null,[`react/${id}/${mid}`]:null})).then(ok=>{if(ok)renderRooms()});
+    const mid=b.dataset.rdel,x=rMsgs(id).find(y=>y.id===mid);
+    act(b,m,()=>x&&x.md&&typeof mdDelPaths==="function"?R("").update(mdDelPaths(id,x.md)):R("rooms").update({[`msgs/${id}/${mid}`]:null,[`react/${id}/${mid}`]:null})).then(ok=>{if(ok)renderRooms()});
   });
   document.querySelectorAll("[data-rmute]").forEach(b=>b.onclick=()=>{const k=b.dataset.rmute,on=rMuted(k),nm=(STUDENTS[k]||{}).name||k;
     act(null,m,()=>R(`rooms/mute/${k}`).set(on?null:true)).then(ok=>{if(ok){roomMsg=on?`${nm}의 말하기 멈춤을 풀었어요.`:`${nm}의 말하기를 멈췄어요. 모든 토의방에서 읽기만 할 수 있어요.`;renderRooms()}})});
@@ -360,6 +381,7 @@ function bindMsgs(id){
 
 /* ---------- 알림 (app.js notiList에서 불러요) ---------- */
 function roomNoti(add){
+  if(role==="teacher"&&typeof mdNoti==="function")mdNoti(add);
   rList().forEach(r=>{
     const ms=rMsgs(r.id),am=r.anon?anonMap(r):null,me=rmK(),title=snip(r.title),go={tab:"rooms",room:r.id};
     ms.forEach(m=>{if(m.toK===me&&m.k!==me&&!m.hid&&!m.sys)add(m.t,"↩️",`토의방 '${title}'에서 ${rName(r,m.k,am)}님이 내 말에 답장했어요: '${snip(m.text)}'`,go)});
