@@ -12,7 +12,7 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 벌점, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261119d";
+const RUN_V="20261119e";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
 const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2"};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
@@ -112,6 +112,7 @@ function runLoad(){
 /* ---------- 학생: 달리기 탭 ---------- */
 function renderRun(){
   const v=$("#view-run");if(!v)return;
+  if(role==="teacher"){v.innerHTML=runTeacherHtml();runTeacherBind();return}
   if(window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){RunGame.refresh();return}
   v.innerHTML=`<article class="card run-card">
     <div class="t-head"><h2>달리기</h2><span class="rstate on">🎫 오늘 남은 판 ${runLeft()} / ${runCfg().max}</span></div>
@@ -127,7 +128,7 @@ function runRaceLive(){
   const sig=JSON.stringify((RACE&&RACE.state)||{});
   const changed=sig!==runStateSig;runStateSig=sig;
   if(role==="student"){if(changed&&window.RunGame&&RunGame.mounted)RunGame.refresh();const b=$("#view-run .rstate");if(b)b.textContent=`🎫 오늘 남은 판 ${runLeft()} / ${runCfg().max}`}
-  if(role==="teacher"&&current==="teacher"){if(changed)rerender();else runTeacherLive()}
+  if(role==="teacher"&&current==="run"){if(changed)rerender();else runTeacherLive()}
 }
 
 /* ---------- 선생님: 설정 + 대결 진행 ---------- */
@@ -192,19 +193,19 @@ function runTeacherBind(){
     const v={runLock:$("#runLockIn").checked,runFrom:$("#runFromIn").value||"09:00",runTo:$("#runToIn").value||"12:10",
       runMax:+$("#runMaxIn").value,runQuizT:+$("#runQuizTIn").value,runPerfT:+$("#runPerfTIn").value,runCoin:runNum($("#runCoinIn").value),runCoinMax:runNum($("#runCoinMaxIn").value),
       runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
-    act($("#runSave"),m,()=>R("config").update(v)).then(ok=>{if(ok){say("달리기 설정을 저장했어요.");renderTeacher()}})};
+    act($("#runSave"),m,()=>R("config").update(v)).then(ok=>{if(ok){say("달리기 설정을 저장했어요.");renderRun()}})};
   const b=id=>$("#"+id);
   if(b("runTabTg"))b("runTabTg").onclick=()=>{const on=!runCfg().open;
     if(!on&&runRaceState()&&runRaceState().st!=="off"&&!confirm("대결방이 열려 있어요. 달리기 탭을 숨기면 학생들이 게임 화면에서 나가요. 숨길까요?"))return;
-    act(b("runTabTg"),m,()=>R("config").update({runOpen:on})).then(ok=>{if(ok){say(on?"학생 메뉴에 달리기 탭이 보여요.":"달리기 탭을 숨겼어요.");renderTeacher()}})};
+    act(b("runTabTg"),m,()=>R("config").update({runOpen:on})).then(ok=>{if(ok){say(on?"학생 메뉴에 달리기 탭이 보여요.":"달리기 탭을 숨겼어요.");renderRun()}})};
   if(b("runOpenRace"))b("runOpenRace").onclick=()=>act(b("runOpenRace"),m,async()=>{
     if(!runCfg().open)await R("config").update({runOpen:true});
     const rid=R("race/state").push().key;await R("race").set({state:{rid,st:"lobby",seed:(Math.random()*1e9)|0,t:SV.TIMESTAMP}});
-  }).then(ok=>{if(ok){say("대결을 열었어요. 학생들이 '달리기 → 친구들과 대결'로 들어오면 '출발!'을 눌러 주세요.");renderTeacher()}});
+  }).then(ok=>{if(ok){say("대결을 열었어요. 학생들이 '달리기 → 친구들과 대결'로 들어오면 '출발!'을 눌러 주세요.");renderRun()}});
   if(b("runGo"))b("runGo").onclick=()=>act(b("runGo"),m,()=>R("race/state").update({st:"run",at:runNow()+4500}))
-    .then(ok=>{if(ok){say("출발! 3·2·1 뒤에 다 같이 달려요.");renderTeacher()}});
+    .then(ok=>{if(ok){say("출발! 3·2·1 뒤에 다 같이 달려요.");renderRun()}});
   if(b("runClose"))b("runClose").onclick=()=>{if(!confirm("대결을 닫을까요? 들어와 있던 학생들은 첫 화면으로 돌아가요."))return;
-    act(b("runClose"),m,()=>R("race").set({state:{rid:"",st:"off"}})).then(ok=>{if(ok){say("대결을 닫았어요.");renderTeacher()}})};
+    act(b("runClose"),m,()=>R("race").set({state:{rid:"",st:"off"}})).then(ok=>{if(ok){say("대결을 닫았어요.");renderRun()}})};
   if(b("runFinish"))b("runFinish").onclick=()=>{
     const s=runRaceState();if(!s)return;const fin=runRanking(s.rid),c=runCfg(),run=runPlayers(s.rid).filter(p=>!p.done).length;
     if(!confirm(`${run?`아직 ${run}명이 달리는 중이에요. `:""}대결을 마치고 완주한 학생 중 1~5등에게 보상을 줄까요?`))return;
@@ -215,6 +216,6 @@ function runTeacherBind(){
         const r=await R("students/"+p.k).transaction(cur=>cur?{...cur,wallet:r2((+cur.wallet||0)+coin)}:cur);
         if(r&&r.committed)await R("logs/"+p.k).push({t:SV.TIMESTAMP,text:`달리기 대결 ${i+1}등 (${p.rec.toFixed(1)}초)`,amount:coin})}
       await R("race/state/st").set("end");
-    }).then(ok=>{if(ok){say(`대결을 마쳤어요. 1~${Math.min(5,fin.length)}등에게 보상을 넣었어요.`);renderTeacher()}});
+    }).then(ok=>{if(ok){say(`대결을 마쳤어요. 1~${Math.min(5,fin.length)}등에게 보상을 넣었어요.`);renderRun()}});
   };
 }

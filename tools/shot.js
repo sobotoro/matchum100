@@ -22,7 +22,7 @@ const srv=http.createServer((q,s)=>{
   fs.mkdirSync(OUT,{recursive:true});
   const VP={phone:{width:390,height:844},tablet:{width:820,height:1180},pc:{width:1440,height:900}};
   const jobs=[];
-  const S=["quiz","run","bank","stock","shop","class","board","rooms","me"],T=["teacher","quiz","stock","class","board","rooms"];
+  const S=["quiz","run","bank","stock","shop","class","board","rooms","me"],T=["teacher","quiz","run","stock","class","board","rooms"];
   for(const vp of Object.keys(VP)){
     jobs.push({vp,as:"none",tab:"login",scheme:"light"});
     S.forEach(tab=>jobs.push({vp,as:"student",tab,scheme:"light"}));

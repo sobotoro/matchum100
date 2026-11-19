@@ -714,7 +714,7 @@ function showLogin(msg){
 /* ---------- 탭 ---------- */
 const TABS=["quiz","run","bank","stock","shop","class","board","rooms","me","teacher"];
 let current="quiz";
-function allowedTabs(){return role==="teacher"?["quiz","stock","class","board","rooms","teacher"]:["quiz",...(typeof runCfg!=="function"||runCfg().open?["run"]:[]),"bank","stock","shop","class","board","rooms","me"]}
+function allowedTabs(){return role==="teacher"?["quiz","run","stock","class","board","rooms","teacher"]:["quiz",...(typeof runCfg!=="function"||runCfg().open?["run"]:[]),"bank","stock","shop","class","board","rooms","me"]}
 function showTab(t){
   if(!role){showLogin();return}
   if(role==="student"&&!ME)return;
@@ -1360,7 +1360,7 @@ function renderTeacher(){
   const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used&&p.kind!=="lotto")pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
   pend.sort((a,b)=>a.t-b.t);
   const sel=(id,opts,v)=>`<select id="${id}">${opts.map(o=>`<option value="${esc(o[0])}" ${String(v)===String(o[0])?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`;
-  $("#view-teacher").innerHTML=`${popTeacherHtml()}${typeof runTeacherHtml==="function"?runTeacherHtml():""}<article class="card">
+  $("#view-teacher").innerHTML=`${popTeacherHtml()}<article class="card">
     <div class="t-head"><h2>선생님 설정</h2><span class="t-only">선생님 계정에만 보여요</span></div>
     <p class="t-help">'저장'을 누르면 모든 학생 화면에 바로 반영돼요.</p>
     <div class="t-sec"><h3>사이트 이름</h3>
@@ -1495,7 +1495,7 @@ function renderTeacher(){
     if(selKey){const c=$("#editCard");if(c)c.scrollIntoView({block:"nearest"})}
   });
   if(selKey&&$("#editCard"))bindEdit(selKey);
-  enhanceTeacher();fundBind();popTeacherBind();if(typeof runTeacherBind==="function")runTeacherBind();
+  enhanceTeacher();fundBind();popTeacherBind();
   $("#gGo").onclick=()=>{const k=$("#gWho").value,a=r2(+$("#gAmt").value||0),why=$("#gWhy").value.trim()||"선생님";
     if(!k||!a)return $("#gMsg").textContent="학생과 코인을 정해 주세요.";
     act($("#gGo"),$("#gMsg"),async()=>{const cur=(await R(`students/${k}/wallet`).once("value")).val()||0;
