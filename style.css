@@ -776,7 +776,9 @@ input[type=time]::-webkit-date-and-time-value,input[type=date]::-webkit-date-and
 
 /* ---------- 달리기 (run.js) ---------- */
 .run-card .t-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-#runMount{width:100%;max-width:880px;margin:10px auto 6px}
+#runMount{width:100%;max-width:min(1320px,calc((100vh - 120px)*1.6));margin:8px auto 6px}
+@supports (height:100dvh){#runMount{max-width:min(1320px,calc((100dvh - 120px)*1.6))}}
+@media (max-width:600px){#runMount{max-width:none}}
 .run-credit{margin:4px 0 0;font-size:.75rem;color:var(--muted)}
 .run-ticket{margin:8px 0 0;font-weight:700;color:#8a5a00}
 .run-ticket a{color:var(--accent)}

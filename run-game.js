@@ -119,13 +119,16 @@ function soloReady(){
   if(sb){state='menu';showBox(`<h2>🏃 혼자 연습</h2><p>${esc(sb)}</p>${host.needQuiz()?'<button type="button" class="rg-go" id="rgToQuiz">오늘의 퀴즈 풀러 가기</button>':''}
     <button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()};
     if($('rgToQuiz'))$('rgToQuiz').onclick=e=>{e.stopPropagation();host.goQuiz()};return}
-  mode='solo';state='ready';clearWorld();hearts=3;hud();
+  mode='solo';state='ready';clearWorld();hearts=3;hud();fitView();
   showBox(`<h2>🏃 혼자 연습</h2><p><span class="rg-tickets">🎫 티켓 1장을 써요 · 남은 판 ${host.ticketsLeft()}</span></p><p>누르면 점프! 공중에서 한 번 더 누르면 2단 점프!</p>
   <p class="more">퀴즈 문을 맞히면 하트 1개 회복! 멀리 갈수록 새 몬스터가 나타나요.</p>
   <p class="tip">화면을 누르거나 스페이스·Enter로 시작 · 최고 기록 ${host.best()}m</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();menu()};
 }
 let starting=false;
+// 게임 화면이 잘려 보이면 화면 안으로 스크롤해요.
+function fitView(){const g=$('rgGame');if(!g)return;const r=g.getBoundingClientRect(),vh=innerHeight;if(r.top>=0&&r.bottom<=vh)return;
+  try{g.scrollIntoView({block:r.height<=vh?'center':'start',behavior:'smooth'})}catch(_){g.scrollIntoView()}}
 async function soloStart(){
   if(starting)return;if(host.soloBlock()){menu();return}
   starting=true;let ok=false;try{ok=await host.useTicket()}catch(e){ok=false}starting=false;
@@ -273,7 +276,7 @@ function raceWatch(){
   const rs=host.race();
   if(state==='lobby'){
     if(!rs||rs.rid!==rid||rs.st==='off'){toast('선생님이 대결을 닫았어요');menu();return}
-    if(rs.st==='run'&&rs.at){startLocal=rs.at;hideBox();state='count';$('rgCount').classList.remove('rg-hidden')}
+    if(rs.st==='run'&&rs.at){startLocal=rs.at;hideBox();state='count';$('rgCount').classList.remove('rg-hidden');fitView()}
     else{const n=host.racePlayers(rid).length;if(n!==lobbyN){lobbyN=n;lobbyBox()}}
   }
   if((state==='race'||state==='result'||state==='count')&&(!rs||rs.rid!==rid)){toast('선생님이 대결을 닫았어요');menu()}
