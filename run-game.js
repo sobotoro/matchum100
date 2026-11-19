@@ -7,7 +7,9 @@
    ========================================================= */
 (function(){
 "use strict";
-const W=240,H=150,GY=126,HX=48,PXM=12,FIN_M=500,FIN=FIN_M*PXM;
+// 화면 폭(게임 픽셀): 혼자 연습은 화면이 넓을수록 앞이 더 멀리 보이고, 대결은 모두 같은 폭이라 공평해요.
+let W=240;const RACE_W=320,VIEW_SCALE=3.6;
+const H=150,GY=126,HX=48,PXM=12,FIN_M=500,FIN=FIN_M*PXM;
 let P,FX,host,root,cv,ctx,atlas=null,AT=null,fB,fF,LB,LF,raf=0,mounted=false;
 const $=id=>root&&root.querySelector('#'+id);
 
@@ -87,7 +89,11 @@ function rnd(n){return (Math.random()*n)|0}
 function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let x=Math.imul(seed^seed>>>15,1|seed);x=x+Math.imul(x^x>>>7,61|x)^x;return((x^x>>>14)>>>0)/4294967296}}
 function withSeed(seed,fn){const R0=Math.random;Math.random=rng(seed);try{return fn()}finally{Math.random=R0}}
 
-function clearWorld(){hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
+function soloW(){const pe=root&&root.parentElement,cw=Math.min(1320,(pe&&pe.clientWidth)||(root&&root.clientWidth)||880);return Math.max(240,Math.min(400,Math.round(cw/VIEW_SCALE/4)*4))}
+function setView(w){if(w===W&&fB)return;W=w;cv.width=W;cv.height=H;ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
+  fB=P.createFrame(W,H);fF=P.createFrame(W,H);LB=mkLayer();LF=mkLayer();$('rgGame').style.aspectRatio=W+'/'+H;root.style.setProperty('--rg-ar',(W/H).toFixed(3))}
+function mkLayer(){const c=document.createElement('canvas');c.width=W;c.height=H;return{c,x:c.getContext('2d'),d:new ImageData(W,H)}}
+function clearWorld(){setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
   obs=[];items=[];fxs=[];camY=0;inv=0;shake=0;coins=0;dist=0;t=0;met.clear();toastT=0;$('rgToast').classList.remove('show');
   gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0}
 function hud(){
@@ -310,20 +316,20 @@ function showResult(){
 let resT=0;
 
 // ── 배경 ──
-const clouds=[[20,18,1],[110,12,0],[190,24,1]];
+const clouds=[[20,18,1],[110,12,0],[190,24,1],[150,30,0]];
 function drawBg(){
   const g=ctx.createLinearGradient(0,0,0,GY);g.addColorStop(0,'#9fd3ff');g.addColorStop(1,'#e6f6ff');ctx.fillStyle=g;ctx.fillRect(0,0,W,GY);
   // 구름
-  ctx.fillStyle='#ffffff';clouds.forEach(c=>{const x=((c[0]-scroll*0.08)%(W+60)+W+60)%(W+60)-40;const s=c[2]?1:0.8;
+  ctx.fillStyle='#ffffff';clouds.forEach((c,i)=>{if(i>=3&&W<300)return;const cx=c[0]*W/240,x=((cx-scroll*0.08)%(W+60)+W+60)%(W+60)-40;const s=c[2]?1:0.8;
     ctx.fillRect(x,c[1],26*s,6);ctx.fillRect(x+5,c[1]-4,14*s,5);ctx.fillRect(x+3,c[1]+6,20*s,2)});
   // 먼 학교 건물
   const bx=((-scroll*0.2)%320+320)%320-80;
-  for(const ox of [bx,bx+320]){ctx.fillStyle='#d9cdb8';ctx.fillRect(ox,GY-60,96,60);ctx.fillStyle='#c9b99f';ctx.fillRect(ox,GY-60,96,4);
+  for(let ox=bx;ox<W;ox+=320){ctx.fillStyle='#d9cdb8';ctx.fillRect(ox,GY-60,96,60);ctx.fillStyle='#c9b99f';ctx.fillRect(ox,GY-60,96,4);
     ctx.fillStyle='#9fc4e0';for(let r=0;r<3;r++)for(let cI=0;cI<7;cI++)ctx.fillRect(ox+6+cI*13,GY-52+r*14,8,8);
     ctx.fillStyle='#b9472f';ctx.fillRect(ox+40,GY-72,16,12);ctx.fillStyle='#fff';ctx.fillRect(ox+44,GY-69,8,6);ctx.fillStyle='#333';ctx.fillRect(ox+47,GY-68,1,3);ctx.fillRect(ox+47,GY-66,3,1)}
   // 나무
   const tx=((-scroll*0.5)%120+120)%120-40;
-  for(let k=0;k<4;k++){const x=tx+k*120;ctx.fillStyle='#7b5a3a';ctx.fillRect(x+9,GY-20,4,20);ctx.fillStyle='#4fa04a';ctx.fillRect(x,GY-40,22,22);ctx.fillRect(x+3,GY-46,16,6);ctx.fillStyle='#62b85a';ctx.fillRect(x+3,GY-38,8,6)}
+  for(let k=0;tx+k*120<W;k++){const x=tx+k*120;ctx.fillStyle='#7b5a3a';ctx.fillRect(x+9,GY-20,4,20);ctx.fillStyle='#4fa04a';ctx.fillRect(x,GY-40,22,22);ctx.fillRect(x+3,GY-46,16,6);ctx.fillStyle='#62b85a';ctx.fillRect(x+3,GY-38,8,6)}
   // 땅
   ctx.fillStyle='#5cae45';ctx.fillRect(0,GY,W,4);ctx.fillStyle='#4a9a38';ctx.fillRect(0,GY+4,W,1);
   ctx.fillStyle='#caa070';ctx.fillRect(0,GY+5,W,H-GY-5);ctx.fillStyle='#b68b5c';
@@ -475,20 +481,21 @@ function mount(el,h){
   P=window.PFX;FX=P.fx;host=h;root=el;
   if(!document.getElementById('rgStyle')){const st=document.createElement('style');st.id='rgStyle';st.textContent=CSS;document.head.appendChild(st)}
   el.innerHTML=HTML;cv=$('rgC');ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
-  fB=P.createFrame(W,H);fF=P.createFrame(W,H);HF=P.createFrame(14,44);
-  const mk=()=>{const c=document.createElement('canvas');c.width=W;c.height=H;return{c,x:c.getContext('2d'),d:new ImageData(W,H)}};LB=mk();LF=mk();
+  fB=null;HF=P.createFrame(14,44);
   AT=window.RUN_ATLAS;const im=new Image();im.onload=()=>{atlas=im};im.src=AT.src;
   const gm=$('rgGame');
   gm.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;e.preventDefault();gm.focus({preventScroll:true});press()});
   window.addEventListener('pointerup',release);window.addEventListener('pointercancel',release);
-  window.addEventListener('keydown',onKey);window.addEventListener('keyup',onKeyUp);
+  window.addEventListener('keydown',onKey);window.addEventListener('keyup',onKeyUp);window.addEventListener('resize',onResize);
   mounted=true;menu();last=0;raf=requestAnimationFrame(loop);
 }
 function unmount(){
   mounted=false;cancelAnimationFrame(raf);
   window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',release);
-  window.removeEventListener('keydown',onKey);window.removeEventListener('keyup',onKeyUp);
+  window.removeEventListener('keydown',onKey);window.removeEventListener('keyup',onKeyUp);window.removeEventListener('resize',onResize);
 }
+// 창 크기가 바뀌면 게임 중이 아닐 때만 혼자 연습 화면 폭을 다시 맞춰요.
+let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&mode==='solo'&&(state==='menu'||state==='ready'))setView(soloW())},200)}
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
