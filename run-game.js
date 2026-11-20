@@ -175,8 +175,8 @@ function onKeyUp(e){if(!visible())return;const c=e.code||e.key;if(JUMP_KEYS.incl
 // ── 몬스터 ──
 const MON={
   slime:{name:'슬라임',at:0,tip:'뛰어넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:3,seed:rnd(99)}),by:GY})},
-  bat:{name:'박쥐',at:0,tip:'이리저리 날아다녀요. 박쥐 밑에서는 뛰지 마요',make:()=>({fx:P.createFx(FX.bat,{x:0,y:0,seed:rnd(99)}),by:GY-90+rnd(6),r:rng((Math.random()*1e9)|0),
-    move:batMove})},
+  bat:{name:'박쥐',at:0,tip:'이리저리 날다가 갑자기 낮게 내려와요. 높으면 그냥 달리고, 낮으면 뛰어넘어요',make:()=>{const sd=rnd(99);return{fx:P.createFx(FX.bat,{x:0,y:0,seed:sd}),ct:batTable(sd),by:GY-90+rnd(6),r:rng((Math.random()*1e9)|0),
+    move:batMove}}},
   frog:{name:'개구리',at:80,tip:'폴짝대며 다가와요',make:()=>({fx:P.createFx(FX.frog,{x:0,y:0,seed:rnd(99)}),by:GY,vx:38})},
   snake:{name:'뱀',at:160,tip:'길어요! 길게 눌러 멀리 뛰어요',make:()=>({fx:P.createFx(FX.snake,{x:0,y:0,seed:rnd(99)}),by:GY,vx:20})},
   bouncy:{name:'통통 슬라임',at:240,tip:'높이 튀어요. 내려왔을 때 넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:26,seed:rnd(99),palette:['#1a0a14','#4a1638','#8a2a6a','#c24a9a','#f07ac8','#ffb8e8','#fff0fa']}),by:GY})},
@@ -195,17 +195,36 @@ const MON={
 };
 
 // 박쥐: 0.5~1.1초마다 위·아래·앞·뒤·대각선 중 한 방향을 골라 날아요.
-// 높이는 GY-108~GY-82 사이만 다녀요 → 가만히 서 있으면 밑으로 지나가고, 뛰면 부딪혀요.
-// 방향은 박쥐마다 정해진 씨앗으로 골라서, 대결에서는 모두 같은 움직임이에요.
-const BAT_DIR=[[0,-1],[0,1],[1,0],[-1,0],[1,-1],[1,1],[-1,-1],[-1,1]],BAT_TOP=GY-108,BAT_LOW=GY-82;
+// 높이 나는 상태(서 있으면 머리 위로 지나가요)와 낮게 나는 상태(서 있으면 부딪혀요 → 뛰어넘어요)를 불규칙하게 오가요.
+// 높이를 바꾸는 건 캐릭터와 충분히 떨어져 있을 때만이라(HX+230보다 멀 때), 가까이 와서 갑자기 바뀌지는 않아요.
+// 방향과 높이는 박쥐마다 정해진 씨앗으로 골라서, 대결에서는 모두 같은 움직임이에요.
+const BAT_DIR=[[0,-1],[0,1],[1,0],[-1,0],[1,-1],[1,1],[-1,-1],[-1,1]];
+const BAT_BAND={hi:[GY-106,GY-84],lo:[GY-22,GY-18]},BAT_SWITCH=HX+230,BAT_DIVE=170;
 function batMove(o,dt){
-  if(!(o.nt>0)){const d=BAT_DIR[(o.r()*BAT_DIR.length)|0],sp=26+o.r()*22;o.dvx=d[0]*sp;o.dvy=d[1]*sp*0.8;o.nt=0.5+o.r()*0.6;
-    if(o.calm)o.dvx=0}
+  if(!o.band){o.band=!o.calm&&o.r()<0.35?'lo':'hi'}
+  const [top,low]=BAT_BAND[o.band];
+  if(!(o.nt>0)){
+    const d=BAT_DIR[(o.r()*BAT_DIR.length)|0],sp=26+o.r()*22;o.dvx=d[0]*sp;o.dvy=d[1]*sp*0.8;o.nt=0.5+o.r()*0.6;
+    if(o.calm)o.dvx=0;
+    else if(o.x>BAT_SWITCH&&o.r()<0.4)o.band=o.band==='hi'?'lo':'hi';   // 불규칙하게 내려오거나 올라가요
+  }
   o.nt-=dt;
-  if(o.y<=BAT_TOP&&o.dvy<0||o.y>=BAT_LOW&&o.dvy>0)o.dvy=-o.dvy;   // 위아래 끝에서는 튕겨요
-  if(o.x>W+10&&o.dvx<0)o.dvx=-o.dvx;                             // 화면 오른쪽 밖으로 도망가지 않아요
-  o.vx=o.dvx;o.y=Math.max(BAT_TOP,Math.min(BAT_LOW,o.y+o.dvy*dt));
+  const [t2,l2]=BAT_BAND[o.band];
+  if(o.y<t2-1||o.y>l2+1){o.y+=Math.sign((t2+l2)/2-o.y)*Math.min(Math.abs((t2+l2)/2-o.y),BAT_DIVE*dt)}   // 빠르게 내려가거나 올라가요
+  else{if(o.y<=t2&&o.dvy<0||o.y>=l2&&o.dvy>0)o.dvy=-o.dvy;o.y=Math.max(t2,Math.min(l2,o.y+o.dvy*dt))}
+  if(o.x>W+10&&o.dvx<0)o.dvx=-o.dvx;
+  // 낮게 날 때는 뒤로 물러나지 않아요 (머리 위에 오래 머물면 뛰어넘을 수 없으니까요)
+  o.vx=o.band==='lo'?Math.max(12,o.dvx):o.dvx;
 }
+// 박쥐 그림은 자기 칸 안에서 8자로 맴돌아요(가로 ±22, 세로 ±15). 그 맴돌기를 빼서, 박쥐 몸이 게임이 정한 길로만 움직이게 해요.
+const BATC={};
+function batTable(seed){if(BATC[seed])return BATC[seed];const w=128,h=112,f=P.createFrame(w,h),g=P.createFx(FX.bat,{x:64,y:56,seed}),out=[];
+  for(let i=0;i<48;i++){P.clearFrame(f);g.draw(f,'back');g.draw(f,'front');let sx=0,sy=0,n=0;const C=f.color;
+    for(let k=0;k<C.length;k++)if((C[k]>>>24)>=250){sx+=k%w;sy+=(k/w)|0;n++}out.push(n?[sx/n-64,sy/n-56]:[0,0]);g.update(2.4/48)}
+  return BATC[seed]=out}
+function monPos(o){let x=o.x,y=o.y;
+  if(o.ct){const t=((o.fx.t%2.4)+2.4)%2.4,c=o.ct[Math.floor(t/2.4*48)%48];x-=c[0];y-=c[1]}
+  o.fx.options.x=Math.round(x);o.fx.options.y=Math.round(y)}
 function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;obs.push(o);
   if(!met.has(type)&&m.at>0){met.add(type);toast(`${Math.floor(dist)}m · 새 몬스터 <b>${m.name}</b>! ${m.tip}`)}else met.add(type);return o}
 const VX={bat:48,frog:38,snake:20,bird:40,ghost:90,wisp:70,butterfly:10,iceslime:62,eyeball:130,skull:75};
@@ -224,7 +243,7 @@ function spawnObs(){const g=pickGroup(dist,Math.random);g.forEach(([k,dx])=>{con
 let HF;
 function pixHit(o,hx0,hy0){
   if(Math.abs(o.x-HX)>90)return false;HF.ox=hx0;HF.oy=Math.round(hy0);P.clearFrame(HF);
-  o.fx.options.x=Math.round(o.x);o.fx.options.y=Math.round(o.y);o.fx.draw(HF,'back');o.fx.draw(HF,'front');
+  monPos(o);o.fx.draw(HF,'back');o.fx.draw(HF,'front');
   let n=0;for(const c of HF.color)if((c>>>24)>=250&&++n>=7)return true;return false;
 }
 function coinGroup(x0,R){const n=3+((R()*3)|0),arc=R()<0.5,out=[];
@@ -606,7 +625,7 @@ function render(dt){
   ctx.save();ctx.translate(sx,sy+Math.round(camY));drawBg();drawLines();drawGates();
   P.clearFrame(fB);P.clearFrame(fF);
   items.forEach(c=>{c.fx.options.x=Math.round(c.x);c.fx.options.y=Math.round(c.y);c.fx.draw(fF,'front')});
-  obs.forEach(o=>{o.fx.options.x=Math.round(o.x);o.fx.options.y=Math.round(o.y);o.fx.draw(fB,'back');o.fx.draw(fF,'front')});
+  obs.forEach(o=>{monPos(o);o.fx.draw(fB,'back');o.fx.draw(fF,'front')});
   fxs.forEach(e=>{e.fx.draw(fB,'back');e.fx.draw(fF,'front')});
   P.composite(fB,LB.d.data,null);LB.x.putImageData(LB.d,0,0);P.composite(fF,LF.d.data,null);LF.x.putImageData(LF.d,0,0);
   ctx.drawImage(LB.c,0,0);ctx.drawImage(LF.c,0,0);
