@@ -9,7 +9,7 @@
 "use strict";
 // 화면 폭(게임 픽셀): 혼자 연습은 화면이 넓을수록 앞이 더 멀리 보이고, 대결은 모두 같은 폭이라 공평해요.
 let W=240;const RACE_W=320,VIEW_SCALE=3.6;
-const H=150,GY=126,HX=48,PXM=12,FIN_M=500,FIN=FIN_M*PXM;
+const H=150,GY=126,HX=48,PXM=12;let FIN_M=500,FIN=FIN_M*PXM;   // 대결 거리는 선생님이 정해요 (race/state/len)
 let P,FX,host,root,cv,ctx,atlas=null,AT=null,fB,fF,LB,LF,raf=0,mounted=false;
 const $=id=>root&&root.querySelector('#'+id);
 
@@ -127,7 +127,7 @@ function soloReady(){
     <button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()};
     if($('rgToQuiz'))$('rgToQuiz').onclick=e=>{e.stopPropagation();host.goQuiz()};return}
   mode='solo';state='ready';clearWorld();hearts=3;hud();fitView();
-  showBox(`<h2>🏃 혼자 연습</h2><p><span class="rg-tickets">🎫 티켓 1장을 써요 · 남은 판 ${host.ticketsLeft()}</span></p><p>누르면 점프! 공중에서 한 번 더 누르면 2단 점프!</p>
+  showBox(`<h2>🏃 혼자 연습</h2><p><span class="rg-tickets">🎫 티켓 1장을 써요 · 남은 판 ${host.ticketsLeft()}</span></p><p>누르면 점프! 공중에서 한 번 더 누르면 2단 점프! 🪙 먹은 코인만큼 진짜 코인을 받아요.</p>
   <p class="more">퀴즈 문을 맞히면 하트 1개 회복! 멀리 갈수록 새 몬스터가 나타나요.</p>
   <p class="tip">화면을 누르거나 스페이스·Enter로 시작 · 최고 기록 ${host.best()}m</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();menu()};
@@ -182,13 +182,19 @@ const MON={
     move:(o,dt)=>{const target=o.x<175?o.ty:o.by;o.cy=(o.cy??o.by)+(target-(o.cy??o.by))*Math.min(1,dt*5);o.y=o.cy+Math.sin(o.t*6)*3}}}},
   ghost:{name:'유령',at:420,tip:'오르내리다 갑자기 다가와요',make:()=>({fx:P.createFx(FX.ghost,{x:0,y:0,hover:6,seed:rnd(99)}),by:GY,vx:12,ph:Math.random()*6,
     move:(o,dt)=>{o.y=o.by-(0.5-0.5*Math.cos(o.t*1.6+o.ph))*62;const dash=(o.t%2.2)>1.6;o.vx=dash?90:12}})},
+  butterfly:{name:'나비',at:60,tip:'낮게 팔랑팔랑 날아요. 길게 눌러 높이 뛰어요',make:()=>({fx:P.createFx(FX.butterfly,{x:0,y:0,seed:rnd(99)}),by:GY-20,vx:10,ph:Math.random()*6,
+    move:(o,dt)=>{o.y=o.by+Math.sin(o.t*2.2+o.ph)*3}})},
+  iceslime:{name:'얼음 슬라임',at:130,tip:'미끄러지듯 빠르게 와요. 일찍 뛰어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:0,seed:rnd(99),palette:['#06131f','#0d3050','#1d5f8f','#3d97c8','#7ccdf0','#c4f0ff','#ffffff']}),by:GY,vx:62})},
+  eyeball:{name:'눈알 괴물',at:280,tip:'멈칫 노려보다가 갑자기 돌진해요',make:()=>({fx:P.createFx(FX.eyeball,{x:0,y:0,hover:10,seed:rnd(99)}),by:GY,vx:14,
+    move:(o,dt)=>{if(o.x<HX+175&&!o.go){o.wait=(o.wait||0)+dt;o.vx=-8;o.y=o.by+Math.sin(o.t*40)*1.2;if(o.wait>0.45)o.go=1}else if(o.go){o.vx=130;o.y=o.by}}})},
+  skull:{name:'불꽃 해골',at:470,tip:'불꽃을 달고 빠르게 날아와요. 뛰지 말고 그냥 달려요',make:()=>({fx:P.createFx(FX.skull,{x:0,y:0,hover:74,floor:false,seed:rnd(99)}),by:GY,vx:75})},
   wisp:{name:'도깨비불',at:520,tip:'높았다 낮았다, 빨랐다 느렸다 해요',make:()=>({fx:P.createFx(FX.wisp,{x:0,y:0,hover:8,seed:rnd(99)}),by:GY-4,ph:Math.random()*6,
     move:(o,dt)=>{const s=Math.sin(o.t*2.4+o.ph);o.ty=s>0?58:0;o.y+=((o.by-o.ty)-o.y)*Math.min(1,dt*7);o.vx=s>0?20:70}})},
 };
 
 function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;obs.push(o);
   if(!met.has(type)&&m.at>0){met.add(type);toast(`${Math.floor(dist)}m · 새 몬스터 <b>${m.name}</b>! ${m.tip}`)}else met.add(type);return o}
-const VX={frog:38,snake:20,bird:40,ghost:90,wisp:70};
+const VX={frog:38,snake:20,bird:40,ghost:90,wisp:70,butterfly:10,iceslime:62,eyeball:130,skull:75};
 function pickGroup(d,R){
   const pool=Object.keys(MON).filter(k=>MON[k].at<=d);
   const w=pool.map(k=>1+Math.max(0,1.5-(d-MON[k].at)/120));let r=R()*w.reduce((a,b)=>a+b,0),pick=pool[0];
@@ -251,7 +257,7 @@ function drawGates(){
 // 선생님이 연 대결(rid, seed)마다 모두 같은 코스: 같은 몬스터·코인·퀴즈 문(100·200·300·400m)과 같은 문제
 function makeCourse(seed){
   const R=rng(seed),mons=[],cns=[],gts=[];let x=540;
-  for(let k=1;k<=4;k++)gts.push({x:k*100*PXM,q:host.pickQ(R,false)});
+  for(let k=1;k<=4;k++)gts.push({x:Math.round(k*FIN/5),q:host.pickQ(R,false)});   // 퀴즈 문 4개를 고르게
   while(x<FIN-160){
     const d=x/PXM,tt=(-100+Math.sqrt(10000+3.6*x))/1.8,sp=baseSpeed(tt);
     const g=pickGroup(d,R);g.forEach(([k,dx])=>mons.push({x:x+(dx==='B'?sp*1.5:dx),type:k,sd:(R()*1e9)|0}));
@@ -267,14 +273,14 @@ let course=null,ci=0,cci=0,gci=0,meX=0,raceT=0,meDone=false,meTime=0,cnt=0,ghost
 function raceOff(){cntHide=0;$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
 function raceLobby(){
   const rs=host.race();if(!rs||rs.st!=='lobby'){menu();return}
-  mode='race';state='lobby';clearWorld();rid=rs.rid;course=makeCourse(rs.seed);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
+  mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
   $('rgTrack').classList.remove('rg-hidden');hud();
   host.raceJoin(rid).catch(()=>{toast('대결에 들어가지 못했어요. 새로 고쳐 주세요.')});
   lobbyBox();
 }
 function lobbyBox(){
   const ps=host.racePlayers(rid),c=host.cfg();
-  showBox(`<h2>👫 대결 대기실</h2><p>선생님이 "출발"을 누르면 3·2·1 다 같이 시작해요.</p><p><span class="rg-tickets">🏆 ${prizeLine(c.prize)}</span></p>
+  showBox(`<h2>👫 대결 대기실</h2><p>🏁 ${FIN_M}m 달리기 · 선생님이 "출발"을 누르면 3·2·1 다 같이 시작해요. 🪙 코인을 먹으면 잠깐 빨라져요!</p><p><span class="rg-tickets">🏆 ${prizeLine(c.prize)}</span></p>
   <div class="rg-chips" id="rgChips">${ps.map((p,i)=>`<span class="rg-chip" style="background:${p.me?'#2456e6':COLORS[i%COLORS.length]}">${esc(p.me?'나':p.n)}</span>`).join('')}</div>
   <p class="tip">${ps.length}명 들어왔어요 · 기다리는 중…</p><button type="button" class="rg-go sub" id="rgMenu">← 나가기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();host.raceLeave(rid).catch(()=>{});menu()};
@@ -359,7 +365,7 @@ function worldStep(dt,dx){
     if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
-    const cy=c.y-19;if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;if(mode==='race')hero.boost=Math.max(hero.boost,Math.min(1.2,hero.boost+0.25));fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
+    const cy=c.y-19;if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;hero.boost=Math.max(hero.boost,Math.min(1.2,hero.boost+0.25));fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
   items=items.filter(c=>c.x>-20&&!c.got);
   inv=Math.max(0,inv-dt);
   fxs.forEach(e=>{if(e.scroll)e.fx.options.x-=dx});
@@ -377,7 +383,7 @@ function update(dt){
     scT-=dt;hero.key=idleKey();$('rgCount').textContent=scT>0?Math.ceil(scT):'출발!';if(scT<=0){state='play';cntHide=0.7}
   }else if(state==='play'){
     if(cntHide>0){cntHide-=dt;if(cntHide<=0)$('rgCount').classList.add('rg-hidden')}
-    if(!asking)t+=dt;speed=baseSpeed(t);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;
+    if(!asking){t+=dt;hero.boost=Math.max(0,hero.boost-dt)}speed=baseSpeed(t)*(hero.boost>0?1.3:1);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;   // 코인을 먹으면 잠깐 빨라져요
     heroStep(dt,asking?0:speed);if(asking&&hero.ground)hero.key=idleKey();
     if(!asking){nextObs-=dx;if(nextObs<=0)spawnObs();
       nextCoin-=dt;if(nextCoin<=0){if(clearAhead(W+40))spawnCoins();else nextCoin=0.3}
@@ -420,12 +426,13 @@ function hit(o){
 async function gameOver(){
   state='over';overT=0;cntHide=0;$('rgCount').classList.add('rg-hidden');const d=Math.floor(dist);
   let res={reward:0,best:host.best(),newBest:false,today:0};
-  try{res=await host.soloEnd({dist:d,right:qRight,all:qAll})}catch(e){}
+  try{res=await host.soloEnd({dist:d,right:qRight,all:qAll,coins})}catch(e){}
   newBest=res.newBest;
   if(newBest){fx(FX.confetti,{x:60,y:GY},false);fx(FX.confetti,{x:180,y:GY,seed:5},false)}
   setTimeout(()=>{if(state!=='over')return;const c=host.cfg(),tl=host.ticketsLeft(),sb=host.soloBlock();
     showBox(`<h2>${newBest?'<span class="new">새 최고 기록!</span>':'수고했어요!'}</h2><p class="big">${d}m</p>
-    <p>퀴즈 ${qRight}/${qAll} · 보상 🪙 +${res.reward} <span style="color:#868e96;font-size:12px">${res.preview?'(학생이라면 받을 코인 · 지갑에는 안 들어가요)':`(오늘 ${res.today}/${c.coinMax})`}</span></p>
+    <p>퀴즈 ${qRight}/${qAll} · 먹은 코인 ${coins}개 → 🪙 +${res.reward} <span style="color:#868e96;font-size:12px">${res.preview?'(학생이라면 받을 코인 · 지갑에는 안 들어가요)':`(오늘 ${res.today}/${c.coinMax})`}</span></p>
+    ${res.reward<coins?`<p style="color:#868e96;font-size:12px">${res.why||''}</p>`:''}
     ${wrongs.length?`<p style="font-weight:700;margin-top:6px">📒 다시 보기</p><ul class="rg-wrongs">${wrongs.slice(0,3).map(q=>`<li>${esc(q.s).replace('___',`<b>${esc(q.ans)}</b>`)}</li>`).join('')}</ul>`:qAll?'<p>퀴즈 문을 모두 맞혔어요! 🎯</p>':''}
     <p class="tip">${sb?esc(sb):`남은 판 ${tl} · 화면을 누르거나 스페이스·Enter로 한 판 더`}</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()}},700);
 }
@@ -505,5 +512,5 @@ let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
-  _t:{answer,press,release,get asking(){return asking},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:()=>{nextObs=1e9;nextCoin=1e9},get meX(){return meX}}};
+  _t:{answer,press,release,get asking(){return asking},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX}}};
 })();

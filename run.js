@@ -12,9 +12,9 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 벌점, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261120a";
+const RUN_V="20261120b";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
-const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2"};
+const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
 
 /* 코인 숫자: 0 이상이면 얼마든지 (소수 둘째 자리까지) */
@@ -23,7 +23,7 @@ function runCfg(){
   const c={...RUN_DEF,...CFG};
   return {open:c.runOpen!==false,max:Math.max(1,+c.runMax||3),quizT:Math.max(0,+c.runQuizT||0),perfT:Math.max(0,+c.runPerfT||0),
     lockOn:c.runLock!==false,from:c.runFrom||"09:00",to:c.runTo||"12:10",coin:Math.max(0,+c.runCoin||0),coinMax:Math.max(0,+c.runCoinMax||0),
-    gateEvery:Math.max(60,+c.runGate||120),pen:Math.max(0,+c.runPen||0),
+    gateEvery:Math.max(60,+c.runGate||120),pen:Math.max(0,+c.runPen||0),len:[500,800,1000,1500,2000].includes(+c.runLen)?+c.runLen:1000,
     prize:String(c.runPrize==null?RUN_DEF.runPrize:c.runPrize).split(",").map(x=>runNum(x)).concat([0,0,0,0,0]).slice(0,5)};
 }
 const runNow=()=>Date.now()+RUN_OFF;
@@ -71,23 +71,28 @@ async function runUseTicket(){
     if((+day.used||0)>=lim){ok=false;return}ok=true;return {...day,used:(+day.used||0)+1}});
   return !!(r&&r.committed&&ok);
 }
-async function runSoloEnd({dist,right,all}){
-  const c=runCfg();let reward=0,best=0,newBest=false,todayCoin=0;
+/* 혼자 연습 보상: 먹은 게임 코인 그대로. 한 판 최대(runCoin)·하루 최대(runCoinMax)까지 */
+function runReward(coins,todaySoFar){const c=runCfg(),n=Math.max(0,Math.floor(+coins||0));
+  const left=Math.max(0,c.coinMax-(+todaySoFar||0)),r=Math.min(n,c.coin,left);
+  const why=r<n?(left<=Math.min(n,c.coin)?`오늘 받을 수 있는 코인(${c.coinMax}개)을 다 채웠어요.`:`한 판에 ${c.coin}코인까지 받아요.`):"";
+  return {r,why}}
+async function runSoloEnd({dist,right,all,coins}){
+  const c=runCfg();let reward=0,best=0,newBest=false,todayCoin=0,why="";
   const r=await R("students/"+KEY).transaction(cur=>{
     if(!cur)return cur;const run=cur.run||{},day=run.d===today()?run:{...run,d:today(),used:0,coin:0};
-    reward=dist>=30?Math.max(0,Math.min(c.coin,c.coinMax-(+day.coin||0))):0;
+    const rw=runReward(coins,day.coin);reward=rw.r;why=rw.why;
     best=Math.max(+run.best||0,dist);newBest=dist>(+run.best||0)&&dist>0;todayCoin=(+day.coin||0)+reward;
     return {...cur,wallet:r2((+cur.wallet||0)+reward),run:{...day,coin:todayCoin,best}};
   });
-  if(r&&r.committed&&reward>0)await log(`달리기 연습 ${dist}m (퀴즈 ${right}/${all})`,reward).catch(()=>{});
-  return {reward,best,newBest,today:todayCoin};
+  if(r&&r.committed&&reward>0)await log(`달리기 연습 ${dist}m · 코인 ${coins}개 먹음 (퀴즈 ${right}/${all})`,reward).catch(()=>{});
+  return {reward,best,newBest,today:todayCoin,why};
 }
 function runPlayers(rid){
   const p=(RACE&&RACE.p)||{};
   return Object.entries(p).filter(([k,v])=>v&&v.rid===rid).map(([k,v])=>({k,n:v.n||((STUDENTS[k]||{}).name)||k,x:+v.x||0,y:+v.y||126,s:!!v.s,q:!!v.q,pen:+v.pen||0,ok:+v.ok||0,done:!!v.done,tm:+v.tm||0,j:+v.j||0,me:k===KEY}))
     .sort((a,b)=>(a.j||0)-(b.j||0));
 }
-function runRaceState(){const s=RACE&&RACE.state;if(!s||!s.rid)return null;return {rid:s.rid,st:s.st||"off",seed:+s.seed||1,at:+s.at||0}}
+function runRaceState(){const s=RACE&&RACE.state;if(!s||!s.rid)return null;return {rid:s.rid,st:s.st||"off",seed:+s.seed||1,at:+s.at||0,len:+s.len||500}}
 const RUN_HOST={
   title:()=>ME&&ME.grade&&ME.cls?`${ME.grade}학년 ${ME.cls}반`:(CFG.className||"우리 반"),
   cfg:runCfg,soloBlock:runBlock,ticketsLeft:runLeft,needQuiz:()=>!runQuizDone()&&runCfg().open&&!runLocked(),
@@ -106,7 +111,7 @@ const RUN_HOST_T={...RUN_HOST,
   title:()=>{const x=Object.values(STUDENTS||{}).find(v=>v&&v.grade&&v.cls);return x?`${x.grade}학년 ${x.cls}반`:(CFG.className||"우리 반")},
   soloBlock:()=>"",ticketsLeft:()=>runCfg().max,needQuiz:()=>false,best:()=>RUN_T_BEST,
   useTicket:async()=>true,markQ:()=>{},
-  soloEnd:async({dist})=>{const c=runCfg(),reward=dist>=30?Math.max(0,Math.min(c.coin,c.coinMax)):0,newBest=dist>RUN_T_BEST&&dist>0;RUN_T_BEST=Math.max(RUN_T_BEST,dist);return {reward,best:RUN_T_BEST,newBest,today:reward,preview:true}},
+  soloEnd:async({dist,coins})=>{const rw=runReward(coins,0),reward=rw.r,why=rw.why,newBest=dist>RUN_T_BEST&&dist>0;RUN_T_BEST=Math.max(RUN_T_BEST,dist);return {reward,best:RUN_T_BEST,newBest,today:reward,why,preview:true}},
   noRace:"대결은 학생만 참여해요. 위의 '친구들과 대결' 칸에서 열고 출발시켜 주세요.",
   raceJoin:()=>Promise.reject(new Error("teacher")),raceSend:()=>Promise.resolve(),raceLeave:()=>Promise.resolve()
 };
@@ -169,7 +174,7 @@ function runLiveHtml(){
   return `<p class="t-status">${s.st==="end"?"끝난 대결":"달리는 중"} · 완주 ${fin.length} / ${ps.length}명</p>
     <table class="run-tbl"><thead><tr><th>순위</th><th>이름</th><th>기록</th><th>정답</th><th>보상</th></tr></thead><tbody>
     ${fin.map((p,i)=>`<tr><td>${medal[i]||(i+1)+"등"}</td><td>${esc(p.n)}</td><td>${p.rec.toFixed(1)}초${p.pen?` <small>(+${p.pen})</small>`:""}</td><td>${p.ok}/${N}${p.ok===N?" 🎯":""}</td><td>${c.prize[i]?"🪙"+c.prize[i]:""}</td></tr>`).join("")}
-    ${run.map(p=>`<tr class="run-going"><td>-</td><td>${esc(p.n)}</td><td>${Math.min(500,Math.round(p.x/12))}m ${p.q?"(문제 푸는 중)":""}</td><td>${p.ok}</td><td></td></tr>`).join("")}
+    ${run.map(p=>`<tr class="run-going"><td>-</td><td>${esc(p.n)}</td><td>${Math.min(s.len,Math.round(p.x/12))}m ${p.q?"(문제 푸는 중)":""}</td><td>${p.ok}</td><td></td></tr>`).join("")}
     </tbody></table>${s.st==="end"&&RACE.state.paid?`<p class="t-status">보상을 지갑에 넣었어요.</p>`:""}`;
 }
 function runTeacherLive(){const el=$("#runLive");if(el)el.innerHTML=runLiveHtml()}
@@ -202,10 +207,11 @@ function runTeacherHtml(){
       <label class="t-field">하루 최대 판수${opt("runMaxIn",c.max,[[1,"1판"],[2,"2판"],[3,"3판"],[4,"4판"],[5,"5판"]])}</label>
       <label class="t-field">퀴즈를 끝내면 티켓${opt("runQuizTIn",c.quizT,[[1,"1장"],[2,"2장"],[3,"3장"]])}</label>
       <label class="t-field">만점이면 티켓 더${opt("runPerfTIn",c.perfT,[[0,"없음"],[1,"1장"],[2,"2장"]])}</label>
-      <label class="t-field">혼자 연습 보상 (판당 코인)<input type="number" inputmode="decimal" min="0" step="any" id="runCoinIn" value="${c.coin}"></label>
+      <label class="t-field">혼자 연습 한 판 최대 코인 <small>(먹은 코인만큼 받아요)</small><input type="number" inputmode="decimal" min="0" step="any" id="runCoinIn" value="${c.coin}"></label>
       <label class="t-field">혼자 연습 하루 최대 코인<input type="number" inputmode="decimal" min="0" step="any" id="runCoinMaxIn" value="${c.coinMax}"></label>
       <label class="t-field">퀴즈 문 간격 (혼자 연습)${opt("runGateIn",c.gateEvery,[[80,"80m마다"],[120,"120m마다"],[200,"200m마다"]])}</label>
       <label class="t-field">대결 오답 벌점${opt("runPenIn",c.pen,[[0,"없음"],[2,"2초"],[3,"3초"],[5,"5초"]])}</label>
+      <label class="t-field">대결 거리${opt("runLenIn",c.len,[[500,"500m (약 1분)"],[800,"800m"],[1000,"1000m (약 1분 40초)"],[1500,"1500m"],[2000,"2000m (약 3분)"]])}</label>
       <label class="t-field run-wide">대결 1~5등 보상 (코인)<span class="run-prize">${c.prize.map((p,i)=>`<input type="number" inputmode="decimal" min="0" step="any" id="runPz${i}" value="${p}" aria-label="${i+1}등 코인">`).join("")}</span></label>
     </div>
     <div class="actions"><button type="button" class="primary" id="runSave">설정 저장</button></div>
@@ -218,7 +224,7 @@ function runTeacherBind(){
   $("#runSave").onclick=()=>{runTMsg="";
     const v={runLock:$("#runLockIn").checked,runFrom:$("#runFromIn").value||"09:00",runTo:$("#runToIn").value||"12:10",
       runMax:+$("#runMaxIn").value,runQuizT:+$("#runQuizTIn").value,runPerfT:+$("#runPerfTIn").value,runCoin:runNum($("#runCoinIn").value),runCoinMax:runNum($("#runCoinMaxIn").value),
-      runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
+      runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runLen:+$("#runLenIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
     act($("#runSave"),m,()=>R("config").update(v)).then(ok=>{if(ok){say("달리기 설정을 저장했어요.");renderRun()}})};
   const b=id=>$("#"+id);
   if(b("runTabTg"))b("runTabTg").onclick=()=>{const on=!runCfg().open;
@@ -226,7 +232,7 @@ function runTeacherBind(){
     act(b("runTabTg"),m,()=>R("config").update({runOpen:on})).then(ok=>{if(ok){say(on?"학생 메뉴에 달리기 탭이 보여요.":"달리기 탭을 숨겼어요.");renderRun()}})};
   if(b("runOpenRace"))b("runOpenRace").onclick=()=>act(b("runOpenRace"),m,async()=>{
     if(!runCfg().open)await R("config").update({runOpen:true});
-    const rid=R("race/state").push().key;await R("race").set({state:{rid,st:"lobby",seed:(Math.random()*1e9)|0,t:SV.TIMESTAMP}});
+    const rid=R("race/state").push().key;await R("race").set({state:{rid,st:"lobby",seed:(Math.random()*1e9)|0,len:runCfg().len,t:SV.TIMESTAMP}});
   }).then(ok=>{if(ok){say("대결을 열었어요. 학생들이 '달리기 → 친구들과 대결'로 들어오면 '출발!'을 눌러 주세요.");renderRun()}});
   if(b("runGo"))b("runGo").onclick=()=>act(b("runGo"),m,()=>R("race/state").update({st:"run",at:runNow()+4500}))
     .then(ok=>{if(ok){say("출발! 3·2·1 뒤에 다 같이 달려요.");renderRun()}});
