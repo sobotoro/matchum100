@@ -175,7 +175,8 @@ function onKeyUp(e){if(!visible())return;const c=e.code||e.key;if(JUMP_KEYS.incl
 // ── 몬스터 ──
 const MON={
   slime:{name:'슬라임',at:0,tip:'뛰어넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:3,seed:rnd(99)}),by:GY})},
-  bat:{name:'박쥐',at:0,tip:'높이 뛰면 부딪혀요',make:()=>({fx:P.createFx(FX.bat,{x:0,y:0,seed:rnd(99)}),by:GY-90+rnd(6)})},
+  bat:{name:'박쥐',at:0,tip:'이리저리 날아다녀요. 박쥐 밑에서는 뛰지 마요',make:()=>({fx:P.createFx(FX.bat,{x:0,y:0,seed:rnd(99)}),by:GY-90+rnd(6),r:rng((Math.random()*1e9)|0),
+    move:batMove})},
   frog:{name:'개구리',at:80,tip:'폴짝대며 다가와요',make:()=>({fx:P.createFx(FX.frog,{x:0,y:0,seed:rnd(99)}),by:GY,vx:38})},
   snake:{name:'뱀',at:160,tip:'길어요! 길게 눌러 멀리 뛰어요',make:()=>({fx:P.createFx(FX.snake,{x:0,y:0,seed:rnd(99)}),by:GY,vx:20})},
   bouncy:{name:'통통 슬라임',at:240,tip:'높이 튀어요. 내려왔을 때 넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:26,seed:rnd(99),palette:['#1a0a14','#4a1638','#8a2a6a','#c24a9a','#f07ac8','#ffb8e8','#fff0fa']}),by:GY})},
@@ -193,9 +194,21 @@ const MON={
     move:(o,dt)=>{const s=Math.sin(o.t*2.4+o.ph);o.ty=s>0?58:0;o.y+=((o.by-o.ty)-o.y)*Math.min(1,dt*7);o.vx=s>0?20:70}})},
 };
 
+// 박쥐: 0.5~1.1초마다 위·아래·앞·뒤·대각선 중 한 방향을 골라 날아요.
+// 높이는 GY-108~GY-82 사이만 다녀요 → 가만히 서 있으면 밑으로 지나가고, 뛰면 부딪혀요.
+// 방향은 박쥐마다 정해진 씨앗으로 골라서, 대결에서는 모두 같은 움직임이에요.
+const BAT_DIR=[[0,-1],[0,1],[1,0],[-1,0],[1,-1],[1,1],[-1,-1],[-1,1]],BAT_TOP=GY-108,BAT_LOW=GY-82;
+function batMove(o,dt){
+  if(!(o.nt>0)){const d=BAT_DIR[(o.r()*BAT_DIR.length)|0],sp=26+o.r()*22;o.dvx=d[0]*sp;o.dvy=d[1]*sp*0.8;o.nt=0.5+o.r()*0.6;
+    if(o.calm)o.dvx=0}
+  o.nt-=dt;
+  if(o.y<=BAT_TOP&&o.dvy<0||o.y>=BAT_LOW&&o.dvy>0)o.dvy=-o.dvy;   // 위아래 끝에서는 튕겨요
+  if(o.x>W+10&&o.dvx<0)o.dvx=-o.dvx;                             // 화면 오른쪽 밖으로 도망가지 않아요
+  o.vx=o.dvx;o.y=Math.max(BAT_TOP,Math.min(BAT_LOW,o.y+o.dvy*dt));
+}
 function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;obs.push(o);
   if(!met.has(type)&&m.at>0){met.add(type);toast(`${Math.floor(dist)}m · 새 몬스터 <b>${m.name}</b>! ${m.tip}`)}else met.add(type);return o}
-const VX={frog:38,snake:20,bird:40,ghost:90,wisp:70,butterfly:10,iceslime:62,eyeball:130,skull:75};
+const VX={bat:48,frog:38,snake:20,bird:40,ghost:90,wisp:70,butterfly:10,iceslime:62,eyeball:130,skull:75};
 function pickGroup(d,R){
   const pool=Object.keys(MON).filter(k=>MON[k].at<=d);
   const w=pool.map(k=>1+Math.max(0,1.5-(d-MON[k].at)/120));let r=R()*w.reduce((a,b)=>a+b,0),pick=pool[0];
@@ -206,7 +219,7 @@ function pickGroup(d,R){
 }
 function gapAfter(d,sp,group,R){const lvl=Math.min(1,d/700),vxMax=Math.max(0,...group.map(g=>VX[g[0]]||0));
   return Math.max(170,sp*(2.3-lvl*0.7))+R()*(170-lvl*60)+vxMax*1.2}
-function spawnObs(){const g=pickGroup(dist,Math.random);g.forEach(([k,dx])=>addMon(k,dx==='B'?speed*1.5:dx));nextObs=gapAfter(dist,speed,g,Math.random)}
+function spawnObs(){const g=pickGroup(dist,Math.random);g.forEach(([k,dx])=>{const o=addMon(k,dx==='B'?speed*1.5:dx);if(dx==='B')o.calm=1});nextObs=gapAfter(dist,speed,g,Math.random)}
 // 부딪힘 판정: 몬스터가 실제로 그려진 픽셀이 캐릭터 몸과 겹치면 부딪힌 거예요
 let HF;
 function pixHit(o,hx0,hy0){
@@ -263,7 +276,7 @@ function makeCourse(seed){
   for(let k=1;k<=4;k++)gts.push({x:Math.round(k*FIN/5),q:host.pickQ(R,false)});   // 퀴즈 문 4개를 고르게
   while(x<FIN-160){
     const d=x/PXM,tt=(-100+Math.sqrt(10000+3.6*x))/1.8,sp=baseSpeed(tt);
-    const g=pickGroup(d,R);g.forEach(([k,dx])=>mons.push({x:x+(dx==='B'?sp*1.5:dx),type:k,sd:(R()*1e9)|0}));
+    const g=pickGroup(d,R);g.forEach(([k,dx])=>mons.push({x:x+(dx==='B'?sp*1.5:dx),type:k,sd:(R()*1e9)|0,calm:dx==='B'}));
     const gap=gapAfter(d,sp,g,R);
     if(R()<0.7)coinGroup(x+gap*0.5-30,R).forEach(c=>cns.push(c));
     x+=gap;
@@ -301,7 +314,7 @@ function raceWatch(){
 }
 let lobbyN=0;
 function raceSpawn(){
-  while(ci<course.mons.length&&course.mons[ci].x-meX<=W+30-HX){const e=course.mons[ci++];withSeed(e.sd,()=>addMon(e.type,(e.x-meX)-(W+30-HX)))}
+  while(ci<course.mons.length&&course.mons[ci].x-meX<=W+30-HX){const e=course.mons[ci++];const o=withSeed(e.sd,()=>addMon(e.type,(e.x-meX)-(W+30-HX)));if(e.calm)o.calm=1}
   while(cci<course.cns.length&&course.cns[cci][0]-meX<=W+20-HX){const c=course.cns[cci++];addCoin(HX+(c[0]-meX),c[1])}
   while(gci<course.gts.length&&course.gts[gci].x-meX<=W+40-HX){const g=course.gts[gci++];gates.push({x:HX+(g.x-meX),q:g.q})}
 }
@@ -396,15 +409,17 @@ function bgAutumn(){
   for(let x=loopX(-scroll*0.15,220)-110;x<W;x+=220){ctx.fillStyle='#c0706a';for(let i=0;i<120;i++){const h=Math.round(Math.max(0,50-Math.abs(i-60)*0.85));ctx.fillRect(x+i,GY-h,1,h)}
     ctx.fillStyle='#a85d5f';for(let i=0;i<90;i++){const h=Math.round(Math.max(0,36-Math.abs(i-45)*0.8));ctx.fillRect(x+100+i,GY-h,1,h)}}
   const cs=[['#e8642c','#ff9a3c'],['#d63b2f','#f2703f'],['#f0b429','#ffd25a']];
-  for(let x=loopX(-scroll*0.5,95)-50,k=0;x<W;x+=95,k++){const [a,b]=cs[(k+Math.floor(scroll/95/2))%3|0]||cs[0];
+  const t0=Math.ceil(scroll*0.5/95);
+  for(let x=loopX(-scroll*0.5,95)-50,k=0;x<W;x+=95,k++){const [a,b]=cs[((t0+k)%3+3)%3];
     ctx.fillStyle='#6b4428';ctx.fillRect(x+10,GY-22,4,22);ctx.fillStyle=a;ctx.fillRect(x,GY-44,24,22);ctx.fillRect(x+4,GY-50,16,6);ctx.fillStyle=b;ctx.fillRect(x+4,GY-42,9,6);ctx.fillRect(x+15,GY-34,6,5)}
 }
 function bgNight(){
   ctx.fillStyle='#f4f1d0';ctx.fillRect(W-52,12,14,14);ctx.fillRect(W-55,15,20,8);ctx.fillRect(W-49,9,8,20);ctx.fillStyle='#d9d4a8';ctx.fillRect(W-48,16,3,3);ctx.fillRect(W-43,21,2,2);
-  for(let x=loopX(-scroll*0.2,280)-60,k=0;x<W;x+=280,k++){
+  // 창문 불빛은 건물마다 정해져 있어요 (움직여도 깜빡이지 않게 화면 위치가 아니라 건물·층·칸 번호로 정해요)
+  for(let x=Math.round(loopX(-scroll*0.2,280))-60;x<W;x+=280){
     [[0,46,22],[24,64,18],[44,38,26],[72,56,20],[94,30,24],[120,70,16],[138,44,22]].forEach(([dx,h,w],j)=>{
       ctx.fillStyle='#16224a';ctx.fillRect(x+dx,GY-h,w,h);ctx.fillStyle='#ffd866';
-      for(let r=GY-h+5;r<GY-6;r+=7)for(let c=x+dx+3;c<x+dx+w-3;c+=6)if(((r*7+c*3+j*11)%5)<2)ctx.fillRect(c,r,2,3)})}
+      for(let ri=0,r=GY-h+5;r<GY-6;r+=7,ri++)for(let ci=0,c=x+dx+3;c<x+dx+w-3;c+=6,ci++)if(((ri*7+ci*3+j*11)%5)<2)ctx.fillRect(c,r,2,3)})}
   for(let x=loopX(-scroll*0.5,120)-40;x<W;x+=120){ctx.fillStyle='#3b2a20';ctx.fillRect(x+9,GY-20,4,20);ctx.fillStyle='#1f4a2a';ctx.fillRect(x,GY-40,22,22);ctx.fillRect(x+3,GY-46,16,6)}
 }
 function bgSnow(){
@@ -426,7 +441,8 @@ function bgDesert(){
 function bgCandy(){
   for(let x=loopX(-scroll*0.15,200)-80;x<W;x+=200){ctx.fillStyle='#ffe0ef';ctx.fillRect(x+10,GY-38,40,38);ctx.fillStyle='#ff9ccc';ctx.fillRect(x+6,GY-46,48,10);
     ctx.fillStyle='#fff';for(let i=0;i<48;i+=8)ctx.fillRect(x+6+i,GY-38,4,4);ctx.fillStyle='#b5651d';ctx.fillRect(x+24,GY-16,12,16);ctx.fillStyle='#ff4f9a';ctx.fillRect(x+28,GY-54,4,8)}
-  for(let x=loopX(-scroll*0.5,90)-40,k=0;x<W;x+=90,k++){const cols=[['#ff5fa2','#ffd23f'],['#5fc8ff','#ff8fc3'],['#8be06b','#ffffff']][k%3];
+  const l0=Math.ceil(scroll*0.5/90);
+  for(let x=loopX(-scroll*0.5,90)-40,k=0;x<W;x+=90,k++){const cols=[['#ff5fa2','#ffd23f'],['#5fc8ff','#ff8fc3'],['#8be06b','#ffffff']][((l0+k)%3+3)%3];
     ctx.fillStyle='#ffffff';ctx.fillRect(x+11,GY-26,2,26);ctx.fillStyle=cols[0];ctx.fillRect(x+2,GY-44,20,18);ctx.fillRect(x+5,GY-47,14,24);
     ctx.fillStyle=cols[1];ctx.fillRect(x+6,GY-40,12,3);ctx.fillRect(x+9,GY-34,9,3);ctx.fillRect(x+6,GY-29,6,2)}
   for(let x=loopX(-scroll*0.5,170)+30;x<W+30;x+=170){const b=x-170;ctx.fillStyle='#ffffff';ctx.fillRect(b,GY-22,3,22);ctx.fillRect(b,GY-24,9,3);ctx.fillRect(b+7,GY-22,3,5);
