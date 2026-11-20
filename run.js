@@ -12,7 +12,7 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 벌점, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261119f";
+const RUN_V="20261120a";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
 const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2"};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
@@ -99,6 +99,18 @@ const RUN_HOST={
   raceLeave:rid=>R(`race/p/${KEY}`).remove()
 };
 
+/* 선생님 미리보기: 학생 화면 그대로, 티켓·잠금 없이 몇 번이든. 코인·기록·오답은 저장하지 않아요 */
+let RUN_T_BEST=0;
+const RUN_HOST_T={...RUN_HOST,
+  preview:"👀 선생님 미리보기 · 학생 화면과 같아요. 티켓·코인·기록은 저장되지 않아요.",
+  title:()=>{const x=Object.values(STUDENTS||{}).find(v=>v&&v.grade&&v.cls);return x?`${x.grade}학년 ${x.cls}반`:(CFG.className||"우리 반")},
+  soloBlock:()=>"",ticketsLeft:()=>runCfg().max,needQuiz:()=>false,best:()=>RUN_T_BEST,
+  useTicket:async()=>true,markQ:()=>{},
+  soloEnd:async({dist})=>{const c=runCfg(),reward=dist>=30?Math.max(0,Math.min(c.coin,c.coinMax)):0,newBest=dist>RUN_T_BEST&&dist>0;RUN_T_BEST=Math.max(RUN_T_BEST,dist);return {reward,best:RUN_T_BEST,newBest,today:reward,preview:true}},
+  noRace:"대결은 학생만 참여해요. 위의 '친구들과 대결' 칸에서 열고 출발시켜 주세요.",
+  raceJoin:()=>Promise.reject(new Error("teacher")),raceSend:()=>Promise.resolve(),raceLeave:()=>Promise.resolve()
+};
+
 /* 필요할 때만 게임 파일 불러오기 */
 function runLoad(){
   if(window.RunGame&&window.PFX)return Promise.resolve();
@@ -112,7 +124,21 @@ function runLoad(){
 /* ---------- 학생: 달리기 탭 ---------- */
 function renderRun(){
   const v=$("#view-run");if(!v)return;
-  if(role==="teacher"){v.innerHTML=runTeacherHtml();runTeacherBind();return}
+  if(role==="teacher"){
+    const w=$("#runTWrap");
+    if(w&&window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){w.innerHTML=runTeacherHtml();runTeacherBind();RunGame.refresh();return}
+    v.innerHTML=`<div id="runTWrap">${runTeacherHtml()}</div>
+    <article class="card run-card">
+      <div class="t-head"><h2>학생 화면으로 연습해 보기</h2><span class="rstate">미리보기</span></div>
+      <p class="t-help">학생이 보는 달리기 화면과 똑같아요. 선생님은 티켓·수업 시간 잠금 없이 몇 번이든 해 볼 수 있고, 코인·기록은 저장되지 않아요. 퀴즈 문은 지금 정한 오늘의 퀴즈 범위에서 나와요.</p>
+      <div id="runMount"><p class="empty">게임을 불러오는 중…</p></div>
+      <p class="run-credit">효과: pixelfx (Patch, MIT License)</p>
+    </article>`;
+    runTeacherBind();
+    runLoad().then(()=>{const m=$("#runMount");if(m&&!m.querySelector(".rg-game"))RunGame.mount(m,RUN_HOST_T)})
+      .catch(()=>{const m=$("#runMount");if(m)m.innerHTML=`<p class="empty">게임을 불러오지 못했어요. 새로 고쳐 주세요.</p>`});
+    return;
+  }
   if(window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){RunGame.refresh();return}
   v.innerHTML=`<article class="card run-card">
     <div class="t-head"><h2>달리기</h2><span class="rstate on">🎫 오늘 남은 판 ${runLeft()} / ${runCfg().max}</span></div>

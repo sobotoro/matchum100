@@ -47,6 +47,7 @@ const CSS=`.rg-game{outline:none;position:relative;border-radius:14px;overflow:h
 .rg-track .dot{position:absolute;top:4px;width:16px;height:16px;margin-left:-8px;border-radius:50%;border:2px solid #fff;font-size:9px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .rg-track .dot.rg-me{width:20px;height:20px;margin-left:-10px;top:2px;z-index:5;font-size:10px}
 .rg-tag{position:absolute;transform:translate(-50%,-100%);font-size:clamp(9px,1.6vw,13px);font-weight:700;color:#fff;padding:1px 6px;border-radius:8px;white-space:nowrap;pointer-events:none}
+.rg-prev{margin:0 0 6px;font-size:clamp(11px,1.6vw,13px);font-weight:700;color:#8a5a00;background:#fff3cd;border-radius:999px;padding:3px 10px;display:inline-block}
 .rg-count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(40px,12vw,110px);font-weight:700;color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.3);pointer-events:none}
 .rg-quiz{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:min(94%,560px);background:#fff;border-radius:14px;padding:clamp(8px,1.8vw,14px) clamp(10px,2vw,18px);box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:center;z-index:6;cursor:default;color:#1d1d1f}
 .rg-quiz .qk{font-size:clamp(11px,1.8vw,13px);color:var(--accent,#2456e6);font-weight:700;margin-bottom:2px}
@@ -111,11 +112,11 @@ function menu(){
   mode='solo';state='menu';clearWorld();raceOff();hearts=3;
   const c=host.cfg(),sb=host.soloBlock(),tl=host.ticketsLeft(),rs=host.race();
   const raceOpen=rs&&(rs.st==='lobby'||rs.st==='run');
-  showBox(`<h2>달려라, ${esc(host.title())}!</h2><p><span class="rg-tickets">🎫 오늘 남은 판 ${tl} / ${c.max}</span></p>
+  showBox(`${host.preview?`<p class="rg-prev">${esc(host.preview)}</p>`:''}<h2>달려라, ${esc(host.title())}!</h2><p><span class="rg-tickets">🎫 오늘 남은 판 ${tl} / ${c.max}</span></p>
   <div class="rg-modes"><button type="button" id="rgSolo" class="${sb?'off':''}"><b>🏃 혼자 연습</b><span>${sb?esc(sb):`티켓 1장 · 하트 3개<br>내 최고 기록 ${host.best()}m`}</span></button>
   <button type="button" id="rgRace" class="${raceOpen?'':'off'}"><b>👫 친구들과 대결</b><span>${raceOpen?(rs.st==='run'?'대결이 벌써 시작했어요':'선생님이 연 대결!<br>1~5등 코인 보상'):'선생님이 대결을 열면<br>들어갈 수 있어요'}</span></button></div>`);
   $('rgSolo').onclick=e=>{e.stopPropagation();soloReady()};
-  $('rgRace').onclick=e=>{e.stopPropagation();const r=host.race();if(r&&r.st==='lobby')raceLobby();else toast(r&&r.st==='run'?'대결이 이미 시작했어요. 다음 대결을 기다려요!':'선생님이 대결을 열면 들어갈 수 있어요')};
+  $('rgRace').onclick=e=>{e.stopPropagation();if(host.noRace){toast(host.noRace);return}const r=host.race();if(r&&r.st==='lobby')raceLobby();else toast(r&&r.st==='run'?'대결이 이미 시작했어요. 다음 대결을 기다려요!':'선생님이 대결을 열면 들어갈 수 있어요')};
   hud();
 }
 
@@ -424,7 +425,7 @@ async function gameOver(){
   if(newBest){fx(FX.confetti,{x:60,y:GY},false);fx(FX.confetti,{x:180,y:GY,seed:5},false)}
   setTimeout(()=>{if(state!=='over')return;const c=host.cfg(),tl=host.ticketsLeft(),sb=host.soloBlock();
     showBox(`<h2>${newBest?'<span class="new">새 최고 기록!</span>':'수고했어요!'}</h2><p class="big">${d}m</p>
-    <p>퀴즈 ${qRight}/${qAll} · 보상 🪙 +${res.reward} <span style="color:#868e96;font-size:12px">(오늘 ${res.today}/${c.coinMax})</span></p>
+    <p>퀴즈 ${qRight}/${qAll} · 보상 🪙 +${res.reward} <span style="color:#868e96;font-size:12px">${res.preview?'(학생이라면 받을 코인 · 지갑에는 안 들어가요)':`(오늘 ${res.today}/${c.coinMax})`}</span></p>
     ${wrongs.length?`<p style="font-weight:700;margin-top:6px">📒 다시 보기</p><ul class="rg-wrongs">${wrongs.slice(0,3).map(q=>`<li>${esc(q.s).replace('___',`<b>${esc(q.ans)}</b>`)}</li>`).join('')}</ul>`:qAll?'<p>퀴즈 문을 모두 맞혔어요! 🎯</p>':''}
     <p class="tip">${sb?esc(sb):`남은 판 ${tl} · 화면을 누르거나 스페이스·Enter로 한 판 더`}</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()}},700);
 }
