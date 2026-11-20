@@ -7,12 +7,12 @@
    데이터
    config  runOpen 게임 열기, runMax 하루 최대 판, runQuizT 퀴즈 끝내면 티켓, runPerfT 만점이면 티켓 더,
            runLock 수업 시간 잠금(평일 runFrom~runTo), runCoin 판당 코인, runCoinMax 하루 최대 코인,
-           runGate 퀴즈 문 간격(m), runPen 대결 오답 벌점(초), runPrize "10,8,6,4,2" 대결 1~5등 코인
+           runGate 퀴즈 문 간격(m), runPen 대결 오답 벌점(초, 문 앞에서 멈춰요), runPrize "10,8,6,4,2" 대결 1~5등 코인
    students/학번/run  {d 날짜, used 쓴 판, coin 받은 코인, best 최고 기록(m), wr 틀린 문제 id 목록}
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
-   race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 벌점, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
+   race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261120c";
+const RUN_V="20261120d";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
 const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
@@ -89,7 +89,7 @@ async function runSoloEnd({dist,right,all,coins}){
 }
 function runPlayers(rid){
   const p=(RACE&&RACE.p)||{};
-  return Object.entries(p).filter(([k,v])=>v&&v.rid===rid).map(([k,v])=>({k,n:v.n||((STUDENTS[k]||{}).name)||k,x:+v.x||0,y:+v.y||126,s:!!v.s,q:!!v.q,pen:+v.pen||0,ok:+v.ok||0,done:!!v.done,tm:+v.tm||0,j:+v.j||0,me:k===KEY}))
+  return Object.entries(p).filter(([k,v])=>v&&v.rid===rid).map(([k,v])=>({k,n:v.n||((STUDENTS[k]||{}).name)||k,x:+v.x||0,y:+v.y||126,s:!!v.s,q:!!v.q,pen:+v.pen||0,pw:+v.pw||0,ok:+v.ok||0,done:!!v.done,tm:+v.tm||0,j:+v.j||0,me:k===KEY}))
     .sort((a,b)=>(a.j||0)-(b.j||0));
 }
 function runRaceState(){const s=RACE&&RACE.state;if(!s||!s.rid)return null;return {rid:s.rid,st:s.st||"off",seed:+s.seed||1,at:+s.at||0,len:+s.len||500}}
@@ -173,7 +173,7 @@ function runLiveHtml(){
   const fin=runRanking(s.rid),run=ps.filter(p=>!p.done).sort((a,b)=>b.x-a.x),medal=["🥇","🥈","🥉"];
   return `<p class="t-status">${s.st==="end"?"끝난 대결":"달리는 중"} · 완주 ${fin.length} / ${ps.length}명</p>
     <table class="run-tbl"><thead><tr><th>순위</th><th>이름</th><th>기록</th><th>정답</th><th>보상</th></tr></thead><tbody>
-    ${fin.map((p,i)=>`<tr><td>${medal[i]||(i+1)+"등"}</td><td>${esc(p.n)}</td><td>${p.rec.toFixed(1)}초${p.pen?` <small>(+${p.pen})</small>`:""}</td><td>${p.ok}/${N}${p.ok===N?" 🎯":""}</td><td>${c.prize[i]?"🪙"+c.prize[i]:""}</td></tr>`).join("")}
+    ${fin.map((p,i)=>`<tr><td>${medal[i]||(i+1)+"등"}</td><td>${esc(p.n)}</td><td>${p.rec.toFixed(1)}초${p.pen?` <small>(+${p.pen})</small>`:""}${p.pw?` <small>(벌점 ${p.pw}초 포함)</small>`:""}</td><td>${p.ok}/${N}${p.ok===N?" 🎯":""}</td><td>${c.prize[i]?"🪙"+c.prize[i]:""}</td></tr>`).join("")}
     ${run.map(p=>`<tr class="run-going"><td>-</td><td>${esc(p.n)}</td><td>${Math.min(s.len,Math.round(p.x/12))}m ${p.q?"(문제 푸는 중)":""}</td><td>${p.ok}</td><td></td></tr>`).join("")}
     </tbody></table>${s.st==="end"&&RACE.state.paid?`<p class="t-status">보상을 지갑에 넣었어요.</p>`:""}`;
 }
@@ -184,7 +184,7 @@ function runTeacherHtml(){
   const opt=(id,v,list)=>`<select id="${id}">${list.map(([a,b])=>`<option value="${a}" ${String(v)===String(a)?"selected":""}>${b}</option>`).join("")}</select>`;
   return `<article class="card" id="runCard">
     <div class="t-head"><h2>달리기 게임</h2>${c.open?`<span class="rstate on">달리기 탭 보임</span>`:`<span class="rstate">달리기 탭 숨김</span>`}</div>
-    <p class="t-help">학생은 오늘의 퀴즈를 끝내야 티켓을 받아 혼자 연습을 할 수 있어요. 대결은 선생님이 열 때만 들어갈 수 있고, 기록은 <b>도착 시간 + 틀린 문제마다 벌점</b>으로 매겨요.</p>
+    <p class="t-help">학생은 오늘의 퀴즈를 끝내야 티켓을 받아 혼자 연습을 할 수 있어요. 대결은 선생님이 열 때만 들어갈 수 있고, 기록은 <b>도착 시간</b>으로 매기고, 퀴즈 문을 틀리면 그 자리에서 <b>벌점 시간만큼 멈춰요</b>.</p>
     <h3 class="run-h">🎮 달리기 탭 (게임 전체)</h3>
     <div class="run-open ${c.open?"on":""}">
       <p>${c.open?"학생 메뉴에 <b>달리기</b> 탭이 보여요. 혼자 연습과 대결 모두 할 수 있어요.":"학생 메뉴에서 <b>달리기</b> 탭이 숨겨져 있어요. 학생은 게임을 아예 볼 수 없어요."}</p>
@@ -210,7 +210,7 @@ function runTeacherHtml(){
       <label class="t-field">혼자 연습 한 판 최대 코인 <small>(먹은 코인만큼 받아요)</small><input type="number" inputmode="decimal" min="0" step="any" id="runCoinIn" value="${c.coin}"></label>
       <label class="t-field">혼자 연습 하루 최대 코인<input type="number" inputmode="decimal" min="0" step="any" id="runCoinMaxIn" value="${c.coinMax}"></label>
       <label class="t-field">퀴즈 문 간격 (혼자 연습)${opt("runGateIn",c.gateEvery,[[80,"80m마다"],[120,"120m마다"],[200,"200m마다"]])}</label>
-      <label class="t-field">대결 오답 벌점${opt("runPenIn",c.pen,[[0,"없음"],[2,"2초"],[3,"3초"],[5,"5초"]])}</label>
+      <label class="t-field">대결 오답 벌점 <small>(문 앞에서 멈추는 시간)</small>${opt("runPenIn",c.pen,[[0,"없음"],[2,"2초"],[3,"3초"],[5,"5초"]])}</label>
       <label class="t-field">대결 거리${opt("runLenIn",c.len,[[500,"500m (약 1분)"],[800,"800m"],[1000,"1000m (약 1분 40초)"],[1500,"1500m"],[2000,"2000m (약 3분)"]])}</label>
       <label class="t-field run-wide">대결 1~5등 보상 (코인)<span class="run-prize">${c.prize.map((p,i)=>`<input type="number" inputmode="decimal" min="0" step="any" id="runPz${i}" value="${p}" aria-label="${i+1}등 코인">`).join("")}</span></label>
     </div>

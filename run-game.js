@@ -48,6 +48,7 @@ const CSS=`.rg-game{outline:none;position:relative;border-radius:14px;overflow:h
 .rg-track .dot.rg-me{width:20px;height:20px;margin-left:-10px;top:2px;z-index:5;font-size:10px}
 .rg-tag{position:absolute;transform:translate(-50%,-100%);font-size:clamp(9px,1.6vw,13px);font-weight:700;color:#fff;padding:1px 6px;border-radius:8px;white-space:nowrap;pointer-events:none}
 .rg-prev{margin:0 0 6px;font-size:clamp(11px,1.6vw,13px);font-weight:700;color:#8a5a00;background:#fff3cd;border-radius:999px;padding:3px 10px;display:inline-block}
+.rg-quiz .qpen{margin-top:6px;font-size:clamp(13px,2.4vw,18px);font-weight:800;color:#e03131}
 .rg-count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(40px,12vw,110px);font-weight:700;color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.3);pointer-events:none}
 .rg-quiz{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:min(94%,560px);background:#fff;border-radius:14px;padding:clamp(8px,1.8vw,14px) clamp(10px,2vw,18px);box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:center;z-index:6;cursor:default;color:#1d1d1f}
 .rg-quiz .qk{font-size:clamp(11px,1.8vw,13px);color:var(--accent,#2456e6);font-weight:700;margin-bottom:2px}
@@ -83,7 +84,7 @@ const HTML=`<div class="rg-game" id="rgGame" tabindex="0">
 // state: menu | ready | play | over (연습)  /  lobby | count | race | result (대결)
 let mode='solo',state='menu',t=0,speed=100,dist=0,coins=0,hearts=3,inv=0,shake=0,overT=0,newBest=false;
 const hero={y:GY,vy:0,ground:true,jumps:0,hold:false,f:0,ft:0,key:'idle1',hurtT:9,land:0,hop:0,stun:0,boost:0};
-let obs=[],items=[],fxs=[],nextObs=260,nextCoin=1.0,scroll=0,camY=0,gates=[],asking=null,nextGateM=100,qRight=0,qAll=0,wrongs=[],mePen=0,toastT=0,busyEnd=false;
+let obs=[],items=[],fxs=[],nextObs=260,nextCoin=1.0,scroll=0,camY=0,gates=[],asking=null,nextGateM=100,qRight=0,qAll=0,wrongs=[],mePen=0,mePw=0,toastT=0,busyEnd=false;
 const met=new Set();
 const baseSpeed=tt=>Math.min(175,100+tt*1.8);
 function rnd(n){return (Math.random()*n)|0}
@@ -96,9 +97,9 @@ function setView(w){if(w===W&&fB)return;W=w;cv.width=W;cv.height=H;ctx=cv.getCon
 function mkLayer(){const c=document.createElement('canvas');c.width=W;c.height=H;return{c,x:c.getContext('2d'),d:new ImageData(W,H)}}
 function clearWorld(){setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
   obs=[];items=[];fxs=[];camY=0;inv=0;shake=0;coins=0;dist=0;t=0;met.clear();toastT=0;$('rgToast').classList.remove('show');
-  gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0}
+  gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0;mePw=0}
 function hud(){
-  if(mode==='race'){$('rgDist').textContent='⏱ '+raceT.toFixed(1)+'초'+(mePen?` +${mePen}`:'');$('rgCoin').textContent='🪙 '+coins;
+  if(mode==='race'){$('rgDist').textContent='⏱ '+raceT.toFixed(1)+'초'+(mePw?` (벌점 ${mePw}초)`:'');$('rgCoin').textContent='🪙 '+coins;
     $('rgHearts').textContent=meDone?'완주!':'🏁 '+Math.max(0,Math.ceil(FIN_M-dist))+'m';return}
   $('rgDist').textContent=Math.floor(dist)+'m';$('rgCoin').textContent='🪙 '+coins;$('rgHearts').textContent='❤️'.repeat(Math.max(0,hearts))+'🤍'.repeat(Math.max(0,3-Math.max(0,hearts)))}
 function fx(mod,o,keep){const e={fx:P.createFx(mod,o),o,keep};fxs.push(e);return e}
@@ -236,14 +237,16 @@ function answer(i){
   if(ok){qRight++;$('rgQf').innerHTML='정답! '+(mode==='race'?'🚀 잠깐 빨라져요':hearts<3?'❤️ 하트 1개 회복':'🪙 코인 +1');
     if(mode==='race')hero.boost=1.6;else if(hearts<3)hearts++;else coins++;
     fx(FX.burst,{x:g.x,y:GY-40,light:0.9},false).scroll=1}
-  else{$('rgQf').innerHTML=`땡! 정답은 <b>${esc(q.ans)}</b>${q.e?' — '+q.e:''}`+(mode==='race'?` <b style="color:#e03131">벌점 +${host.cfg().pen}초</b>`:'');
-    if(mode==='race')mePen+=host.cfg().pen;else wrongs.push(q)}
+  else{const pen=mode==='race'?host.cfg().pen:0;
+    $('rgQf').innerHTML=`땡! 정답은 <b>${esc(q.ans)}</b>${q.e?' — '+q.e:''}`+(pen?`<div class="qpen">⏳ 벌점! <b id="rgPenT">${pen}</b>초 동안 멈춰요</div>`:'');
+    if(mode==='race'){mePw+=pen;asking.pen=pen}else wrongs.push(q)}
   if(mode==='solo')host.markQ(q,ok);
-  asking.wait=ok?0.7:1.9;hud();if(mode==='race')sendNow=true;
+  // 대결 오답: 벌점 시간만큼 문 앞에 멈춰 있어요 (시계는 계속 가요). 화면을 눌러도 풀리지 않아요.
+  asking.wait=ok?0.7:Math.max(1.9,asking.pen||0);hud();if(mode==='race')sendNow=true;
 }
 function gateStep(dt,dx){
   gates.forEach(g=>{g.x-=dx;if(!g.state&&g.x-HX<30){g.state='asked';ask(g)}});gates=gates.filter(g=>g.x>-40);
-  if(asking&&asking.res){asking.wait-=dt;if(asking.wait<=0){$('rgQuiz').classList.add('rg-hidden');asking.g.state='done';asking=null}}
+  if(asking&&asking.res){asking.wait-=dt;if(asking.pen){const e=$('rgPenT');if(e)e.textContent=Math.max(1,Math.ceil(asking.wait))}if(asking.wait<=0){$('rgQuiz').classList.add('rg-hidden');asking.g.state='done';asking=null}}
 }
 function drawGates(){
   for(const g of gates){const x=Math.round(g.x);if(x<-30||x>W+30)continue;const open=g.state==='done',lift=open?Math.min(18,(g.lift=(g.lift||0)+1.2)):0;
@@ -304,7 +307,7 @@ function raceSpawn(){
 }
 function raceSend(dt){
   sendT-=dt;if(!sendNow&&sendT>0)return;sendT=0.3;sendNow=false;
-  host.raceSend(rid,{x:Math.round(meX),y:Math.round(hero.y),s:hero.stun>0||hero.hurtT<0.6?1:0,q:asking?1:0,pen:mePen,ok:qRight,...(meDone?{done:true,tm:Math.round(meTime*100)/100}:{})}).catch(()=>{});
+  host.raceSend(rid,{x:Math.round(meX),y:Math.round(hero.y),s:hero.stun>0||hero.hurtT<0.6?1:0,q:asking?1:0,pen:mePen,pw:mePw,ok:qRight,...(meDone?{done:true,tm:Math.round(meTime*100)/100}:{})}).catch(()=>{});
 }
 function meFinish(){meDone=true;meTime=raceT;overT=0;sendNow=true;raceSend(0);
   const myRec=meTime+mePen,better=host.racePlayers(rid).filter(p=>!p.me&&p.done&&p.tm+(p.pen||0)<myRec).length;newBest=better<3;
@@ -312,14 +315,14 @@ function meFinish(){meDone=true;meTime=raceT;overT=0;sendNow=true;raceSend(0);
   hud();setTimeout(()=>{if(state==='race')showResult()},1500)}
 function showResult(){
   resultShown=true;state='result';const N=course.gts.length,c=host.cfg();
-  const ps=host.racePlayers(rid).map(p=>p.me?Object.assign({},p,{done:true,tm:meTime,pen:mePen,ok:qRight}):p);
+  const ps=host.racePlayers(rid).map(p=>p.me?Object.assign({},p,{done:true,tm:meTime,pen:mePen,pw:mePw,ok:qRight}):p);
   const fin=ps.filter(p=>p.done).map(p=>Object.assign({},p,{rec:p.tm+(p.pen||0)})).sort((a,b)=>a.rec-b.rec),run=ps.filter(p=>!p.done).sort((a,b)=>(b.x||0)-(a.x||0));
   const medal=['🥇','🥈','🥉'],myRank=fin.findIndex(r=>r.me)+1,myPrize=c.prize[myRank-1]||0;
   showBox(`<h2>${myRank}등${myPrize?` · 🪙 +${myPrize}`:''}${run.length?' <span style="font-size:13px;color:#868e96">(친구들이 들어오는 중)</span>':''}</h2>
   <table class="rg-rank"><tr style="color:#868e96"><td></td><td>이름</td><td>기록</td><td>정답</td><td>보상</td></tr>${fin.map((r,i)=>`<tr class="${r.me?'rg-me':''}"><td>${medal[i]||(i+1)+'등'}</td><td>${esc(r.me?'나':r.n)}</td>
-    <td>${r.rec.toFixed(1)}초${r.pen?` <span style="color:#e03131;font-size:11px">(+${r.pen})</span>`:''}</td><td>${r.ok||0}/${N}${(r.ok||0)===N?' 🎯':''}</td><td>${c.prize[i]?'🪙+'+c.prize[i]:''}</td></tr>`).join('')}
+    <td>${r.rec.toFixed(1)}초${r.pen?` <span style="color:#e03131;font-size:11px">(+${r.pen})</span>`:''}${r.pw?` <span style="color:#e03131;font-size:11px">(벌점 ${r.pw}초 포함)</span>`:''}</td><td>${r.ok||0}/${N}${(r.ok||0)===N?' 🎯':''}</td><td>${c.prize[i]?'🪙+'+c.prize[i]:''}</td></tr>`).join('')}
     ${run.map(r=>`<tr><td>-</td><td>${esc(r.n)}</td><td>달리는 중</td><td></td><td></td></tr>`).join('')}</table>
-  <p class="tip">기록 = 도착 시간 + 틀린 문제마다 ${c.pen}초 · 🎯 모두 맞힘 · 보상은 선생님이 대결을 마치면 지갑에 들어가요</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
+  <p class="tip">기록 = 도착 시간 (틀리면 문 앞에서 ${c.pen}초 멈춰요) · 🎯 모두 맞힘 · 보상은 선생님이 대결을 마치면 지갑에 들어가요</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();menu()};
 }
 let resT=0;
