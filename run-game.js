@@ -88,12 +88,12 @@ let obs=[],items=[],fxs=[],nextObs=260,nextCoin=1.0,scroll=0,camY=0,gates=[],ask
 const met=new Set();
 // 난이도 (혼자 연습만, 선생님 설정 runDiff). 대결은 언제나 '쉬움' 값으로 그대로예요.
 // v0 처음 속도, vMax 가장 빠른 속도, acc 빨라지는 정도(1초마다), gap 장애물 간격 배율, at 새 몬스터가 나오는 거리 배율,
-// combo/comboAt 두 마리 함께 나오기(최대 확률/시작 거리), bat 낮게 나는 박쥐 확률, wild 변칙 움직임 확률
+// bat 낮게 나는 박쥐 확률, wild 변칙 움직임 세기(0이면 예전처럼 규칙적). 몬스터는 언제나 한 마리씩, 같은 몬스터가 연달아 나오지 않아요.
 const DIFF={
   easy:{name:'쉬움',v0:100,vMax:175,acc:1.8,gap:1,at:1,combo:0.35,comboAt:200,bat:0.35,wild:0},
-  normal:{name:'보통',v0:112,vMax:200,acc:2.2,gap:0.92,at:0.7,combo:0.45,comboAt:120,bat:0.45,wild:0.45},
-  hard:{name:'어려움',v0:125,vMax:225,acc:2.6,gap:0.86,at:0.5,combo:0.55,comboAt:60,bat:0.55,wild:0.7},
-  crazy:{name:'아주 어려움',v0:135,vMax:250,acc:3,gap:0.8,at:0.35,combo:0.65,comboAt:30,bat:0.6,wild:0.9}};
+  normal:{name:'보통',v0:112,vMax:200,acc:2.2,gap:0.92,at:0.7,combo:0,comboAt:0,bat:0.6,wild:0.6},
+  hard:{name:'어려움',v0:125,vMax:225,acc:2.6,gap:0.86,at:0.5,combo:0,comboAt:0,bat:0.75,wild:0.8},
+  crazy:{name:'아주 어려움',v0:135,vMax:250,acc:3,gap:0.8,at:0.35,combo:0,comboAt:0,bat:0.85,wild:1}};
 let DF=DIFF.easy;
 function setDiff(){DF=mode==='race'?DIFF.easy:(DIFF[(host&&host.cfg().diff)]||DIFF.normal)}
 const baseSpeed=tt=>Math.min(DF.vMax,DF.v0+tt*DF.acc);
@@ -184,11 +184,11 @@ function onKeyUp(e){if(!visible())return;const c=e.code||e.key;if(JUMP_KEYS.incl
 
 // ── 몬스터 ──
 const MON={
-  slime:{name:'슬라임',at:0,tip:'뛰어넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:3,seed:rnd(99)}),by:GY})},
+  slime:{name:'슬라임',at:0,tip:'멈칫하거나 확 달려들어요. 잘 보고 뛰어넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:3,seed:rnd(99)}),by:GY})},
   bat:{name:'박쥐',at:0,tip:'이리저리 날다가 갑자기 낮게 내려와요. 높으면 그냥 달리고, 낮으면 뛰어넘어요',make:()=>{const sd=rnd(99);return{fx:P.createFx(FX.bat,{x:0,y:0,seed:sd}),ct:batTable(sd),by:GY-90+rnd(6),r:rng((Math.random()*1e9)|0),
     move:batMove}}},
   frog:{name:'개구리',at:80,tip:'폴짝대며 다가와요',make:()=>({fx:P.createFx(FX.frog,{x:0,y:0,seed:rnd(99)}),by:GY,vx:38})},
-  snake:{name:'뱀',at:160,tip:'길어요! 길게 눌러 멀리 뛰어요',make:()=>({fx:P.createFx(FX.snake,{x:0,y:0,seed:rnd(99)}),by:GY,vx:20})},
+  snake:{name:'뱀',at:160,tip:'길어요! 몸을 떨면 확 달려들어요. 길게 눌러 멀리 뛰어요',make:()=>({fx:P.createFx(FX.snake,{x:0,y:0,seed:rnd(99)}),by:GY,vx:20})},
   bouncy:{name:'통통 슬라임',at:240,tip:'높이 튀어요. 내려왔을 때 넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:26,seed:rnd(99),palette:['#1a0a14','#4a1638','#8a2a6a','#c24a9a','#f07ac8','#ffb8e8','#fff0fa']}),by:GY})},
   bird:{name:'새',at:320,tip:'날아오다 높이를 휙 바꿔요. 낮으면 뛰고, 높으면 그냥 달려요',make:()=>{const hi=Math.random()<0.5;return{fx:P.createFx(FX.bird,{x:0,y:0,seed:rnd(99)}),by:hi?GY-84:GY-30,ty:hi?GY-30:GY-84,vx:40,
     move:(o,dt)=>{const target=o.x<175?o.ty:o.by;o.cy=(o.cy??o.by)+(target-(o.cy??o.by))*Math.min(1,dt*5);o.y=o.cy+Math.sin(o.t*6)*3}}}},
@@ -199,7 +199,8 @@ const MON={
   iceslime:{name:'얼음 슬라임',at:130,tip:'미끄러지듯 빠르게 와요. 일찍 뛰어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:0,seed:rnd(99),palette:['#06131f','#0d3050','#1d5f8f','#3d97c8','#7ccdf0','#c4f0ff','#ffffff']}),by:GY,vx:62})},
   eyeball:{name:'눈알 괴물',at:280,tip:'멈칫 노려보다가 갑자기 돌진해요',make:()=>({fx:P.createFx(FX.eyeball,{x:0,y:0,hover:10,seed:rnd(99)}),by:GY,vx:14,
     move:(o,dt)=>{if(o.x<HX+175&&!o.go){o.wait=(o.wait||0)+dt;o.vx=-8;o.y=o.by+Math.sin(o.t*40)*1.2;if(o.wait>0.45)o.go=1}else if(o.go){o.vx=130;o.y=o.by}}})},
-  skull:{name:'불꽃 해골',at:470,tip:'불꽃을 달고 빠르게 날아와요. 뛰지 말고 그냥 달려요',make:()=>({fx:P.createFx(FX.skull,{x:0,y:0,hover:74,floor:false,seed:rnd(99)}),by:GY,vx:75})},
+  skull:{name:'불꽃 해골',at:470,tip:'높이 날다가 불덩이를 뱉어요! 해골 밑에서는 뛰지 말고, 불덩이는 뛰어넘어요',make:()=>({fx:P.createFx(FX.skull,{x:0,y:0,hover:74,floor:false,seed:rnd(99)}),by:GY,vx:75})},
+  fireblob:{name:'불덩이',at:1e9,tip:'해골이 뱉은 불덩이! 뛰어넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:5,seed:rnd(99),palette:['#2a0800','#6a1a04','#b83a0c','#f06a1a','#ffa63a','#ffd77a','#fff4c8']}),by:GY,vx:105})},
   wisp:{name:'도깨비불',at:520,tip:'높았다 낮았다, 빨랐다 느렸다 해요',make:()=>({fx:P.createFx(FX.wisp,{x:0,y:0,hover:8,seed:rnd(99)}),by:GY-4,ph:Math.random()*6,
     move:(o,dt)=>{const s=Math.sin(o.t*2.4+o.ph);o.ty=s>0?58:0;o.y+=((o.by-o.ty)-o.y)*Math.min(1,dt*7);o.vx=s>0?20:70}})},
 };
@@ -238,50 +239,59 @@ function monPos(o){let x=o.x,y=o.y;
 function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;obs.push(o);
   if(!met.has(type)&&m.at>0){met.add(type);toast(`${Math.floor(dist)}m · 새 몬스터 <b>${m.name}</b>! ${m.tip}`)}else met.add(type);return o}
 const VX={bat:48,frog:38,snake:20,bird:40,ghost:90,wisp:70,butterfly:10,iceslime:62,eyeball:130,skull:75};
-function pickGroup(d,R){
-  const A=k=>MON[k].at*DF.at,pool=Object.keys(MON).filter(k=>A(k)<=d);
+function pickGroup(d,R,prev){
+  const A=k=>MON[k].at*DF.at;let pool=Object.keys(MON).filter(k=>A(k)<=d);
+  if(prev&&pool.length>1)pool=pool.filter(k=>k!==prev);   // 같은 몬스터가 연달아 나오지 않아요
   const w=pool.map(k=>1+Math.max(0,1.5-(d-A(k))/120));let r=R()*w.reduce((a,b)=>a+b,0),pick=pool[0];
   for(let i=0;i<pool.length;i++){r-=w[i];if(r<=0){pick=pool[i];break}}
-  if(d>DF.comboAt&&R()<Math.min(DF.combo,(d-DF.comboAt)/800)){
-    if(DF.wild&&R()<DF.wild){   // 변칙 묶음: 간격이 '붙어서(한 번에 넘기)' 또는 '벌어져서(두 번 뛰기)' 중 하나로 정해져요
-      const c=(R()*5)|0,wide=R()<0.5,G=()=>wide?'W':30;
-      if(c===0)return[['slime',0],['slime',G()]];
-      if(c===1)return[['slime',0],['slime',30],['slime',G()]];
-      if(c===2)return[['slime',0],['frog',G()]];
-      if(c===3)return[['frog',0],['frog',G()]];
-      return[['iceslime',0],['bat','B']]}
-    const c=(R()*3)|0;
-    if(c===0)return[['slime',0],['bat','B']];if(c===1)return[['slime',0],['slime',32]];return[['frog',0],['frog',70]]}
-  return[[pick,0]];
+  return[[pick,0]];   // 언제나 한 마리씩
 }
 function gapAfter(d,sp,group,R){const lvl=Math.min(1,d/(700*DF.at)),vxMax=Math.max(0,...group.map(g=>VX[g[0]]||0));
   const g=(Math.max(170,sp*(2.3-lvl*0.7))+R()*(170-lvl*60))*DF.gap;
   return Math.max(g,170,sp*1.15)+vxMax*1.2}   // 점프 한 번(약 1.1초) 뒤 바로 다시 뛸 수 있는 간격은 꼭 남겨요
-function spawnObs(){const g=pickGroup(dist,Math.random);nextObs=spawnGroup(g,DF.wild)}
-function spawnGroup(g,wildP){let lead=null,off=0;const made=[];
-  g.forEach(([k,dx],i)=>{
-    if(dx==='W'){off+=Math.max(150,speed*1.4)+Math.random()*70;dx=off}else if(typeof dx==='number'&&i>0){off+=dx;dx=off}
-    const o=addMon(k,dx==='B'?speed*1.5:dx);if(dx==='B')o.calm=1;made.push(o);
-    if(i===0)lead=o;else if(dx!=='B'){o.follow=lead;o.vx=lead.vx||0}});
-  if(wildP&&lead&&WILD[lead.type]&&Math.random()<wildP)wildify(lead);
-  return gapAfter(dist,speed,g,Math.random)+(lead&&lead.wm?70:0)}
-// ── 변칙 움직임 (혼자 연습 '보통' 이상) ──
-// 멀리 있을 때만 움직임을 바꿔요. 캐릭터 가까이(nearX 안쪽) 오면 그때 속도 그대로 와요 → 늘 피할 수 있어요.
-// 바꾸기 직전에는 0.22초 부르르 떨어서 알려 줘요. 함께 나온 친구들은 맨 앞 몬스터와 똑같이 움직여서 간격이 그대로예요.
+let lastMon=null;
+function spawnObs(){const g=pickGroup(dist,Math.random,lastMon);lastMon=g[0][0];nextObs=spawnGroup(g,DF.wild)}
+function spawnGroup(g,wild){const o=addMon(g[0][0],0);if(wild)wildify(o,wild);
+  return gapAfter(dist,speed,g,Math.random)+(wild?70:0)}
+// ── 변칙 움직임 (혼자 연습 '보통' 이상: 모든 몬스터) ──
+// 멀리 있을 때만 움직임을 바꿔요. 캐릭터 가까이(nearX 안쪽) 오면 더 이상 바꾸지 않고, 멈추거나 뒷걸음치지도 않아요 → 늘 피할 수 있어요.
+// 땅 몬스터는 바꾸기 직전에 0.22초 부르르 떨어서 알려 줘요. k는 세기(보통 0.6 ~ 아주 어려움 1).
 const nearX=()=>HX+Math.max(150,speed*1.05);
-const WILD={slime:'ground',iceslime:'ground',bouncy:'ground',snake:'ground',frog:'leap'};
-function wildify(o){o.wm=WILD[o.type];o.bvx=o.vx||0;o.wt=0.2+Math.random()*0.4;o.r=o.r||rng((Math.random()*1e9)|0)}
+function wildify(o,k){o.wk=k;o.bvx=o.vx||0;o.wt=0.2+Math.random()*0.4;o.r=o.r||rng((Math.random()*1e9)|0);
+  const t=o.type;
+  if(t==='slime'||t==='bouncy'||t==='iceslime'||t==='snake')o.wm='ground';
+  else if(t==='frog')o.wm='leap';
+  else if(t==='butterfly')o.wm='drift';
+  else if(t==='bird'){o.wm='lane';o.move=null;o.lane=o.by;o.y=o.by}
+  else if(t==='eyeball'){o.move=null;o.wm='stare';o.trig=HX+150+o.r()*90;o.wait=0.25+o.r()*0.45;o.dash=(110+o.r()*60)*(0.7+0.3*k)}
+  else if(t==='skull'){o.wm='spit';o.spitAt=W-10-o.r()*60}
+  if(o.wm==='ground'&&(t==='slime'||t==='bouncy'))o.bvx=Math.max(o.bvx,Math.round(25*k));   // 슬라임도 가만히 있지 않아요
+}
 function wildStep(o,dt){
-  const far=o.x>nearX();
+  const far=o.x>nearX(),k=o.wk||1;
   if(o.wm==='ground'){
     if(far){o.wt-=dt;
-      if(o.wt<=0&&o.tell==null){o.tell=0.22;const k=o.r();o.nv=k<0.25?-30:k<0.5?o.bvx*0.2:k<0.75?o.bvx+70:o.bvx+(o.type==='snake'?60:120)}
-      if(o.tell!=null){o.tell-=dt;if(o.tell<=0){o.vx=o.nv;o.tell=null;o.wt=0.45+o.r()*0.6}}
-    }else{o.tell=null;if(o.vx<o.bvx)o.vx=o.bvx}   // 가까이 오면 뒷걸음질·멈춤 없이 지금 속도로 와요
+      if(o.wt<=0&&o.tell==null){o.tell=0.22;const c=o.r();
+        o.nv=c<0.22?-30:c<0.42?o.bvx*0.2:c<0.62?o.bvx+40*k:o.type==='snake'?o.bvx+150*k:o.bvx+(70+50*o.r())*k}
+      if(o.tell!=null){o.tell-=dt;if(o.tell<=0){o.vx=o.nv;o.tell=null;o.wt=0.4+o.r()*0.6}}
+    }else{o.tell=null;if(o.vx<o.bvx)o.vx=o.bvx}
+    if(o.type==='snake'&&o.tell==null&&!far)o.vx=Math.max(o.vx,o.bvx+12*Math.sin(o.t*3));
     o.y=o.by+(o.tell!=null?Math.round(Math.sin(o.t*70)):0);
   }else if(o.wm==='leap'){   // 개구리: 불규칙하게 앞으로 크게 도약
-    if(o.lp>0){o.lp-=dt;const k=1-o.lp/0.38;o.vx=o.bvx+150;o.y=o.by-Math.sin(k*Math.PI)*16;if(o.lp<=0){o.vx=o.bvx;o.y=o.by;o.wt=0.5+o.r()*0.9}}
+    if(o.lp>0){o.lp-=dt;const q=1-o.lp/0.38;o.vx=o.bvx+150*k;o.y=o.by-Math.sin(q*Math.PI)*16;if(o.lp<=0){o.vx=o.bvx;o.y=o.by;o.wt=0.4+o.r()*0.9}}
     else if(far){o.wt-=dt;if(o.wt<=0)o.lp=0.38}
+  }else if(o.wm==='drift'){   // 나비: 앞으로 왔다 뒤로 갔다 팔랑팔랑
+    if(far){o.wt-=dt;if(o.wt<=0){o.vx=-15+o.r()*70*k;o.wt=0.4+o.r()*0.5}}else if(o.vx<10)o.vx=10;
+    o.y=o.by+Math.sin(o.t*2.2)*3;
+  }else if(o.wm==='lane'){   // 새: 멀리서 높이를 몇 번이고 바꿔요 (가까이 오면 그 높이 그대로)
+    if(far){o.wt-=dt;if(o.wt<=0){o.lane=o.r()<0.5?GY-84:GY-30;o.wt=0.35+o.r()*0.6}}
+    o.cy=(o.cy??o.by)+(o.lane-(o.cy??o.by))*Math.min(1,dt*6);o.y=o.cy+Math.sin(o.t*6)*3;o.vx=o.bvx;
+  }else if(o.wm==='stare'){  // 눈알: 언제 멈추고 얼마나 빨리 돌진할지 매번 달라요
+    if(!o.go&&o.x<o.trig){o.wait-=dt;o.vx=-8;o.y=o.by+Math.sin(o.t*40)*1.2;if(o.wait<=0)o.go=1}
+    else if(o.go){o.vx=o.dash;o.y=o.by}else o.vx=14;
+  }else if(o.wm==='spit'){   // 해골: 한 번 불덩이를 뱉고 위로 날아가요
+    if(!o.spat&&o.x<o.spitAt&&o.x>nearX()+40){o.spat=1;const b=addMon('fireblob',0);b.x=o.x;b.vx=(95+40*o.r())*(0.7+0.3*k);fx(FX.burst,{x:o.x,y:GY-60,light:0.9},false).scroll=1}
+    if(o.spat){o.vx=-20;o.by-=dt*40;o.y=o.by}
   }
 }
 // 부딪힘 판정: 몬스터가 실제로 그려진 픽셀이 캐릭터 몸과 겹치면 부딪힌 거예요
@@ -336,13 +346,13 @@ function drawGates(){
 // ══ 친구들과 대결 ══
 // 선생님이 연 대결(rid, seed)마다 모두 같은 코스: 같은 몬스터·코인·퀴즈 문(100·200·300·400m)과 같은 문제
 function makeCourse(seed){
-  const R=rng(seed),mons=[],cns=[],gts=[];let x=540;
+  const R=rng(seed),mons=[],cns=[],gts=[];let x=540,course_prev=null;
   for(let k=1;k<=4;k++)gts.push({x:Math.round(k*FIN/5),q:host.pickQ(R,false)});   // 퀴즈 문 4개를 고르게
   while(x<FIN-160){
     const d=x/PXM,tt=(-100+Math.sqrt(10000+3.6*x))/1.8,sp=baseSpeed(tt);
-    const g=pickGroup(d,R);g.forEach(([k,dx])=>mons.push({x:x+(dx==='B'?sp*1.5:dx),type:k,sd:(R()*1e9)|0,calm:dx==='B'}));
+    const g=pickGroup(d,R,course_prev);course_prev=g[0][0];g.forEach(([k,dx])=>mons.push({x:x+(dx==='B'?sp*1.5:dx),type:k,sd:(R()*1e9)|0,calm:dx==='B'}));
     const gap=gapAfter(d,sp,g,R);
-    if(R()<0.7)coinGroup(x+gap*0.5-30,R).forEach(c=>cns.push(c));
+    R();   // (예전 코인 자리: 순서를 지키려고 남겨 둬요) 대결에는 코인이 없어요
     x+=gap;
   }
   const near=x=>gts.some(g=>x>g.x-170&&x<g.x+150);
@@ -360,7 +370,7 @@ function raceLobby(){
 }
 function lobbyBox(){
   const ps=host.racePlayers(rid),c=host.cfg();
-  showBox(`<h2>👫 대결 대기실</h2><p>🏁 ${FIN_M}m 달리기 · 선생님이 "출발"을 누르면 3·2·1 다 같이 시작해요. 🪙 코인을 먹으면 잠깐 빨라져요!</p><p><span class="rg-tickets">🏆 ${prizeLine(c.prize)}</span></p>
+  showBox(`<h2>👫 대결 대기실</h2><p>🏁 ${FIN_M}m 달리기 · 선생님이 "출발"을 누르면 3·2·1 다 같이 시작해요.</p><p><span class="rg-tickets">🏆 ${prizeLine(c.prize)}</span></p>
   <div class="rg-chips" id="rgChips">${ps.map((p,i)=>`<span class="rg-chip" style="background:${p.me?'#2456e6':COLORS[i%COLORS.length]}">${esc(p.me?'나':p.n)}</span>`).join('')}</div>
   <p class="tip">${ps.length}명 들어왔어요 · 기다리는 중…</p><button type="button" class="rg-go sub" id="rgMenu">← 나가기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();host.raceLeave(rid).catch(()=>{});menu()};
@@ -566,7 +576,7 @@ function worldStep(dt,dx){
     if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
-    const cy=c.y-19;if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;hero.boost=Math.max(hero.boost,Math.min(1.2,hero.boost+0.25));fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
+    const cy=c.y-19;if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
   items=items.filter(c=>c.x>-20&&!c.got);
   inv=Math.max(0,inv-dt);
   fxs.forEach(e=>{if(e.scroll)e.fx.options.x-=dx});
@@ -584,11 +594,11 @@ function update(dt){
     scT-=dt;hero.key=idleKey();$('rgCount').textContent=scT>0?Math.ceil(scT):'출발!';if(scT<=0){state='play';cntHide=0.7}
   }else if(state==='play'){
     if(cntHide>0){cntHide-=dt;if(cntHide<=0)$('rgCount').classList.add('rg-hidden')}
-    if(!asking){t+=dt;hero.boost=Math.max(0,hero.boost-dt)}speed=baseSpeed(t)*(hero.boost>0?1.3:1);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;   // 코인을 먹으면 잠깐 빨라져요
+    if(!asking)t+=dt;speed=baseSpeed(t);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;   // 코인을 먹으면 잠깐 빨라져요
     heroStep(dt,asking?0:speed);if(asking&&hero.ground)hero.key=idleKey();
     if(!asking){nextObs-=dx;if(nextObs<=0)spawnObs();
       nextCoin-=dt;if(nextCoin<=0){if(clearAhead(W+40))spawnCoins();else nextCoin=0.3}
-      if(dist>=nextGateM&&!obs.some(o=>o.x>W-110)){gates.push({x:W+40,q:host.pickQ(Math.random,true)});nextGateM+=host.cfg().gateEvery;nextObs=Math.max(nextObs,260)}}
+      if(dist>=nextGateM&&!obs.some(o=>o.x>W-110)&&!gates.some(g=>g.state!=='done')){gates.push({x:W+40,q:host.pickQ(Math.random,true)});nextGateM=Math.max(nextGateM,dist)+host.cfg().gateEvery;nextObs=Math.max(nextObs,260)}}
     gateStep(dt,dx);worldStep(dt,dx);
     if(Math.floor(dist)%5===0)hud();
   }else if(state==='lobby'){
@@ -713,5 +723,5 @@ let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
-  _t:{answer,press,release,get asking(){return asking},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX}}};
+  _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX}}};
 })();
