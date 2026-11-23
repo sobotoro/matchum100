@@ -12,7 +12,7 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261120f";
+const RUN_V="20261123a";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
 const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
@@ -31,7 +31,12 @@ function runDay(){const r=(ME&&ME.run)||{};return r.d===today()?r:{d:today(),use
 function runQuizDone(){const q=ME&&ME.quiz;return !!(q&&q.date===today()&&q.state==="완료")}
 function runEarned(){if(!runQuizDone())return 0;const q=ME.quiz,c=runCfg();return c.quizT+(+q.total>0&&+q.right===+q.total?c.perfT:0)}
 function runLeft(){const c=runCfg();return Math.max(0,Math.min(c.max,runEarned())-(+runDay().used||0))}
-function runLocked(){const c=runCfg();if(!c.lockOn)return false;const dw=dowOf(today());if(dw===0||dw===6)return false;const n=nowHM();return n>=c.from&&n<c.to}
+/* 잠금 시간은 학생 기기 시계가 아니라 Firebase 서버 시간(한국 시간)으로 판단해요.
+   기기 시계가 틀리거나, 기기에 따라 시각이 '오후 12:58'처럼 표시되어도 잠금이 풀리지 않아요. */
+function runKST(){const d=new Date(runNow()+9*3600e3),p=n=>String(n).padStart(2,"0");return {dow:d.getUTCDay(),hm:p(d.getUTCHours())+":"+p(d.getUTCMinutes())}}
+const runHM=v=>{const m=String(v||"").match(/^(\d{1,2}):(\d{2})/);return m?m[1].padStart(2,"0")+":"+m[2]:""};
+function runLocked(){const c=runCfg();if(!c.lockOn)return false;const k=runKST();if(k.dow===0||k.dow===6)return false;
+  const f=runHM(c.from)||"09:00",t=runHM(c.to)||"12:10";return k.hm>=f&&k.hm<t}
 function runBlock(){
   const c=runCfg();
   if(!c.open)return "선생님이 게임을 닫아 두었어요.";
