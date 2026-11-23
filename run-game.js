@@ -88,12 +88,12 @@ let obs=[],items=[],fxs=[],nextObs=260,nextCoin=1.0,scroll=0,camY=0,gates=[],ask
 const met=new Set();
 // 난이도 (혼자 연습만, 선생님 설정 runDiff). 대결은 언제나 '쉬움' 값으로 그대로예요.
 // v0 처음 속도, vMax 가장 빠른 속도, acc 빨라지는 정도(1초마다), gap 장애물 간격 배율, at 새 몬스터가 나오는 거리 배율,
-// combo/comboAt 두 마리 함께 나오기(최대 확률/시작 거리), bat 낮게 나는 박쥐 확률
+// combo/comboAt 두 마리 함께 나오기(최대 확률/시작 거리), bat 낮게 나는 박쥐 확률, wild 변칙 움직임 확률
 const DIFF={
-  easy:{name:'쉬움',v0:100,vMax:175,acc:1.8,gap:1,at:1,combo:0.35,comboAt:200,bat:0.35},
-  normal:{name:'보통',v0:112,vMax:200,acc:2.2,gap:0.92,at:0.7,combo:0.45,comboAt:120,bat:0.45},
-  hard:{name:'어려움',v0:125,vMax:225,acc:2.6,gap:0.86,at:0.5,combo:0.55,comboAt:60,bat:0.55},
-  crazy:{name:'아주 어려움',v0:135,vMax:250,acc:3,gap:0.8,at:0.35,combo:0.65,comboAt:30,bat:0.6}};
+  easy:{name:'쉬움',v0:100,vMax:175,acc:1.8,gap:1,at:1,combo:0.35,comboAt:200,bat:0.35,wild:0},
+  normal:{name:'보통',v0:112,vMax:200,acc:2.2,gap:0.92,at:0.7,combo:0.45,comboAt:120,bat:0.45,wild:0.45},
+  hard:{name:'어려움',v0:125,vMax:225,acc:2.6,gap:0.86,at:0.5,combo:0.55,comboAt:60,bat:0.55,wild:0.7},
+  crazy:{name:'아주 어려움',v0:135,vMax:250,acc:3,gap:0.8,at:0.35,combo:0.65,comboAt:30,bat:0.6,wild:0.9}};
 let DF=DIFF.easy;
 function setDiff(){DF=mode==='race'?DIFF.easy:(DIFF[(host&&host.cfg().diff)]||DIFF.normal)}
 const baseSpeed=tt=>Math.min(DF.vMax,DF.v0+tt*DF.acc);
@@ -242,14 +242,48 @@ function pickGroup(d,R){
   const A=k=>MON[k].at*DF.at,pool=Object.keys(MON).filter(k=>A(k)<=d);
   const w=pool.map(k=>1+Math.max(0,1.5-(d-A(k))/120));let r=R()*w.reduce((a,b)=>a+b,0),pick=pool[0];
   for(let i=0;i<pool.length;i++){r-=w[i];if(r<=0){pick=pool[i];break}}
-  if(d>DF.comboAt&&R()<Math.min(DF.combo,(d-DF.comboAt)/800)){const c=(R()*3)|0;
+  if(d>DF.comboAt&&R()<Math.min(DF.combo,(d-DF.comboAt)/800)){
+    if(DF.wild&&R()<DF.wild){   // 변칙 묶음: 간격이 '붙어서(한 번에 넘기)' 또는 '벌어져서(두 번 뛰기)' 중 하나로 정해져요
+      const c=(R()*5)|0,wide=R()<0.5,G=()=>wide?'W':30;
+      if(c===0)return[['slime',0],['slime',G()]];
+      if(c===1)return[['slime',0],['slime',30],['slime',G()]];
+      if(c===2)return[['slime',0],['frog',G()]];
+      if(c===3)return[['frog',0],['frog',G()]];
+      return[['iceslime',0],['bat','B']]}
+    const c=(R()*3)|0;
     if(c===0)return[['slime',0],['bat','B']];if(c===1)return[['slime',0],['slime',32]];return[['frog',0],['frog',70]]}
   return[[pick,0]];
 }
 function gapAfter(d,sp,group,R){const lvl=Math.min(1,d/(700*DF.at)),vxMax=Math.max(0,...group.map(g=>VX[g[0]]||0));
   const g=(Math.max(170,sp*(2.3-lvl*0.7))+R()*(170-lvl*60))*DF.gap;
   return Math.max(g,170,sp*1.15)+vxMax*1.2}   // 점프 한 번(약 1.1초) 뒤 바로 다시 뛸 수 있는 간격은 꼭 남겨요
-function spawnObs(){const g=pickGroup(dist,Math.random);g.forEach(([k,dx])=>{const o=addMon(k,dx==='B'?speed*1.5:dx);if(dx==='B')o.calm=1});nextObs=gapAfter(dist,speed,g,Math.random)}
+function spawnObs(){const g=pickGroup(dist,Math.random);nextObs=spawnGroup(g,DF.wild)}
+function spawnGroup(g,wildP){let lead=null,off=0;const made=[];
+  g.forEach(([k,dx],i)=>{
+    if(dx==='W'){off+=Math.max(150,speed*1.4)+Math.random()*70;dx=off}else if(typeof dx==='number'&&i>0){off+=dx;dx=off}
+    const o=addMon(k,dx==='B'?speed*1.5:dx);if(dx==='B')o.calm=1;made.push(o);
+    if(i===0)lead=o;else if(dx!=='B'){o.follow=lead;o.vx=lead.vx||0}});
+  if(wildP&&lead&&WILD[lead.type]&&Math.random()<wildP)wildify(lead);
+  return gapAfter(dist,speed,g,Math.random)+(lead&&lead.wm?70:0)}
+// ── 변칙 움직임 (혼자 연습 '보통' 이상) ──
+// 멀리 있을 때만 움직임을 바꿔요. 캐릭터 가까이(nearX 안쪽) 오면 그때 속도 그대로 와요 → 늘 피할 수 있어요.
+// 바꾸기 직전에는 0.22초 부르르 떨어서 알려 줘요. 함께 나온 친구들은 맨 앞 몬스터와 똑같이 움직여서 간격이 그대로예요.
+const nearX=()=>HX+Math.max(150,speed*1.05);
+const WILD={slime:'ground',iceslime:'ground',bouncy:'ground',snake:'ground',frog:'leap'};
+function wildify(o){o.wm=WILD[o.type];o.bvx=o.vx||0;o.wt=0.2+Math.random()*0.4;o.r=o.r||rng((Math.random()*1e9)|0)}
+function wildStep(o,dt){
+  const far=o.x>nearX();
+  if(o.wm==='ground'){
+    if(far){o.wt-=dt;
+      if(o.wt<=0&&o.tell==null){o.tell=0.22;const k=o.r();o.nv=k<0.25?-30:k<0.5?o.bvx*0.2:k<0.75?o.bvx+70:o.bvx+(o.type==='snake'?60:120)}
+      if(o.tell!=null){o.tell-=dt;if(o.tell<=0){o.vx=o.nv;o.tell=null;o.wt=0.45+o.r()*0.6}}
+    }else{o.tell=null;if(o.vx<o.bvx)o.vx=o.bvx}   // 가까이 오면 뒷걸음질·멈춤 없이 지금 속도로 와요
+    o.y=o.by+(o.tell!=null?Math.round(Math.sin(o.t*70)):0);
+  }else if(o.wm==='leap'){   // 개구리: 불규칙하게 앞으로 크게 도약
+    if(o.lp>0){o.lp-=dt;const k=1-o.lp/0.38;o.vx=o.bvx+150;o.y=o.by-Math.sin(k*Math.PI)*16;if(o.lp<=0){o.vx=o.bvx;o.y=o.by;o.wt=0.5+o.r()*0.9}}
+    else if(far){o.wt-=dt;if(o.wt<=0)o.lp=0.38}
+  }
+}
 // 부딪힘 판정: 몬스터가 실제로 그려진 픽셀이 캐릭터 몸과 겹치면 부딪힌 거예요
 let HF;
 function pixHit(o,hx0,hy0){
@@ -528,7 +562,7 @@ function heroStep(dt,sp){
 function worldStep(dt,dx){
   if(asking){obs.forEach(o=>o.fx.update(dt));items.forEach(c=>c.fx.update(dt));return}
   const hx0=HX-7,hy0=hero.y-46,hy1=hero.y-2;
-  obs.forEach(o=>{o.t+=dt;if(o.move)o.move(o,dt);o.x-=dx+(o.vx||0)*dt;o.fx.update(dt);
+  obs.forEach(o=>{o.t+=dt;if(o.move)o.move(o,dt);if(o.wm)wildStep(o,dt);if(o.follow&&!o.follow.gone&&obs.includes(o.follow))o.vx=o.follow.vx||0;o.x-=dx+(o.vx||0)*dt;o.fx.update(dt);
     if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
@@ -679,5 +713,5 @@ let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
-  _t:{answer,press,release,get asking(){return asking},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX}}};
+  _t:{answer,press,release,get asking(){return asking},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX}}};
 })();
