@@ -86,7 +86,17 @@ let mode='solo',state='menu',t=0,speed=100,dist=0,coins=0,hearts=3,inv=0,shake=0
 const hero={y:GY,vy:0,ground:true,jumps:0,hold:false,f:0,ft:0,key:'idle1',hurtT:9,land:0,hop:0,stun:0,boost:0};
 let obs=[],items=[],fxs=[],nextObs=260,nextCoin=1.0,scroll=0,camY=0,gates=[],asking=null,nextGateM=100,qRight=0,qAll=0,wrongs=[],mePen=0,mePw=0,toastT=0,busyEnd=false;
 const met=new Set();
-const baseSpeed=tt=>Math.min(175,100+tt*1.8);
+// 난이도 (혼자 연습만, 선생님 설정 runDiff). 대결은 언제나 '쉬움' 값으로 그대로예요.
+// v0 처음 속도, vMax 가장 빠른 속도, acc 빨라지는 정도(1초마다), gap 장애물 간격 배율, at 새 몬스터가 나오는 거리 배율,
+// combo/comboAt 두 마리 함께 나오기(최대 확률/시작 거리), bat 낮게 나는 박쥐 확률
+const DIFF={
+  easy:{name:'쉬움',v0:100,vMax:175,acc:1.8,gap:1,at:1,combo:0.35,comboAt:200,bat:0.35},
+  normal:{name:'보통',v0:112,vMax:200,acc:2.2,gap:0.92,at:0.7,combo:0.45,comboAt:120,bat:0.45},
+  hard:{name:'어려움',v0:125,vMax:225,acc:2.6,gap:0.86,at:0.5,combo:0.55,comboAt:60,bat:0.55},
+  crazy:{name:'아주 어려움',v0:135,vMax:250,acc:3,gap:0.8,at:0.35,combo:0.65,comboAt:30,bat:0.6}};
+let DF=DIFF.easy;
+function setDiff(){DF=mode==='race'?DIFF.easy:(DIFF[(host&&host.cfg().diff)]||DIFF.normal)}
+const baseSpeed=tt=>Math.min(DF.vMax,DF.v0+tt*DF.acc);
 function rnd(n){return (Math.random()*n)|0}
 function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let x=Math.imul(seed^seed>>>15,1|seed);x=x+Math.imul(x^x>>>7,61|x)^x;return((x^x>>>14)>>>0)/4294967296}}
 function withSeed(seed,fn){const R0=Math.random;Math.random=rng(seed);try{return fn()}finally{Math.random=R0}}
@@ -95,7 +105,7 @@ function soloW(){const pe=root&&root.parentElement,cw=Math.min(1320,(pe&&pe.clie
 function setView(w){if(w===W&&fB)return;W=w;cv.width=W;cv.height=H;ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
   fB=P.createFrame(W,H);fF=P.createFrame(W,H);LB=mkLayer();LF=mkLayer();$('rgGame').style.aspectRatio=W+'/'+H;root.style.setProperty('--rg-ar',(W/H).toFixed(3))}
 function mkLayer(){const c=document.createElement('canvas');c.width=W;c.height=H;return{c,x:c.getContext('2d'),d:new ImageData(W,H)}}
-function clearWorld(){setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
+function clearWorld(){setDiff();setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
   obs=[];items=[];fxs=[];camY=0;inv=0;shake=0;coins=0;dist=0;t=0;met.clear();toastT=0;$('rgToast').classList.remove('show');
   gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0;mePw=0}
 function hud(){
@@ -114,7 +124,7 @@ function menu(){
   const c=host.cfg(),sb=host.soloBlock(),tl=host.ticketsLeft(),rs=host.race();
   const raceOpen=rs&&(rs.st==='lobby'||rs.st==='run');
   showBox(`${host.preview?`<p class="rg-prev">${esc(host.preview)}</p>`:''}<h2>달려라, ${esc(host.title())}!</h2><p><span class="rg-tickets">🎫 오늘 남은 판 ${tl} / ${c.max}</span></p>
-  <div class="rg-modes"><button type="button" id="rgSolo" class="${sb?'off':''}"><b>🏃 혼자 연습</b><span>${sb?esc(sb):`티켓 1장 · 하트 3개<br>내 최고 기록 ${host.best()}m`}</span></button>
+  <div class="rg-modes"><button type="button" id="rgSolo" class="${sb?'off':''}"><b>🏃 혼자 연습</b><span>${sb?esc(sb):`티켓 1장 · 하트 3개 · ${DF.name}<br>내 최고 기록 ${host.best()}m`}</span></button>
   <button type="button" id="rgRace" class="${raceOpen?'':'off'}"><b>👫 친구들과 대결</b><span>${raceOpen?(rs.st==='run'?'대결이 벌써 시작했어요':'선생님이 연 대결!<br>1~5등 코인 보상'):'선생님이 대결을 열면<br>들어갈 수 있어요'}</span></button></div>`);
   $('rgSolo').onclick=e=>{e.stopPropagation();soloReady()};
   $('rgRace').onclick=e=>{e.stopPropagation();if(host.noRace){toast(host.noRace);return}const r=host.race();if(r&&r.st==='lobby')raceLobby();else toast(r&&r.st==='run'?'대결이 이미 시작했어요. 다음 대결을 기다려요!':'선생님이 대결을 열면 들어갈 수 있어요')};
@@ -128,7 +138,7 @@ function soloReady(){
     <button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()};
     if($('rgToQuiz'))$('rgToQuiz').onclick=e=>{e.stopPropagation();host.goQuiz()};return}
   mode='solo';state='ready';clearWorld();hearts=3;hud();fitView();
-  showBox(`<h2>🏃 혼자 연습</h2><p><span class="rg-tickets">🎫 티켓 1장을 써요 · 남은 판 ${host.ticketsLeft()}</span></p><p>누르면 점프! 공중에서 한 번 더 누르면 2단 점프! 🪙 먹은 코인만큼 진짜 코인을 받아요.</p>
+  showBox(`<h2>🏃 혼자 연습</h2><p><span class="rg-tickets">🎫 티켓 1장을 써요 · 남은 판 ${host.ticketsLeft()}</span> <span class="rg-tickets">난이도 ${DF.name}</span></p><p>누르면 점프! 공중에서 한 번 더 누르면 2단 점프! 🪙 먹은 코인만큼 진짜 코인을 받아요.</p><p class="more">난이도: <b>${DF.name}</b></p>
   <p class="more">퀴즈 문을 맞히면 하트 1개 회복! 멀리 갈수록 새 몬스터가 나타나요.</p>
   <p class="tip">화면을 누르거나 스페이스·Enter로 시작 · 최고 기록 ${host.best()}m</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();menu()};
@@ -201,12 +211,12 @@ const MON={
 const BAT_DIR=[[0,-1],[0,1],[1,0],[-1,0],[1,-1],[1,1],[-1,-1],[-1,1]];
 const BAT_BAND={hi:[GY-106,GY-84],lo:[GY-22,GY-18]},BAT_SWITCH=HX+230,BAT_DIVE=170;
 function batMove(o,dt){
-  if(!o.band){o.band=!o.calm&&o.r()<0.35?'lo':'hi'}
+  if(!o.band){o.band=!o.calm&&o.r()<DF.bat?'lo':'hi'}
   const [top,low]=BAT_BAND[o.band];
   if(!(o.nt>0)){
     const d=BAT_DIR[(o.r()*BAT_DIR.length)|0],sp=26+o.r()*22;o.dvx=d[0]*sp;o.dvy=d[1]*sp*0.8;o.nt=0.5+o.r()*0.6;
     if(o.calm)o.dvx=0;
-    else if(o.x>BAT_SWITCH&&o.r()<0.4)o.band=o.band==='hi'?'lo':'hi';   // 불규칙하게 내려오거나 올라가요
+    else if(o.x>Math.max(BAT_SWITCH,HX+speed*1.35)&&o.r()<0.4)o.band=o.band==='hi'?'lo':'hi';   // 불규칙하게 내려오거나 올라가요
   }
   o.nt-=dt;
   const [t2,l2]=BAT_BAND[o.band];
@@ -229,15 +239,16 @@ function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0
   if(!met.has(type)&&m.at>0){met.add(type);toast(`${Math.floor(dist)}m · 새 몬스터 <b>${m.name}</b>! ${m.tip}`)}else met.add(type);return o}
 const VX={bat:48,frog:38,snake:20,bird:40,ghost:90,wisp:70,butterfly:10,iceslime:62,eyeball:130,skull:75};
 function pickGroup(d,R){
-  const pool=Object.keys(MON).filter(k=>MON[k].at<=d);
-  const w=pool.map(k=>1+Math.max(0,1.5-(d-MON[k].at)/120));let r=R()*w.reduce((a,b)=>a+b,0),pick=pool[0];
+  const A=k=>MON[k].at*DF.at,pool=Object.keys(MON).filter(k=>A(k)<=d);
+  const w=pool.map(k=>1+Math.max(0,1.5-(d-A(k))/120));let r=R()*w.reduce((a,b)=>a+b,0),pick=pool[0];
   for(let i=0;i<pool.length;i++){r-=w[i];if(r<=0){pick=pool[i];break}}
-  if(d>200&&R()<Math.min(0.35,(d-200)/800)){const c=(R()*3)|0;
+  if(d>DF.comboAt&&R()<Math.min(DF.combo,(d-DF.comboAt)/800)){const c=(R()*3)|0;
     if(c===0)return[['slime',0],['bat','B']];if(c===1)return[['slime',0],['slime',32]];return[['frog',0],['frog',70]]}
   return[[pick,0]];
 }
-function gapAfter(d,sp,group,R){const lvl=Math.min(1,d/700),vxMax=Math.max(0,...group.map(g=>VX[g[0]]||0));
-  return Math.max(170,sp*(2.3-lvl*0.7))+R()*(170-lvl*60)+vxMax*1.2}
+function gapAfter(d,sp,group,R){const lvl=Math.min(1,d/(700*DF.at)),vxMax=Math.max(0,...group.map(g=>VX[g[0]]||0));
+  const g=(Math.max(170,sp*(2.3-lvl*0.7))+R()*(170-lvl*60))*DF.gap;
+  return Math.max(g,170,sp*1.15)+vxMax*1.2}   // 점프 한 번(약 1.1초) 뒤 바로 다시 뛸 수 있는 간격은 꼭 남겨요
 function spawnObs(){const g=pickGroup(dist,Math.random);g.forEach(([k,dx])=>{const o=addMon(k,dx==='B'?speed*1.5:dx);if(dx==='B')o.calm=1});nextObs=gapAfter(dist,speed,g,Math.random)}
 // 부딪힘 판정: 몬스터가 실제로 그려진 픽셀이 캐릭터 몸과 겹치면 부딪힌 거예요
 let HF;
