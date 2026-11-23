@@ -12,7 +12,7 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261124a";
+const RUN_V="20261124b";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
 const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal"};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
@@ -60,9 +60,11 @@ function runPool(){
   if(!pool.length)ALL.forEach(q=>{if(q.type==="sent")pool.push({id:q.id,kind:"sent",s:q.sent,ans:q.opts[0],ng:q.opts[1],e:q.e||""})});
   RUN_POOL=pool;RUN_POOL_SIG=sig;return pool;
 }
+/* '섞기'면 속담과 맞춤법을 반반 내요 (문제 수가 달라도 한쪽만 나오지 않게). 오답 복습도 고른 쪽 안에서만 해요. */
 function runPickQ(R,review){
-  const pool=runPool();let b=null,rev=false;
-  if(review){const wr=((ME&&ME.run&&ME.run.wr)||[]).map(id=>pool.find(p=>p.id===id)).filter(Boolean);if(wr.length&&R()<0.5){b=wr[(R()*wr.length)|0];rev=true}}
+  const all=runPool(),sd=all.filter(q=>q.kind==="sd"),sp=all.filter(q=>q.kind!=="sd");
+  const pool=sd.length&&sp.length?(R()<0.5?sd:sp):all;let b=null,rev=false;
+  if(review){const wr=((ME&&ME.run&&ME.run.wr)||[]).map(id=>pool.find(p=>p.id===id)).filter(Boolean);if(wr.length&&R()<0.4){b=wr[(R()*wr.length)|0];rev=true}}
   if(!b)b=pool[(R()*pool.length)|0];
   const flip=R()<0.5;return {id:b.id,kind:b.kind,s:b.s,ans:b.ans,opts:flip?[b.ng,b.ans]:[b.ans,b.ng],e:b.e,review:rev};
 }
