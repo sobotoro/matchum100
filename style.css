@@ -850,3 +850,25 @@ input[type=time]::-webkit-date-and-time-value,input[type=date]::-webkit-date-and
 .md-lbc .md-state{color:#fff}
 .md-lbx{position:absolute;right:-6px;top:-44px;width:40px;height:40px;border-radius:50%;border:0;background:#fff;color:#111;font-size:1.1rem;cursor:pointer}
 .md-wm{position:absolute;left:12px;top:10px;pointer-events:none;color:rgba(255,255,255,.75);font-size:.8rem;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+
+/* 선생님: 과목 체크 + 사회(역사) 단원 스위치 */
+.subj-pick{border:0;padding:0;margin:0;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px 8px;align-items:center;justify-content:flex-start}
+.subj-pick legend{padding:0;margin-bottom:6px;font-size:inherit}
+.subj-pick label.inline{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;background:var(--sheet)}
+.subj-pick label.inline:has(input:checked){border-color:var(--ink)}
+.subj-pick input{accent-color:var(--accent)}
+.hs-sw{border:1.5px dashed var(--line-2);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.hs-sw-h{margin:0;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.hs-sw-h span{font-size:.85rem;color:var(--muted)}
+.hs-sw-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.hs-unit{font:inherit;display:flex;align-items:center;gap:10px;text-align:left;background:var(--sheet);color:var(--ink);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer}
+.hs-unit:hover{border-color:var(--ink)}
+.hs-unit:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.hs-unit .sw{flex:none;width:40px;height:22px;border-radius:999px;background:var(--line-2);position:relative;transition:background .15s}
+.hs-unit .sw i{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.hs-unit.on{border-color:var(--accent)}
+.hs-unit.on .sw{background:var(--accent)}
+.hs-unit.on .sw i{left:21px}
+.hs-ut{display:flex;flex-direction:column;line-height:1.3;font-size:.9rem}
+.hs-ut small{color:var(--muted);font-size:.8rem}
+.hs-unit:disabled{opacity:.6;cursor:wait}

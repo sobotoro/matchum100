@@ -56,6 +56,7 @@ const CSS=`.rg-game{outline:none;position:relative;border-radius:14px;overflow:h
 .rg-quiz .qs u{text-decoration:none;display:inline-block;min-width:3.2em;border-bottom:3px solid var(--accent,#2456e6);color:var(--accent,#2456e6)}
 .rg-quiz .qo{display:flex;gap:8px;margin-top:8px}
 .rg-quiz .qo button{flex:1;font:inherit;font-size:clamp(15px,3vw,22px);font-weight:700;padding:clamp(6px,1.4vw,12px);border-radius:12px;border:2px solid #dfe3ee;background:#f7f9ff;cursor:pointer;color:#1d1d1f}
+.rg-quiz .qo.long button{font-size:clamp(13px,2.2vw,17px);word-break:keep-all;line-height:1.35}
 .rg-quiz .qo button.ok{background:#e6fcf5;border-color:#20c997}.rg-quiz .qo button.ng{background:#fff5f5;border-color:#ff6b6b}
 .rg-quiz .qf{font-size:clamp(12px,2vw,14px);margin-top:6px;min-height:1.3em;color:#333}
 .rg-quiz .qh{font-size:11px;color:#6b6b70;margin-top:2px}
@@ -320,9 +321,9 @@ function clearAhead(x){return !obs.some(o=>Math.abs(o.x-x)<36)}
 // 문이 캐릭터 앞에 오면 달리기와 몬스터가 멈추고 문제가 나와요. 대결에서는 내 시계는 계속 흘러요.
 function ask(g){
   asking={g,res:null};const q=g.q;qAll++;
-  $('rgQuiz').innerHTML=`<div class="qk">❓ 퀴즈 문${q.review?' · 오답 복습':''} · ${q.kind==='sd'?'속담':'맞춤법'}</div>
+  $('rgQuiz').innerHTML=`<div class="qk">❓ 퀴즈 문${q.review?' · 오답 복습':''} · ${q.kind==='sd'?'속담':q.kind==='hs'?'역사':'맞춤법'}</div>
     <div class="qs">${esc(q.s).replace('___','<u>&nbsp;?&nbsp;</u>')}</div>
-    <div class="qo"><button type="button" id="rgQa0">${esc(q.opts[0])}</button><button type="button" id="rgQa1">${esc(q.opts[1])}</button></div>
+    <div class="qo${q.opts.some(o=>String(o).length>10)?' long':''}"><button type="button" id="rgQa0">${esc(q.opts[0])}</button><button type="button" id="rgQa1">${esc(q.opts[1])}</button></div>
     <div class="qf" id="rgQf"></div><div class="qh">키보드: ← / → (또는 1 / 2)</div>`;
   $('rgQuiz').classList.remove('rg-hidden');
   $('rgQa0').onclick=e=>{e.stopPropagation();answer(0)};$('rgQa1').onclick=e=>{e.stopPropagation();answer(1)};
@@ -653,7 +654,7 @@ async function gameOver(){
     showBox(`<h2>${newBest?'<span class="new">새 최고 기록!</span>':'수고했어요!'}</h2><p class="big">${d}m</p>
     <p>퀴즈 ${qRight}/${qAll} · 먹은 코인 ${coins}개 → 🪙 +${res.reward} <span style="color:#868e96;font-size:12px">${res.preview?'(학생이라면 받을 코인 · 지갑에는 안 들어가요)':`(오늘 ${res.today}/${c.coinMax})`}</span></p>
     ${res.reward<coins?`<p style="color:#868e96;font-size:12px">${res.why||''}</p>`:''}
-    ${wrongs.length?`<p style="font-weight:700;margin-top:6px">📒 다시 보기</p><ul class="rg-wrongs">${wrongs.slice(0,3).map(q=>`<li>${esc(q.s).replace('___',`<b>${esc(q.ans)}</b>`)}</li>`).join('')}</ul>`:qAll?'<p>퀴즈 문을 모두 맞혔어요! 🎯</p>':''}
+    ${wrongs.length?`<p style="font-weight:700;margin-top:6px">📒 다시 보기</p><ul class="rg-wrongs">${wrongs.slice(0,3).map(q=>`<li>${q.s.includes('___')?esc(q.s).replace('___',`<b>${esc(q.ans)}</b>`):`${esc(q.s)} → <b>${esc(q.ans)}</b>`}</li>`).join('')}</ul>`:qAll?'<p>퀴즈 문을 모두 맞혔어요! 🎯</p>':''}
     <p class="tip">${sb?esc(sb):`남은 판 ${tl} · 화면을 누르거나 스페이스·Enter로 한 판 더`}</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()}},700);
 }
 

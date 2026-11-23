@@ -269,7 +269,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",sRange:"1-25",sTimer:30,feeRate:0,feeMin:1,shortDays:3,shortRate:0,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",subjs:"",hUnits:"1,2,3",hTimer:30,sRange:"1-25",sTimer:30,feeRate:0,feeMin:1,shortDays:3,shortRate:0,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -322,6 +322,20 @@ function sdOpts(q){
   return [q.ans,...[...ok.filter(o=>inR.has(o.d)),...ok.filter(o=>!inR.has(o.d))].slice(0,3).map(o=>o[q.pick])];
 }
 
+/* ---------- 역사 (history.js, 5학년 2학기 사회) ----------
+   문제마다 4지선다·O/X·빈칸 중 하나예요. 단원(1~3)은 차시로 정해지고, 선생님이 단원별로 켜고 꺼요. */
+const HSS=typeof HS==="object"&&Array.isArray(HS)?HS:[];
+const hsUnitOf=l=>{const a=+String(l).split("~")[0];return a<=20?1:a<=34?2:3};
+const HS_COUNT={1:0,2:0,3:0};
+HSS.forEach(([n,l,q,a,f,w,e,pg])=>{
+  const u=hsUnitOf(l);HS_COUNT[u]++;
+  const base={id:`h-${n}`,n,d:0,u,les:l,pg,type:"hs",e:esc(e),ans:a,opts:[a,...(w||[])]};
+  const x=f==="빈칸"?{...base,kind:"역사 · 빈칸 채우기",sent:q,long:true}
+    :f==="OX"?{...base,kind:"역사 · O/X",prompt:q,opts:["O","X"],fixed:true,ox:true}
+    :{...base,kind:"역사 · 알맞은 답 고르기",prompt:q,long:true};
+  ALL.push(x);BY_ID[x.id]=x;
+});
+
 /* ---------- Firebase ---------- */
 let db=null,auth=null,SV=null;
 const R=p=>db.ref("matchum/"+p);
@@ -333,8 +347,16 @@ function offAll(){subs.forEach(r=>r.off());subs=[]}
 const TEACHER=()=>(window.EDITOR_EMAIL||"").toLowerCase();
 const emailOf=(g,c,n,gen)=>`s${+g}-${+c}-${+n}-${+gen||0}@matchum100.class`;
 const keyOfEmail=e=>{const m=String(e||"").match(/^s(\d+)-(\d+)-(\d+)-\d+@/);return m?`${+m[1]}-${+m[2]}-${+m[3]}`:null};
-const SUBJ_NAME={"맞춤법":"맞춤법","속담":"속담","섞기":"맞춤법·속담"};
-const cfg=()=>({...CFG,days:parseDays(CFG.range),sdays:parseDays(CFG.sRange),subj:SDS.length&&SUBJ_NAME[CFG.subject]?CFG.subject:"맞춤법",spell:CFG.type!=="빈칸",sent:CFG.type!=="고르기"});
+/* 과목: subjs = "sp,sd,hs" 중 고른 것(맞춤법·속담·역사). 예전 설정(subject)만 있으면 그걸로 정해요. */
+const SUBJ_KEYS=["sp","sd","hs"],SUBJ_LABEL={sp:"맞춤법",sd:"속담",hs:"역사"},SUBJ_TKEY={sp:"timer",sd:"sTimer",hs:"hTimer"};
+function subjSet(){
+  const s=CFG.subjs,set=new Set(typeof s==="string"&&s?s.split(",").filter(k=>SUBJ_LABEL[k]):CFG.subject==="속담"?["sd"]:CFG.subject==="섞기"?["sp","sd"]:["sp"]);
+  if(!SDS.length)set.delete("sd");if(!HSS.length)set.delete("hs");if(!set.size)set.add("sp");return set;
+}
+const hsUnits=()=>{const s=CFG.hUnits;return new Set((s==null?"1,2,3":String(s)).split(",").map(Number).filter(n=>n>=1&&n<=3))};
+const subjTitle=c=>SUBJ_KEYS.filter(k=>c.sub.has(k)).map(k=>SUBJ_LABEL[k]).join("·");
+const unitText=set=>set.size?[...set].sort().join("·")+"단원":"켠 단원 없음";
+const cfg=()=>({...CFG,days:parseDays(CFG.range),sdays:parseDays(CFG.sRange),sub:subjSet(),hunits:hsUnits(),spell:CFG.type!=="빈칸",sent:CFG.type!=="고르기"});
 const byOrder=(a,b)=>((a.order??1e9)-(b.order??1e9));
 const shopList=()=>Object.entries(SHOP||{}).filter(([,it])=>it&&it.name&&it.on!==false).map(([id,it])=>({id,...it,price:Math.max(0,Math.round(+it.price||0))})).sort(byOrder);
 
@@ -807,24 +829,28 @@ let wrongNote=store.get("mc100-wrong",{});
 let Q=null;
 function pools(){
   const c=cfg(),all=Array.from({length:25},(_,i)=>i+1),ds=new Set(c.random?all:c.days),ss=new Set(c.random?all:c.sdays);
-  return {sp:c.subj==="속담"?[]:ALL.filter(q=>ds.has(q.d)&&((q.type==="spell"&&c.spell)||(q.type==="sent"&&c.sent))),
-          sd:c.subj==="맞춤법"?[]:ALL.filter(q=>q.type==="sd"&&ss.has(q.d))};
+  return {sp:!c.sub.has("sp")?[]:ALL.filter(q=>ds.has(q.d)&&((q.type==="spell"&&c.spell)||(q.type==="sent"&&c.sent))),
+          sd:!c.sub.has("sd")?[]:ALL.filter(q=>q.type==="sd"&&ss.has(q.d)),
+          hs:!c.sub.has("hs")?[]:ALL.filter(q=>q.type==="hs"&&c.hunits.has(q.u))};
 }
-function pool(){const p=pools();return [...p.sp,...p.sd]}
+function pool(){const p=pools();return [...p.sp,...p.sd,...p.hs]}
 const takeN=()=>{const n=pool().length,k=+CFG.count||0;return k&&k<n?k:n};
-/* 오늘 낼 문제: 속담은 되도록 서로 다른 속담에서 뽑고, '섞기'는 맞춤법과 속담을 반반 내요. */
+/* 오늘 낼 문제: 속담은 되도록 서로 다른 속담에서 뽑고, 과목을 여러 개 고르면 고른 과목끼리 똑같이 나눠 내요.
+   한 과목의 문제가 모자라면 남는 몫은 다른 과목이 채워요. */
 function pickToday(){
   const p=pools(),n=takeN();
   const sdPick=k=>{const seen=new Set(),first=[],rest=[];pickQs(p.sd,p.sd.length).forEach(q=>{if(seen.has(q.sd))rest.push(q);else{seen.add(q.sd);first.push(q)}});return [...first,...rest].slice(0,k)};
-  if(!p.sd.length)return pickQs(p.sp,n);
-  if(!p.sp.length)return sdPick(n);
-  const half=Math.min(p.sd.length,Math.max(n-p.sp.length,Math.round(n/2)));
-  return [...sdPick(half),...pickQs(p.sp,n-half)];
+  const pick={sp:k=>pickQs(p.sp,k),sd:sdPick,hs:k=>pickQs(p.hs,k)};
+  const g=SUBJ_KEYS.filter(k=>p[k].length);if(!g.length)return [];
+  const share={};g.forEach(k=>share[k]=0);let left=n;const order=shuffle(g);
+  while(left>0){let moved=false;for(const k of order){if(left<=0)break;if(share[k]<p[k].length){share[k]++;left--;moved=true}}if(!moved)break}
+  return g.flatMap(k=>share[k]?pick[k](share[k]):[]);
 }
-const qTag=q=>`${q.type==="sd"?"속담 ":""}${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽`;
+const qTag=q=>q.type==="hs"?`사회 ${q.u}단원 · ${q.les}차시 · 교과서 ${q.pg}쪽`:`${q.type==="sd"?"속담 ":""}${q.d}일차 · ${pad(q.n)}번 · 교재 ${page(q.d)}쪽`;
 function quizScope(){
-  const c=cfg(),r=d=>c.random?"전체 무작위":rangeText(d);
-  return c.subj==="맞춤법"?r(c.days):c.subj==="속담"?`속담 ${r(c.sdays)}`:c.random?"맞춤법 + 속담 전체 무작위":`맞춤법 ${r(c.days)} + 속담 ${r(c.sdays)}`;
+  const c=cfg(),r=d=>c.random?"전체 무작위":rangeText(d),ks=SUBJ_KEYS.filter(k=>c.sub.has(k));
+  if(ks.length===1&&ks[0]==="sp")return r(c.days);
+  return ks.map(k=>k==="sp"?`맞춤법 ${r(c.days)}`:k==="sd"?`속담 ${r(c.sdays)}`:`역사 ${unitText(c.hunits)}`).join(" + ");
 }
 function applyBanner(){
   const tb=$("#tbanner"),c=cfg();
@@ -845,7 +871,7 @@ function renderNotes(){
 /* ---------- 제한 시간 ---------- */
 const TIMEOUT="(시간 초과)";
 const timeX=s=>{const v=s&&s.timeX;return v==null||v===""||isNaN(+v)?1:+v};
-const baseSec=q=>q&&q.type==="sd"?(+CFG.sTimer||0):(+CFG.timer||0);
+const baseSec=q=>q&&q.type==="sd"?(+CFG.sTimer||0):q&&q.type==="hs"?(CFG.hTimer==null?30:+CFG.hTimer||0):(+CFG.timer||0);
 function limitSec(){
   const base=Q?baseSec(Q.qs[Q.i]):0;if(!base)return 0;
   if(Q.mode==="challenge")return Math.round(base*timeX(ME));
@@ -885,11 +911,11 @@ function renderQuizTab(){
   renderStart();renderNotes();
 }
 function renderStart(){
-  const n=takeN(),c=cfg(),tx=timeX(ME),t1=c.subj!=="속담"&&+CFG.timer?Math.round(CFG.timer*tx):0,t2=c.subj!=="맞춤법"&&+CFG.sTimer?Math.round(CFG.sTimer*tx):0,tl=t1||t2;
-  const tline=c.subj==="섞기"&&t1!==t2?[t1?`맞춤법 문제는 <b>${t1}초</b>`:"",t2?`속담 문제는 <b>${t2}초</b>`:""].filter(Boolean).join(", "):tl?`문제마다 <b>${tl}초</b>`:"";
+  const n=takeN(),c=cfg(),tx=timeX(ME),ts=SUBJ_KEYS.filter(k=>c.sub.has(k)).map(k=>[SUBJ_LABEL[k],Math.round(baseSec({type:k})*tx)]),tl=Math.max(0,...ts.map(t=>t[1]));
+  const tline=ts.length>1&&new Set(ts.map(t=>t[1])).size>1?ts.filter(t=>t[1]).map(t=>`${t[0]} 문제는 <b>${t[1]}초</b>`).join(", "):tl?`문제마다 <b>${tl}초</b>`:"";
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">오늘의 도전 · ${md(today())}</p>
-    <h2>${SUBJ_NAME[c.subj]} 퀴즈 ${n}문제</h2>
+    <h2>${subjTitle(c)} 퀴즈 ${n}문제</h2>
     <p class="t-help">하루에 한 번만 도전할 수 있어요. 시작하면 끝까지 풀어야 해요.</p>
     <ul class="rules">${tline?`<li>${tline} 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li><li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
     <p class="msg" id="startMsg" role="status"></p>
@@ -897,7 +923,7 @@ function renderStart(){
   </article>`;
   $("#goBtn").onclick=()=>{
     const qs=shuffle(pickToday()).map(q=>withVar(q,pickVar(q)));
-    const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),shown:qs.map(q=>shuffle(q.opts)),vi:qs.map(q=>q.vi||0),picks:[]};
+    const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),shown:qs.map(q=>q.fixed?[...q.opts]:shuffle(q.opts)),vi:qs.map(q=>q.vi||0),picks:[]};
     act($("#goBtn"),$("#startMsg"),async()=>{
       const cur=(await R(`students/${KEY}/quiz`).once("value")).val()||{};
       if(cur.date===today())throw new Error("오늘의 도전은 이미 시작했어요.");
@@ -921,7 +947,7 @@ function resumeChallenge(qz){
   renderQ();
 }
 function startPractice(list){
-  Q={mode:"practice",qs:shuffle(list).map(q=>{const x=withVar(BY_ID[q.id]||q,pickVar(q));return {...x,shown:shuffle(x.opts)}}),i:0,ms:{},res:[],locked:false,finished:false};
+  Q={mode:"practice",qs:shuffle(list).map(q=>{const x=withVar(BY_ID[q.id]||q,pickVar(q));return {...x,shown:x.fixed?[...x.opts]:shuffle(x.opts)}}),i:0,ms:{},res:[],locked:false,finished:false};
   if(current!=="quiz"){location.hash="quiz";return}
   renderQ();renderNotes();
 }
@@ -1006,9 +1032,9 @@ function renderEnd(){
   const mv=Object.values(Q.ms||{}).map(Number).filter(x=>x>0),avg=mv.length?mv.reduce((a,b)=>a+b,0)/mv.length/1000:0,lateN=Q.res.filter(r=>r.picked===TIMEOUT).length;
   const list=wrong.length?`<ul class="review">${wrong.map(({q,picked})=>`<li>
       <span class="tag" style="align-self:flex-start">${qTag(q)}</span>
-      <p class="rq">${q.sent?qText(q,true):q.situ?`${esc(q.situ)} → <span class="blank filled">${esc(q.ans)}</span>`:(q.mean?`‘${esc(q.mean)}’ → <span class="blank filled">${esc(q.ans)}</span>`:`바른 말: <span class="blank filled">${esc(q.ans)}</span>`)}</p>
+      <p class="rq">${q.sent?qText(q,true):q.type==="hs"?`${esc(q.prompt)} → <span class="blank filled">${esc(q.ans)}</span>`:q.situ?`${esc(q.situ)} → <span class="blank filled">${esc(q.ans)}</span>`:(q.mean?`‘${esc(q.mean)}’ → <span class="blank filled">${esc(q.ans)}</span>`:`바른 말: <span class="blank filled">${esc(q.ans)}</span>`)}</p>
       <p class="rmine">${picked===TIMEOUT?"시간이 다 돼서 못 골랐어요":`내가 고른 답: <s>${esc(picked)}</s>`}</p>
-      <p class="rwhy">${q.e}</p></li>`).join("")}</ul>`:`<p class="allright">하나도 안 틀렸어요! ${Q.res.every(r=>r.q.type==="sd")?"속담":Q.res.some(r=>r.q.type==="sd")?"우리말":"맞춤법"} 박사네요.</p>`;
+      <p class="rwhy">${q.e}</p></li>`).join("")}</ul>`:`<p class="allright">하나도 안 틀렸어요! ${(()=>{const t=new Set(Q.res.map(r=>r.q.type==="hs"?"hs":r.q.type==="sd"?"sd":"sp"));return t.size>1?(t.has("hs")?"척척":"우리말"):SUBJ_LABEL[[...t][0]]||"맞춤법"})()} 박사네요.</p>`;
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">${ch?`오늘의 도전 결과 · ${md(today())}`:"연습 결과 · 코인 없음"}</p>
     <div class="score"><div class="score-num">${score}점${score>=80?CIRCLE.replace('class="mark"','class=""'):""}</div>
@@ -1353,6 +1379,35 @@ function fundBind(){
     act(b,m,()=>R("fund/used/"+b.dataset.fdel).remove()).then(ok=>{if(ok){fundMsg="기록을 지웠어요. 기금이 다시 늘었어요.";renderTeacher()}})});
 }
 let TSHOP=null,tMsgTxt="";
+/* 선생님: 과목 체크와 사회(역사) 단원 스위치 */
+function subjSave(){
+  const ks=[...document.querySelectorAll("[data-subj]")].filter(b=>b.checked).map(b=>b.dataset.subj);
+  const legacy=ks.length===1&&ks[0]==="sd"?"속담":ks.includes("sd")&&ks.includes("sp")?"섞기":ks.includes("sp")?"맞춤법":ks.includes("sd")?"속담":"맞춤법";
+  const v={subjs:ks.join(","),subject:legacy};const t=$("#cHTimer");if(t)v.hTimer=+t.value||0;return v;
+}
+let hsMsgTxt="";
+function hsSwitchHtml(){
+  if(!HSS.length)return "";
+  const on=hsUnits(),hsOn=cfg().sub.has("hs");
+  return `<div class="hs-sw" role="group" aria-label="사회(역사) 단원 켜고 끄기">
+    <p class="hs-sw-h"><b>사회(역사) 단원 스위치</b><span>${hsOn?"켠 단원에서만 역사 문제가 나와요.":"과목에서 '역사'를 고르면 켠 단원의 문제가 나와요."} 누르면 바로 저장돼요.</span></p>
+    <div class="hs-sw-row">${[1,2,3].map(u=>`<button type="button" class="hs-unit ${on.has(u)?"on":""}" role="switch" aria-checked="${on.has(u)}" data-hunit="${u}">
+      <span class="sw" aria-hidden="true"><i></i></span><span class="hs-ut"><b>${u}단원</b> ${esc(HS_UNIT&&HS_UNIT[u]||"")}<small>${HS_COUNT[u]}문제 · ${on.has(u)?"켜짐":"꺼짐"}</small></span></button>`).join("")}</div>
+    <p class="msg" id="hsMsg" role="status">${esc(hsMsgTxt)}</p></div>`;
+}
+function hsSwitchBind(){
+  document.querySelectorAll("[data-hunit]").forEach(b=>b.onclick=()=>{
+    const u=+b.dataset.hunit,on=hsUnits();if(on.has(u))on.delete(u);else on.add(u);
+    const val=[...on].sort().join(",");
+    b.disabled=true;
+    act(null,$("#hsMsg"),async()=>{await R("config").update({hUnits:val});CFG={...CFG,hUnits:val}}).then(ok=>{b.disabled=false;if(!ok)return;
+      hsMsgTxt=`${u}단원 문제를 ${on.has(u)?"켰어요":"껐어요"}. 지금 켜진 단원: ${unitText(on)}${on.size?"":" (역사 문제가 안 나와요)"}`;
+      const sw=document.querySelector(".hs-sw");
+      if(sw){const tmp=document.createElement("div");tmp.innerHTML=hsSwitchHtml();sw.replaceWith(tmp.firstElementChild);hsSwitchBind()}
+    });
+  });
+}
+
 function renderTeacher(){
   const c=CFG;
   if(!TSHOP)TSHOP=Object.entries(SHOP||{}).map(([id,it])=>({id,...it})).sort(byOrder);
@@ -1373,11 +1428,14 @@ function renderTeacher(){
     </div>
     <div class="t-sec"><h3>오늘의 퀴즈</h3>
       <div class="row2">
-        <label class="t-field" for="cSubject">과목${sel("cSubject",[["맞춤법","맞춤법"],["속담","속담"],["섞기","맞춤법 + 속담 섞기 (반반)"]],cfg().subj)}</label>
+        <fieldset class="t-field subj-pick"><legend>과목 (여러 개 고르면 똑같이 나눠 섞여 나와요)</legend>
+          ${SUBJ_KEYS.filter(k=>k!=="sd"||SDS.length).filter(k=>k!=="hs"||HSS.length).map(k=>`<label class="inline" for="cSub-${k}"><input type="checkbox" id="cSub-${k}" data-subj="${k}" ${cfg().sub.has(k)?"checked":""}> ${SUBJ_LABEL[k]}</label>`).join("")}
+        </fieldset>
         <label class="t-field" for="cRange">맞춤법 범위 (일차)<input type="text" id="cRange" value="${esc(c.range)}" placeholder="예: 1-5 또는 1,3,6-8"></label>
         <label class="t-field" for="cSRange">속담 범위 (일차)<input type="text" id="cSRange" value="${esc(c.sRange||"1-25")}" placeholder="예: 1-5 또는 1,3,6-8"></label>
       </div>
-      <p class="t-help">과목을 바꿔도 코인이 걸린 도전은 하루 1번이에요. 속담 문제는 완성하기, 뜻 고르기, 상황에 맞는 속담 고르기 세 가지가 섞여 나오고 보기는 4개예요. 속담도 교재처럼 하루 4개씩 25일차예요.</p>
+      ${hsSwitchHtml()}
+      <p class="t-help">과목을 바꿔도 코인이 걸린 도전은 하루 1번이에요. 역사 문제는 4지선다, O/X, 빈칸 세 가지가 섞여 나오고, 위 단원 스위치를 켠 단원에서만 나와요. 속담 문제는 완성하기, 뜻 고르기, 상황에 맞는 속담 고르기 세 가지가 섞여 나오고 보기는 4개예요. 속담도 교재처럼 하루 4개씩 25일차예요.</p>
       <div class="row2">
         <label class="t-field" for="cCount">하루 문제 수${sel("cCount",[[10,"10문제"],[20,"20문제"],[30,"30문제"],[0,"범위 안 모든 문제"]],c.count)}</label>
         <label class="t-field" for="cType">맞춤법 문제 유형${sel("cType",[["둘다","고르기 + 빈칸"],["고르기","바른 말·뜻 고르기만"],["빈칸","문장 빈칸만"]],c.type)}</label>
@@ -1386,6 +1444,7 @@ function renderTeacher(){
       <div class="row2">
         <label class="t-field" for="cTimer">맞춤법 문제당 제한 시간${sel("cTimer",[[0,"없음"],[10,"10초"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"]],+c.timer||0)}</label>
         <label class="t-field" for="cSTimer">속담 문제당 제한 시간${sel("cSTimer",[[0,"없음"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"],[90,"90초"]],+c.sTimer||0)}</label>
+        ${HSS.length?`<label class="t-field" for="cHTimer">역사 문제당 제한 시간${sel("cHTimer",[[0,"없음"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"],[90,"90초"]],c.hTimer==null?30:+c.hTimer||0)}</label>`:""}
         <label class="t-field" for="cFastB">번개 보너스 (코인, 0이면 끔)<input type="number" id="cFastB" min="0" step="1" value="${esc(+c.fastBonus||0)}"></label>
         <label class="t-field" for="cFastS">번개 기준${sel("cFastS",[[3,"3초 안에 맞히면"],[5,"5초 안에 맞히면"],[7,"7초 안에 맞히면"],[10,"10초 안에 맞히면"]],+c.fastSec||5)}</label>
       </div>
@@ -1472,13 +1531,15 @@ function renderTeacher(){
   <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. 구글 Apps Script(CLASS LAB 주가 갱신)가 평일 장중 10분마다 네이버 시세를 가져와 Firebase에 넣어요. GitHub도 예비로 시세 파일을 올려요. 둘 중 더 새 시세를 써요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
   tMsgTxt="";
   $("#cSave").onclick=()=>{
-    const v={feeRate:r2(clampN($("#cFeeRate").value,0,10)),feeMin:r2(clampN($("#cFeeMin").value,0,1e6)),shortDays:+$("#cShortDays").value||0,shortRate:r2(clampN($("#cShortRate").value,0,10)),subject:$("#cSubject").value,sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
+    const v={feeRate:r2(clampN($("#cFeeRate").value,0,10)),feeMin:r2(clampN($("#cFeeMin").value,0,1e6)),shortDays:+$("#cShortDays").value||0,shortRate:r2(clampN($("#cShortRate").value,0,10)),...subjSave(),sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
       className:$("#cClass").value.trim()||"우리 반",siteName:$("#cSite").value.trim().slice(0,20)||"CLASS LAB",classTag:$("#cTag").value.trim().slice(0,12),tagline:$("#cTagline").value.trim().slice(0,40),board:$("#cBoard").value,boardName:$("#cBName").value,
       mealOn:$("#cMealOn").value==="1",mealLink:$("#cMealLink").value==="1",mealCoins:Math.max(0,Math.round(+$("#cMealCoins").value||0)),
       mealFrom:$("#cMealFrom").value||"12:30",mealTo:$("#cMealTo").value||"13:40",mealSeen:$("#cMealSeen").value==="1"};
+    if(!v.subjs){$("#cMsg").textContent="과목을 하나 이상 골라 주세요.";$("#cMsg").className="msg err";return}
     act($("#cSave"),$("#cMsg"),async()=>{await R("config").update(v);CFG={...CFG,...v};tMsgTxt=`저장했어요. 오늘의 퀴즈: ${quizScope()}`}).then(ok=>ok&&renderTeacher());
   };
+  hsSwitchBind();
   const syncShop=()=>TSHOP.forEach((it,i)=>{it.name=$("#ts-name-"+i).value;it.price=Math.max(0,Math.round(+$("#ts-price-"+i).value||0));it.desc=$("#ts-desc-"+i).value});
   $("#tAdd").onclick=()=>{syncShop();TSHOP.push({id:"p"+Date.now().toString(36),name:"",price:100,desc:"",on:true});renderTeacher();$("#ts-name-"+(TSHOP.length-1)).focus()};
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{syncShop();TSHOP.splice(+b.dataset.del,1);renderTeacher()});

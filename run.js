@@ -48,25 +48,28 @@ function runBlock(){
   return "";
 }
 
-/* 퀴즈 문 문제: 오늘의 퀴즈와 같은 과목·범위에서 내요 (문장 빈칸 + 속담 빈칸, 보기 2개) */
+/* 퀴즈 문 문제: 오늘의 퀴즈와 같은 과목·범위에서 내요 (문장 빈칸 + 속담 빈칸 + 역사, 보기 2개)
+   역사는 선생님이 켠 단원에서만 나와요. 틀린 보기는 문제마다 3개 중 하나를 골라요(O/X는 O·X). */
 let RUN_POOL=null,RUN_POOL_SIG="";
 function runPool(){
-  const c=cfg(),sig=[c.subj,c.days.join(","),c.sdays.join(",")].join("|");
+  const c=cfg(),sig=[[...c.sub].sort().join(","),c.days.join(","),c.sdays.join(","),[...c.hunits].sort().join(",")].join("|");
   if(RUN_POOL&&RUN_POOL_SIG===sig)return RUN_POOL;
-  const ds=new Set(c.days),ss=new Set(c.sdays),sent=[],sd=[];
-  if(c.subj!=="속담")ALL.forEach(q=>{if(q.type==="sent"&&ds.has(q.d))sent.push({id:q.id,kind:"sent",s:q.sent,ans:q.opts[0],ng:q.opts[1],e:q.e||""})});
-  if(c.subj!=="맞춤법"&&typeof SD!=="undefined")SD.forEach(r=>{const d=Math.ceil(r[0]/4);if(ss.has(d)&&r[3]&&r[4]&&r[5]&&r[5][0])sd.push({id:"sd-"+r[0],kind:"sd",s:r[3],ans:r[4],ng:r[5][0],e:`'${esc(r[1])}'`})});
-  let pool=sent.concat(sd);
+  const ds=new Set(c.days),ss=new Set(c.sdays),sent=[],sd=[],hs=[];
+  if(c.sub.has("sp"))ALL.forEach(q=>{if(q.type==="sent"&&ds.has(q.d))sent.push({id:q.id,kind:"sent",s:q.sent,ans:q.opts[0],ng:q.opts[1],e:q.e||""})});
+  if(c.sub.has("sd")&&typeof SD!=="undefined")SD.forEach(r=>{const d=Math.ceil(r[0]/4);if(ss.has(d)&&r[3]&&r[4]&&r[5]&&r[5][0])sd.push({id:"sd-"+r[0],kind:"sd",s:r[3],ans:r[4],ng:r[5][0],e:`'${esc(r[1])}'`})});
+  if(c.sub.has("hs"))ALL.forEach(q=>{if(q.type==="hs"&&c.hunits.has(q.u))hs.push({id:q.id,kind:"hs",s:q.sent||q.prompt,ans:q.ans,ngs:q.opts.filter(o=>o!==q.ans),ox:!!q.ox,e:q.e||""})});
+  let pool=sent.concat(sd,hs);
   if(!pool.length)ALL.forEach(q=>{if(q.type==="sent")pool.push({id:q.id,kind:"sent",s:q.sent,ans:q.opts[0],ng:q.opts[1],e:q.e||""})});
   RUN_POOL=pool;RUN_POOL_SIG=sig;return pool;
 }
-/* '섞기'면 속담과 맞춤법을 반반 내요 (문제 수가 달라도 한쪽만 나오지 않게). 오답 복습도 고른 쪽 안에서만 해요. */
+/* 과목을 여러 개 고르면 고른 과목끼리 똑같은 확률로 내요 (문제 수가 달라도 한쪽만 나오지 않게). 오답 복습도 고른 쪽 안에서만 해요. */
 function runPickQ(R,review){
-  const all=runPool(),sd=all.filter(q=>q.kind==="sd"),sp=all.filter(q=>q.kind!=="sd");
-  const pool=sd.length&&sp.length?(R()<0.5?sd:sp):all;let b=null,rev=false;
+  const all=runPool(),groups=["sent","sd","hs"].map(k=>all.filter(q=>q.kind===k)).filter(g=>g.length);
+  const pool=groups.length>1?groups[(R()*groups.length)|0]:all;let b=null,rev=false;
   if(review){const wr=((ME&&ME.run&&ME.run.wr)||[]).map(id=>pool.find(p=>p.id===id)).filter(Boolean);if(wr.length&&R()<0.4){b=wr[(R()*wr.length)|0];rev=true}}
   if(!b)b=pool[(R()*pool.length)|0];
-  const flip=R()<0.5;return {id:b.id,kind:b.kind,s:b.s,ans:b.ans,opts:flip?[b.ng,b.ans]:[b.ans,b.ng],e:b.e,review:rev};
+  const ng=b.ngs?b.ngs[(R()*b.ngs.length)|0]:b.ng,flip=R()<0.5;
+  return {id:b.id,kind:b.kind,s:b.s,ans:b.ans,opts:b.ox?["O","X"]:flip?[ng,b.ans]:[b.ans,ng],e:b.e,review:rev};
 }
 function runMarkQ(q,ok){
   if(!ME||!KEY)return;let wr=((ME.run&&ME.run.wr)||[]).filter(id=>id!==q.id);if(!ok)wr.unshift(q.id);wr=wr.slice(0,30);
