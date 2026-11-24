@@ -91,10 +91,11 @@ const met=new Set();
 // v0 처음 속도, vMax 가장 빠른 속도, acc 빨라지는 정도(1초마다), gap 장애물 간격 배율, at 새 몬스터가 나오는 거리 배율,
 // bat 낮게 나는 박쥐 확률, wild 변칙 움직임 세기(0이면 예전처럼 규칙적). 몬스터는 언제나 한 마리씩, 같은 몬스터가 연달아 나오지 않아요.
 const DIFF={
-  easy:{name:'쉬움',v0:100,vMax:175,acc:1.8,gap:1,at:1,combo:0.35,comboAt:200,bat:0.35,wild:0},
-  normal:{name:'보통',v0:112,vMax:200,acc:2.2,gap:0.8,at:0.7,combo:0,comboAt:0,bat:0.6,wild:0.6},
-  hard:{name:'어려움',v0:125,vMax:225,acc:2.6,gap:0.68,at:0.5,combo:0,comboAt:0,bat:0.75,wild:0.8},
-  crazy:{name:'아주 어려움',v0:135,vMax:250,acc:3,gap:0.56,at:0.35,combo:0,comboAt:0,bat:0.85,wild:1}};
+  easy:{name:'쉬움',v0:100,vMax:175,acc:1.8,gap:1,at:1,combo:0.35,comboAt:200,bat:0.35,wild:0,react:0,shots:0,dive:0},
+  normal:{name:'보통',v0:112,vMax:200,acc:2.2,gap:0.8,at:0.7,combo:0,comboAt:0,bat:0.6,wild:0.6,react:0.35,shots:2,dive:0.45},
+  hard:{name:'어려움',v0:125,vMax:225,acc:2.6,gap:0.68,at:0.5,combo:0,comboAt:0,bat:0.75,wild:0.8,react:0.55,shots:2,dive:0.6},
+  crazy:{name:'아주 어려움',v0:135,vMax:250,acc:3,gap:0.56,at:0.35,combo:0,comboAt:0,bat:0.85,wild:1,react:0.75,shots:3,dive:0.75}};
+// react: 캐릭터가 점프하는 순간 가까운 몬스터가 따라 뛰어오르거나(땅) 솟구치거나(하늘) 멈칫할 확률 · shots: 해골이 쏘는 불덩이 수 · dive: 해골이 내려올 확률
 let DF=DIFF.easy;
 function setDiff(){DF=mode==='race'?DIFF.easy:(DIFF[(host&&host.cfg().diff)]||DIFF.normal)}
 const baseSpeed=tt=>Math.min(DF.vMax,DF.v0+tt*DF.acc);
@@ -161,7 +162,7 @@ let scT=0,cntHide=0;
 // 점프: 공중에 약 1.1초, 높이 약 52. 짧게 누르면 낮게. 공중에서 한 번 더 = 2단 점프.
 const G=330,FALL_G=1.0,JV=-185,JV2=-178,CUT=0.5;
 function jump(){
-  if(hero.ground){hero.vy=JV;hero.ground=false;hero.jumps=1;hero.hold=true}
+  if(hero.ground){hero.vy=JV;hero.ground=false;hero.jumps=1;hero.hold=true;react()}
   else if(hero.jumps<2){hero.vy=JV2;hero.jumps=2;hero.hold=true;hero.dj=0.25;fx(FX.burst,{x:HX,y:hero.y+2,seed:7,light:0.5},false)}
 }
 function press(){
@@ -185,13 +186,13 @@ function onKeyUp(e){if(!visible())return;const c=e.code||e.key;if(JUMP_KEYS.incl
 
 // ── 몬스터 ──
 const MON={
-  slime:{name:'슬라임',at:0,tip:'멈칫하거나 확 달려들어요. 잘 보고 뛰어넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:3,seed:rnd(99)}),by:GY})},
+  slime:{name:'슬라임',at:0,tip:'멈칫하거나 확 달려들어요. 내가 뛰면 따라 뛰기도 해요!',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:3,seed:rnd(99)}),by:GY})},
   bat:{name:'박쥐',at:0,tip:'이리저리 날다가 갑자기 낮게 내려와요. 높으면 그냥 달리고, 낮으면 뛰어넘어요',make:()=>{const sd=rnd(99);return{fx:P.createFx(FX.bat,{x:0,y:0,seed:sd}),ct:batTable(sd),by:GY-90+rnd(6),r:rng((Math.random()*1e9)|0),
     move:batMove}}},
-  frog:{name:'개구리',at:80,tip:'폴짝대며 다가와요',make:()=>({fx:P.createFx(FX.frog,{x:0,y:0,seed:rnd(99)}),by:GY,vx:38})},
-  snake:{name:'뱀',at:160,tip:'길어요! 몸을 떨면 확 달려들어요. 길게 눌러 멀리 뛰어요',make:()=>({fx:P.createFx(FX.snake,{x:0,y:0,seed:rnd(99)}),by:GY,vx:20})},
+  frog:{name:'개구리',at:80,tip:'폴짝대며 다가와요. 내가 뛰면 같이 뛰어올라요! 한 번 더 눌러 2단 점프!',make:()=>({fx:P.createFx(FX.frog,{x:0,y:0,seed:rnd(99)}),by:GY,vx:38})},
+  snake:{name:'뱀',at:160,tip:'길어요! 몸을 떨면 확 달려들고, 내가 뛰면 멈칫해요. 길게 눌러 멀리 뛰어요',make:()=>({fx:P.createFx(FX.snake,{x:0,y:0,seed:rnd(99)}),by:GY,vx:20})},
   bouncy:{name:'통통 슬라임',at:240,tip:'높이 튀어요. 내려왔을 때 넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:26,seed:rnd(99),palette:['#1a0a14','#4a1638','#8a2a6a','#c24a9a','#f07ac8','#ffb8e8','#fff0fa']}),by:GY})},
-  bird:{name:'새',at:320,tip:'날아오다 높이를 휙 바꿔요. 낮으면 뛰고, 높으면 그냥 달려요',make:()=>{const hi=Math.random()<0.5;return{fx:P.createFx(FX.bird,{x:0,y:0,seed:rnd(99)}),by:hi?GY-84:GY-30,ty:hi?GY-30:GY-84,vx:40,
+  bird:{name:'새',at:320,tip:'날아오다 높이를 휙 바꾸고, 내가 뛰면 솟구쳐요! 2단 점프로 넘어요',make:()=>{const hi=Math.random()<0.5;return{fx:P.createFx(FX.bird,{x:0,y:0,seed:rnd(99)}),by:hi?GY-84:GY-30,ty:hi?GY-30:GY-84,vx:40,
     move:(o,dt)=>{const target=o.x<175?o.ty:o.by;o.cy=(o.cy??o.by)+(target-(o.cy??o.by))*Math.min(1,dt*5);o.y=o.cy+Math.sin(o.t*6)*3}}}},
   ghost:{name:'유령',at:420,tip:'오르내리다 갑자기 다가와요',make:()=>({fx:P.createFx(FX.ghost,{x:0,y:0,hover:6,seed:rnd(99)}),by:GY,vx:12,ph:Math.random()*6,
     move:(o,dt)=>{   // 닿기 0.55초 전부터는 높이(바닥 또는 높이)와 속도를 정해 둬요
@@ -203,8 +204,10 @@ const MON={
   iceslime:{name:'얼음 슬라임',at:130,tip:'미끄러지듯 빠르게 와요. 일찍 뛰어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:0,seed:rnd(99),palette:['#06131f','#0d3050','#1d5f8f','#3d97c8','#7ccdf0','#c4f0ff','#ffffff']}),by:GY,vx:62})},
   eyeball:{name:'눈알 괴물',at:280,tip:'멈칫 노려보다가 갑자기 돌진해요',make:()=>({fx:P.createFx(FX.eyeball,{x:0,y:0,hover:10,seed:rnd(99)}),by:GY,vx:14,
     move:(o,dt)=>{if(o.x<HX+175&&!o.go){o.wait=(o.wait||0)+dt;o.vx=-8;o.y=o.by+Math.sin(o.t*40)*1.2;if(o.wait>0.45)o.go=1}else if(o.go){o.vx=130;o.y=o.by}}})},
-  skull:{name:'불꽃 해골',at:470,tip:'높이 날다가 불덩이를 뱉어요! 해골 밑에서는 뛰지 말고, 불덩이는 뛰어넘어요',make:()=>({fx:P.createFx(FX.skull,{x:0,y:0,hover:74,floor:false,seed:rnd(99)}),by:GY,vx:75})},
+  skull:{name:'불꽃 해골',at:470,tip:'불덩이를 쏘고, 갑자기 낮게 내려와요! 불덩이와 낮게 온 해골은 뛰어넘고, 높이 있을 땐 그 밑에서 뛰지 마요',make:()=>({fx:P.createFx(FX.skull,{x:0,y:0,hover:74,floor:false,seed:rnd(99)}),by:GY,vx:75})},
   fireblob:{name:'불덩이',at:1e9,tip:'해골이 뱉은 불덩이! 뛰어넘어요',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:5,seed:rnd(99),palette:['#2a0800','#6a1a04','#b83a0c','#f06a1a','#ffa63a','#ffd77a','#fff4c8']}),by:GY,vx:105})},
+  fireball:{name:'불덩이',at:1e9,tip:'해골이 나를 겨눠 쏜 불덩이! 날아오는 높이를 보고 피해요',make:()=>({fx:P.createFx(FX.wisp,{x:0,y:0,hover:0,seed:rnd(99),palette:['#4a1712','#8a1f17','#c9281f','#f2561d','#ff8a2a','#ffc23d','#fff3a6']}),by:GY,
+    move:(o,dt)=>{o.y=Math.min(GY-5,o.y+(o.vy||0)*dt);if(o.y>=GY-5&&!o.landed){o.landed=1;o.vy=0;o.vx=55}}})},
   wisp:{name:'도깨비불',at:520,tip:'높았다 낮았다, 빨랐다 느렸다 해요',make:()=>({fx:P.createFx(FX.wisp,{x:0,y:0,hover:8,seed:rnd(99)}),by:GY-4,ph:Math.random()*6,
     move:(o,dt)=>{if(o.lk==null&&tReach(o)>0.55){const s=Math.sin(o.t*2.4+o.ph);o.ty=s>0?58:0;o.vx=s>0?20:70}else o.lk=1;   // 닿기 0.55초 전부터는 높이·속도 그대로
       o.y+=((o.by-o.ty)-o.y)*Math.min(1,dt*7)}})},
@@ -238,10 +241,10 @@ function batTable(seed){if(BATC[seed])return BATC[seed];const w=128,h=112,f=P.cr
   for(let i=0;i<48;i++){P.clearFrame(f);g.draw(f,'back');g.draw(f,'front');let sx=0,sy=0,n=0;const C=f.color;
     for(let k=0;k<C.length;k++)if((C[k]>>>24)>=250){sx+=k%w;sy+=(k/w)|0;n++}out.push(n?[sx/n-64,sy/n-56]:[0,0]);g.update(2.4/48)}
   return BATC[seed]=out}
-function monPos(o){let x=o.x,y=o.y;
-  if(o.ct){const t=((o.fx.t%2.4)+2.4)%2.4,c=o.ct[Math.floor(t/2.4*48)%48];x-=c[0];y-=c[1]}
+function monPos(o){let x=o.x,y=o.y-(o.hy||0);   // hy: 따라 뛰기·솟구치기·내려오기로 바뀐 높이
+  if(o.ct){const t=((o.fx.t%2.4)+2.4)%2.4,c=o.ct[Math.floor(t/2.4*48)%48];x+=o.fx.options.flip?c[0]:-c[0];y-=c[1]}
   o.fx.options.x=Math.round(x);o.fx.options.y=Math.round(y)}
-function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;obs.push(o);
+function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;o.fx.options.flip=true;obs.push(o);   // 모든 몬스터가 캐릭터(왼쪽)를 보도록 좌우를 뒤집어 그려요
   if(!met.has(type)&&m.at>0){met.add(type);toast(`${Math.floor(dist)}m · 새 몬스터 <b>${m.name}</b>! ${m.tip}`)}else met.add(type);return o}
 const VX={bat:48,frog:38,snake:20,bird:40,ghost:90,wisp:70,butterfly:10,iceslime:62,eyeball:130,skull:75};
 function pickGroup(d,R,prev){
@@ -271,7 +274,7 @@ function wildify(o,k){o.wk=k;o.bvx=o.vx||0;o.wt=0.05+Math.random()*0.2;o.r=o.r||
   else if(t==='butterfly')o.wm='drift';
   else if(t==='bird'){o.wm='lane';o.move=null;o.lane=o.by;o.y=o.by}
   else if(t==='eyeball'){o.move=null;o.wm='stare';o.trigT=0.75+o.r()*0.35;o.wait=0.15+o.r()*0.3;o.dash=(110+o.r()*60)*(0.7+0.3*k)}
-  else if(t==='skull'){o.wm='spit'}
+  else if(t==='skull'){o.wm='skull';o.shots=DF.shots||1;o.st=0.1+o.r()*0.25;o.dive=o.r()<(DF.dive||0);o.bvx=20}
   if(o.wm==='ground'&&(t==='slime'||t==='bouncy'))o.bvx=Math.max(o.bvx,Math.round(25*k));   // 슬라임도 가만히 있지 않아요
   if(t==='snake')o.mustLunge=1;   // 뱀은 반드시 한 번 달려들어요
   o.acts=0;
@@ -299,10 +302,43 @@ function wildStep(o,dt){
     if(!o.go&&!o.st&&tReach(o)<o.trigT+o.wait)o.st=1;
     if(o.st&&!o.go){o.wait-=dt;o.vx=-8;o.y=o.by+Math.sin(o.t*40)*1.2;if(o.wait<=0){o.go=1;o.acts++}}
     else if(o.go){o.vx=o.dash;o.y=o.by}else o.vx=14;
-  }else if(o.wm==='spit'){   // 해골: 화면에 들어오면 반드시 불덩이를 한 번 뱉고 위로 날아가요
-    if(!o.spat&&o.x<W-4){o.spat=1;o.acts++;const b=addMon('fireblob',0);b.x=o.x;b.vx=(55+30*o.r())*(0.7+0.3*k);fx(FX.burst,{x:o.x,y:GY-60,light:0.9},false).scroll=1}
-    if(o.spat){o.vx=-20;o.by-=dt*40;o.y=o.by}
+  }else if(o.wm==='skull'){  // 해골: 화면 오른쪽에 멈춰 떠서 캐릭터를 겨눠 불덩이를 쏘고, 잠깐 쉰 뒤 다가와요. 다가오다 갑자기 낮게 내려와 덮치기도 해요
+    if(o.diving){o.dv=Math.min(1,o.dv+dt*2.4);o.hy=-Math.round(SKULL_DROP*(o.dv*o.dv*(3-2*o.dv)));o.vx=o.bvx+25*k}
+    else if(o.shots>0||o.rest>0){const tx=W-62;o.vx=-speed+Math.max(-10,Math.min(90,(o.x-tx)*2.2));
+      if(o.shots>0){if(o.x<W-26){o.st-=dt;if(o.st<=0){skullFire(o,k);o.shots--;o.st=1.0+o.r()*0.3;o.acts++;if(!o.shots)o.rest=0.85+o.r()*0.3}}}
+      else o.rest-=dt}
+    else{o.vx=o.bvx;const tr=tReach(o);if(o.dive&&tr<1.75&&tr>0.95){o.diving=1;o.dv=0;o.acts++;fx(FX.burst,{x:o.x,y:GY-62,light:0.7},false).scroll=1}}
   }
+}
+// 해골 불덩이: 캐릭터 바로 앞 땅(85~130px 앞)을 겨눠 내리꽂힌 뒤, 땅을 따라 캐릭터 쪽으로 빠르게 굴러와요 → 뛰어넘어요.
+// 해골은 다 쏜 뒤 0.85~1.15초 더 떠 있다가 다가와서, 불덩이를 뛰어넘다가 머리 위 해골에 부딪히는 일은 없어요.
+const SKULL_DROP=64;
+function skullFire(o,k){
+  const sx=o.x-8,sy=GY-60,tx=HX+Math.min(sx-HX-40,85+o.r()*45),ty=GY-5,d=Math.hypot(sx-tx,sy-ty);   // 캐릭터 바로 앞 땅을 겨눠요
+  const S=speed*1.1+60*k,tf=d/S;
+  const b=addMon('fireball',0);b.x=sx;b.y=sy;b.vy=(ty-sy)/tf;b.vx=(sx-tx)/tf-speed;b.fb=1;
+  fx(FX.burst,{x:sx,y:sy,light:0.9},false).scroll=1;
+}
+// 따라 하기: 캐릭터가 땅에서 뛰는 순간, 곧 닿을 몬스터가 확률(DF.react)로 반응해요. 몬스터마다 한 번만.
+//  땅 몬스터(슬라임·개구리·눈알): 따라 뛰어올라요(높이 22~34) → 길게 누르거나 2단 점프로 넘어요
+//  뱀·얼음 슬라임: 잠깐 멈칫해요 → 캐릭터가 몬스터 앞에 떨어지니 한 번 더 뛰어요
+//  하늘 몬스터(박쥐·새)가 낮게 오고 있으면: 위로 솟구쳐요 → 2단 점프로 더 높이 넘어요 (나비는 따라 뛰어요)
+function react(){
+  if(mode!=='solo'||!(DF.react>0))return;
+  obs.forEach(o=>{if(!o.wm&&!o.move)return;if(o.reacted||o.dead||o.fb||o.type==='skull')return;const tr=tReach(o);if(tr<0.12||tr>1.15)return;
+    o.reacted=1;if(Math.random()>=DF.react)return;
+    const t=o.type,k=o.wk||1,dl=0.03+Math.random()*0.12;
+    if(t==='snake'||t==='iceslime')o.rx={kind:'brake',d:dl,t:0.32+Math.random()*0.2};
+    else if(t==='slime'||t==='bouncy'||t==='frog'||t==='eyeball'||t==='butterfly'&&o.y>GY-26){if(t==='bouncy'||t==='frog'&&Math.random()<0.4)o.rx={kind:'brake',d:dl,t:0.35};else{const h=22+12*k*Math.random();o.rx={kind:'hop',d:dl,v:Math.sqrt(2*700*h)}}}
+    else if(t!=='ghost'&&t!=='wisp'&&o.y-(o.hy||0)>GY-58)o.rx={kind:'rise',d:dl,to:22+10*k};   // 유령·도깨비불은 원래 움직임만
+    if(o.rx)o.acts=(o.acts||0)+1;
+  });
+}
+function reactStep(o,dt){
+  const r=o.rx;if(r.d>0){r.d-=dt;if(r.d<=0&&r.kind==='hop')o.hvy=r.v;return}
+  if(r.kind==='hop'){o.hy=(o.hy||0)+o.hvy*dt;o.hvy-=700*dt;if(o.hy<=0){o.hy=0;o.rx=null}}
+  else if(r.kind==='brake'){r.t-=dt;o.vx=-28;o.y=o.by+Math.round(Math.sin(o.t*70));if(r.t<=0){o.vx=(o.bvx||o.vx)+30*(o.wk||1);o.rx=null}}
+  else if(r.kind==='rise'){o.hy=(o.hy||0)+(r.to-(o.hy||0))*Math.min(1,dt*9);if(o.x<HX-40)r.to=0}
 }
 // 부딪힘 판정: 몬스터가 실제로 그려진 픽셀이 캐릭터 몸과 겹치면 부딪힌 거예요
 let HF;
@@ -582,7 +618,7 @@ function heroStep(dt,sp){
 function worldStep(dt,dx){
   if(asking){obs.forEach(o=>o.fx.update(dt));items.forEach(c=>c.fx.update(dt));return}
   const hx0=HX-7,hy0=hero.y-46,hy1=hero.y-2;
-  obs.forEach(o=>{o.t+=dt;if(o.move)o.move(o,dt);if(o.wm)wildStep(o,dt);if(o.follow&&!o.follow.gone&&obs.includes(o.follow))o.vx=o.follow.vx||0;o.x-=dx+(o.vx||0)*dt;o.fx.update(dt);
+  obs.forEach(o=>{o.t+=dt;if(o.move)o.move(o,dt);if(o.wm)wildStep(o,dt);if(o.rx)reactStep(o,dt);if(o.follow&&!o.follow.gone&&obs.includes(o.follow))o.vx=o.follow.vx||0;o.x-=dx+(o.vx||0)*dt;o.fx.update(dt);
     if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
@@ -733,5 +769,5 @@ let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
-  _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX}}};
+  _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF}}};
 })();
