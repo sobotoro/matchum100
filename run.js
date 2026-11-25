@@ -8,13 +8,15 @@
    config  runOpen 게임 열기, runMax 하루 최대 판, runQuizT 퀴즈 끝내면 티켓, runPerfT 만점이면 티켓 더,
            runLock 수업 시간 잠금(평일 runFrom~runTo), runCoin 판당 코인, runCoinMax 하루 최대 코인,
            runGate 퀴즈 문 간격(m), runPen 대결 오답 벌점(초, 문 앞에서 멈춰요), runPrize "10,8,6,4,2" 대결 1~5등 코인
-   students/학번/run  {d 날짜, used 쓴 판, coin 받은 코인, best 최고 기록(m), wr 틀린 문제 id 목록}
+   students/학번/run  {d 날짜, used 쓴 판, coin 받은 코인, best 최고 기록(m), wr 틀린 문제 id 목록,
+                       ep 기록이 속한 전광판 회차, bt 최고 기록 시각, wk 이번 주 월요일, wb 이번 주 최고, wt 그 시각}
+   config  runSound 게임 소리(false면 반 전체 끔), runBoardEp 전광판 회차(선생님이 '새로 시작'하면 1 늘어요)
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261124b";
+const RUN_V="20261125a";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
-const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal"};
+const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal",runSound:true,runBoardEp:0};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
 
 /* 코인 숫자: 0 이상이면 얼마든지 (소수 둘째 자리까지) */
@@ -23,7 +25,7 @@ function runCfg(){
   const c={...RUN_DEF,...CFG};
   return {open:c.runOpen!==false,max:Math.max(1,+c.runMax||3),quizT:Math.max(0,+c.runQuizT||0),perfT:Math.max(0,+c.runPerfT||0),
     lockOn:c.runLock!==false,from:c.runFrom||"09:00",to:c.runTo||"12:10",coin:Math.max(0,+c.runCoin||0),coinMax:Math.max(0,+c.runCoinMax||0),
-    gateEvery:Math.max(60,+c.runGate||120),pen:Math.max(0,+c.runPen||0),len:[500,800,1000,1500,2000].includes(+c.runLen)?+c.runLen:1000,diff:["easy","normal","hard","crazy"].includes(c.runDiff)?c.runDiff:"normal",
+    gateEvery:Math.max(60,+c.runGate||120),pen:Math.max(0,+c.runPen||0),len:[500,800,1000,1500,2000].includes(+c.runLen)?+c.runLen:1000,diff:["easy","normal","hard","crazy"].includes(c.runDiff)?c.runDiff:"normal",sound:c.runSound!==false,ep:Math.max(0,+c.runBoardEp||0),
     prize:String(c.runPrize==null?RUN_DEF.runPrize:c.runPrize).split(",").map(x=>runNum(x)).concat([0,0,0,0,0]).slice(0,5)};
 }
 const runNow=()=>Date.now()+RUN_OFF;
@@ -91,8 +93,10 @@ async function runSoloEnd({dist,right,all,coins}){
   const r=await R("students/"+KEY).transaction(cur=>{
     if(!cur)return cur;const run=cur.run||{},day=run.d===today()?run:{...run,d:today(),used:0,coin:0};
     const rw=runReward(coins,day.coin);reward=rw.r;why=rw.why;
-    best=Math.max(+run.best||0,dist);newBest=dist>(+run.best||0)&&dist>0;todayCoin=(+day.coin||0)+reward;
-    return {...cur,wallet:r2((+cur.wallet||0)+reward),run:{...day,coin:todayCoin,best}};
+    const ep=c.ep,same=(+run.ep||0)===ep,ob=same?(+run.best||0):0,wk=monOf(today()),owb=same&&run.wk===wk?(+run.wb||0):0,now=runNow();
+    best=Math.max(ob,dist);newBest=dist>ob&&dist>0;todayCoin=(+day.coin||0)+reward;
+    const nr={...day,coin:todayCoin,best,ep,bt:newBest?now:(same?(run.bt||0):0),wk,wb:Math.max(owb,dist),wt:dist>owb&&dist>0?now:(run.wk===wk&&same?(run.wt||0):0)};
+    return {...cur,wallet:r2((+cur.wallet||0)+reward),run:nr};
   });
   if(r&&r.committed&&reward>0)await log(`달리기 연습 ${dist}m · 코인 ${coins}개 먹음 (퀴즈 ${right}/${all})`,reward).catch(()=>{});
   return {reward,best,newBest,today:todayCoin,why};
@@ -107,7 +111,7 @@ const RUN_HOST={
   title:()=>ME&&ME.grade&&ME.cls?`${ME.grade}학년 ${ME.cls}반`:(CFG.className||"우리 반"),
   cfg:runCfg,soloBlock:runBlock,ticketsLeft:runLeft,needQuiz:()=>!runQuizDone()&&runCfg().open&&!runLocked(),
   goQuiz:()=>{if(location.hash!=="#quiz")location.hash="quiz";else showTab("quiz");window.scrollTo({top:0})},
-  best:()=>+((ME&&ME.run&&ME.run.best)||0),useTicket:runUseTicket,soloEnd:runSoloEnd,pickQ:runPickQ,markQ:runMarkQ,
+  best:()=>{const r=(ME&&ME.run)||{};return (+r.ep||0)===runCfg().ep?+(r.best||0):0},useTicket:runUseTicket,soloEnd:runSoloEnd,pickQ:runPickQ,markQ:runMarkQ,
   race:runRaceState,now:runNow,racePlayers:runPlayers,
   raceJoin:rid=>R(`race/p/${KEY}`).set({rid,n:(ME&&ME.name)||KEY,x:0,y:126,pen:0,ok:0,j:SV.TIMESTAMP}),
   raceSend:(rid,o)=>R(`race/p/${KEY}`).update({...o,rid}),
@@ -141,26 +145,27 @@ function renderRun(){
   const v=$("#view-run");if(!v)return;
   if(role==="teacher"){
     const w=$("#runTWrap");
-    if(w&&window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){w.innerHTML=runTeacherHtml();runTeacherBind();RunGame.refresh();return}
-    v.innerHTML=`<div id="runTWrap">${runTeacherHtml()}</div>
+    if(w&&window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){w.innerHTML=runTeacherHtml();runTeacherBind();runBoardDraw();RunGame.refresh();return}
+    v.innerHTML=`<div id="runTWrap">${runTeacherHtml()}</div>${runBoardCard()}
     <article class="card run-card">
       <div class="t-head"><h2>학생 화면으로 연습해 보기</h2><span class="rstate">미리보기</span></div>
       <p class="t-help">학생이 보는 달리기 화면과 똑같아요. 선생님은 티켓·수업 시간 잠금 없이 몇 번이든 해 볼 수 있고, 코인·기록은 저장되지 않아요. 퀴즈 문은 지금 정한 오늘의 퀴즈 범위에서 나와요.</p>
       <div id="runMount"><p class="empty">게임을 불러오는 중…</p></div>
       <p class="run-credit">효과: pixelfx (Patch, MIT License)</p>
     </article>`;
-    runTeacherBind();
+    runTeacherBind();runBoardDraw();
     runLoad().then(()=>{const m=$("#runMount");if(m&&!m.querySelector(".rg-game"))RunGame.mount(m,RUN_HOST_T)})
       .catch(()=>{const m=$("#runMount");if(m)m.innerHTML=`<p class="empty">게임을 불러오지 못했어요. 새로 고쳐 주세요.</p>`});
     return;
   }
-  if(window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){RunGame.refresh();return}
+  if(window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){runBoardDraw();RunGame.refresh();return}
   v.innerHTML=`<article class="card run-card">
     <div class="t-head"><h2>달리기</h2><span class="rstate on">🎫 오늘 남은 판 ${runLeft()} / ${runCfg().max}</span></div>
     <div id="runMount"><p class="empty">게임을 불러오는 중…</p></div>
     <p class="t-help">오늘의 퀴즈를 끝내면 티켓이 생겨요. 달리다 나오는 퀴즈 문도 꼭 맞혀 보세요! 조작: 화면 누르기 또는 스페이스·↑·W = 점프 (길게 = 높이, 공중에서 한 번 더 = 2단 점프), 퀴즈는 ← / →.</p>
     <p class="run-credit">효과: pixelfx (Patch, MIT License)</p>
-  </article>`;
+  </article>${runBoardCard()}`;
+  runBoardDraw();
   runLoad().then(()=>{const m=$("#runMount");if(m&&!m.querySelector(".rg-game"))RunGame.mount(m,RUN_HOST)})
     .catch(()=>{const m=$("#runMount");if(m)m.innerHTML=`<p class="empty">게임을 불러오지 못했어요. 인터넷 연결을 확인하고 새로 고쳐 주세요.</p>`});
 }
@@ -171,6 +176,47 @@ function runRaceLive(){
   if(role==="student"){if(changed&&window.RunGame&&RunGame.mounted)RunGame.refresh();const b=$("#view-run .rstate");if(b)b.textContent=`🎫 오늘 남은 판 ${runLeft()} / ${runCfg().max}`}
   if(role==="teacher"&&current==="run"){if(changed)rerender();else runTeacherLive()}
 }
+
+/* ---------- 혼자 연습 전광판 ----------
+   이번 주(월요일마다 새로) / 역대 최고. 선생님이 '전광판 새로 시작'을 누르면 회차(runBoardEp)가 바뀌어 모두 0부터 다시 해요.
+   이름은 우리 반 순위표 설정(이름/번호만)을 따라요. 1~3등이 바뀌면 다른 친구 화면에 알림이 잠깐 떠요. */
+let runBoardTab="week",runBoardTop=null,runBoardSure=0;
+const runNm=(k,s)=>CFG.boardName==="번호"?`${(s&&s.num)||String(k).split("-").pop()}번`:String((s&&s.name)||k);
+function runBoardList(tab){
+  const ep=runCfg().ep,wk=monOf(today());
+  return Object.entries(STUDENTS||{}).map(([k,s])=>{const r=(s&&s.run)||{};if((+r.ep||0)!==ep)return null;
+      const m=tab==="week"?(r.wk===wk?+r.wb||0:0):+r.best||0,t=tab==="week"?+r.wt||0:+r.bt||0;
+      return m>0?{k,n:runNm(k,s),m:Math.floor(m),t}:null}).filter(Boolean)
+    .sort((a,b)=>b.m-a.m||(a.t||0)-(b.t||0));
+}
+function runBoardCard(){return `<article class="card run-board" id="runBoard"></article>`}
+function runBoardDraw(){
+  const el=$("#runBoard");if(!el)return;const list=runBoardList(runBoardTab),me=list.findIndex(x=>x.k===KEY),md=["🥇","🥈","🥉"],nowT=runNow();
+  const row=(x,i)=>`<li class="${x.k===KEY?"me":""}${i<3?" top":""}"><span class="rk">${md[i]||i+1}</span><span class="nm">${esc(x.k===KEY?x.n+" (나)":x.n)}</span><span class="mm">${x.m.toLocaleString("ko-KR")}m</span>${x.t&&nowT-x.t<864e5?`<span class="nw">새!</span>`:""}</li>`;
+  const show=list.slice(0,10);
+  el.innerHTML=`<div class="t-head"><h2>🏆 달리기 전광판</h2>
+      <div class="seg" role="group" aria-label="전광판 고르기">${[["week","이번 주"],["all","역대 최고"]].map(([k,l])=>`<button type="button" class="ghost ${runBoardTab===k?"on":""}" data-rbt="${k}" aria-pressed="${runBoardTab===k}">${l}</button>`).join("")}</div></div>
+    <p class="t-help">${runBoardTab==="week"?"혼자 연습 이번 주(월~일) 최고 기록이에요. 월요일마다 새로 시작해요.":"혼자 연습에서 세운 가장 먼 기록이에요."} 난이도: ${esc(({easy:"쉬움",normal:"보통",hard:"어려움",crazy:"아주 어려움"})[runCfg().diff])}</p>
+    ${list.length?`<ol class="rb-list">${show.map(row).join("")}${me>=10?`<li class="gap">⋯</li>${row(list[me],me)}`:""}</ol>`:`<p class="empty">${runBoardTab==="week"?"이번 주 기록이 아직 없어요. 첫 기록의 주인공이 되어 보세요!":"아직 기록이 없어요."}</p>`}
+    ${role==="teacher"?`<div class="actions"><button type="button" class="ghost" id="runBoardReset">${runBoardSure?"한 번 더 누르면 새로 시작":"전광판 새로 시작"}</button></div>
+      <p class="t-help">난이도를 바꿨을 때처럼 예전 기록과 견주기 어려울 때 눌러요. 이번 주·역대 기록이 모두 0부터 다시 시작돼요(코인은 그대로).</p><p class="msg" id="rbMsg" role="status"></p>`:""}`;
+  el.querySelectorAll("[data-rbt]").forEach(b=>b.onclick=()=>{runBoardTab=b.dataset.rbt;runBoardDraw()});
+  const rs=$("#runBoardReset");if(rs)rs.onclick=()=>{
+    if(!runBoardSure){runBoardSure=1;runBoardDraw();setTimeout(()=>{if(runBoardSure){runBoardSure=0;runBoardDraw()}},3000);return}
+    runBoardSure=0;act(rs,$("#rbMsg"),()=>R("config").update({runBoardEp:runCfg().ep+1})).then(ok=>{if(ok){runBoardDraw();const m=$("#rbMsg");if(m)m.textContent="전광판을 새로 시작했어요."}})};
+}
+/* 학생 기록이 바뀔 때: 이번 주 1~3등이 바뀌면(방금 세운 기록) 다른 친구 화면에 알림 */
+function runBoardLive(){
+  if(role==="student"&&current==="run")runBoardDraw();
+  const top=runBoardList("week").slice(0,3),sig=top.map(x=>x.k+":"+x.m).join("|");
+  if(runBoardTop===null){runBoardTop=sig;return}
+  if(sig===runBoardTop)return;const prev=runBoardTop;runBoardTop=sig;
+  const nowT=runNow(),fresh=top.map((x,i)=>({...x,i})).filter(x=>x.t&&nowT-x.t<120e3&&!prev.split("|").includes(x.k+":"+x.m)).sort((a,b)=>a.i-b.i)[0];
+  if(!fresh||fresh.k===KEY||role!=="student")return;
+  runPop(`🏆 ${esc(fresh.n)} 친구가 <b>${fresh.m.toLocaleString("ko-KR")}m</b>로 이번 주 달리기 <b>${fresh.i+1}등</b>이 됐어요!`);
+}
+function runPop(h){let el=document.getElementById("runPop");if(!el){el=document.createElement("div");el.id="runPop";el.className="run-pop";el.setAttribute("role","status");document.body.appendChild(el)}
+  el.innerHTML=h;el.classList.add("show");clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove("show"),4500)}
 
 /* ---------- 선생님: 설정 + 대결 진행 ---------- */
 function runRanking(rid){
@@ -211,6 +257,7 @@ function runTeacherHtml(){
     <div id="runLive">${runLiveHtml()}</div>
     <h3 class="run-h">⚙️ 설정</h3>
     <div class="run-set">
+      ${ck("runSoundIn",c.sound,"게임 소리 켜기 (끄면 반 전체가 조용해요)")}
       ${ck("runLockIn",c.lockOn,"수업 시간에는 잠금 (평일)")}
       <label class="t-field">잠금 시작<input type="time" id="runFromIn" value="${esc(c.from)}"></label>
       <label class="t-field">잠금 끝<input type="time" id="runToIn" value="${esc(c.to)}"></label>
@@ -233,7 +280,7 @@ function runTeacherBind(){
   const m=$("#runMsg");if(!m)return;
   const say=t=>{runTMsg=t;m.textContent=t};
   $("#runSave").onclick=()=>{runTMsg="";
-    const v={runLock:$("#runLockIn").checked,runFrom:$("#runFromIn").value||"09:00",runTo:$("#runToIn").value||"12:10",
+    const v={runSound:$("#runSoundIn").checked,runLock:$("#runLockIn").checked,runFrom:$("#runFromIn").value||"09:00",runTo:$("#runToIn").value||"12:10",
       runMax:+$("#runMaxIn").value,runQuizT:+$("#runQuizTIn").value,runPerfT:+$("#runPerfTIn").value,runCoin:runNum($("#runCoinIn").value),runCoinMax:runNum($("#runCoinMaxIn").value),
       runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runLen:+$("#runLenIn").value,runDiff:$("#runDiffIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
     act($("#runSave"),m,()=>R("config").update(v)).then(ok=>{if(ok){say("달리기 설정을 저장했어요.");renderRun()}})};

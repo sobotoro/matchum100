@@ -17,6 +17,8 @@ const CSS=`.rg-game{outline:none;position:relative;border-radius:14px;overflow:h
 .rg-game canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
 .rg-hud{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;pointer-events:none;font-weight:700;font-size:clamp(13px,2.4vw,20px);color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.35)}
 .rg-hud .l,.rg-hud .r{display:flex;gap:12px;align-items:center}
+.rg-snd{pointer-events:auto;font:inherit;font-size:clamp(13px,2.2vw,18px);line-height:1;min-width:30px;min-height:30px;border:0;border-radius:999px;background:rgba(0,0,0,.22);color:#fff;cursor:pointer;padding:2px 6px;text-shadow:none}
+.rg-snd.off{opacity:.45;text-decoration:line-through}.rg-snd:focus-visible{outline:2px solid #fff}
 .rg-toast{position:absolute;left:50%;top:40px;transform:translate(-50%,-8px);opacity:0;transition:.25s;background:rgba(20,24,40,.82);color:#fff;font-size:clamp(12px,2.2vw,16px);padding:6px 14px;border-radius:999px;white-space:nowrap;pointer-events:none;z-index:3;max-width:94%;overflow:hidden;text-overflow:ellipsis}
 .rg-toast.show{opacity:1;transform:translate(-50%,0)}.rg-toast b{color:#ffd34d}
 .rg-panel{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:4%;pointer-events:none}
@@ -74,7 +76,7 @@ const HTML=`<div class="rg-game" id="rgGame" tabindex="0">
   <div class="rg-track rg-hidden" id="rgTrack"><div class="bar"></div><div class="flag">🏁</div></div>
   <div id="rgTags"></div>
   <div class="rg-toast" id="rgToast"></div>
-  <div class="rg-hud"><div class="l"><span id="rgDist">0m</span><span id="rgCoin">🪙 0</span></div><div class="r"><span id="rgHearts">❤️❤️❤️</span></div></div>
+  <div class="rg-hud"><div class="l"><span id="rgDist">0m</span><span id="rgCoin">🪙 0</span></div><div class="r"><button type="button" class="rg-snd" id="rgSfx" aria-label="효과음 끄기">🔊</button><button type="button" class="rg-snd" id="rgBgm" aria-label="배경 음악 켜기">♪</button><span id="rgHearts">❤️❤️❤️</span></div></div>
   <div class="rg-count rg-hidden" id="rgCount">3</div>
   <div class="rg-quiz rg-hidden" id="rgQuiz"></div>
   <div class="rg-panel" id="rgPanel"><div class="rg-box" id="rgBox"></div></div>
@@ -154,7 +156,7 @@ async function soloStart(){
   starting=true;let ok=false;try{ok=await host.useTicket()}catch(e){ok=false}starting=false;
   if(!ok){showBox(`<h2>🏃 혼자 연습</h2><p>티켓을 쓰지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요.</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);$('rgMenu').onclick=e=>{e.stopPropagation();menu()};return}
   state='scount';scT=3;clearWorld();speed=100;hearts=3;newBest=false;nextObs=240;nextCoin=0.8;hideBox();hud();
-  const cn=$('rgCount');cn.textContent='3';cn.classList.remove('rg-hidden');fitView();
+  const cn=$('rgCount');cn.textContent='3';cn.classList.remove('rg-hidden');fitView();sfx('beep');
 }
 let scT=0,cntHide=0;
 
@@ -162,8 +164,8 @@ let scT=0,cntHide=0;
 // 점프: 공중에 약 1.1초, 높이 약 52. 짧게 누르면 낮게. 공중에서 한 번 더 = 2단 점프.
 const G=330,FALL_G=1.0,JV=-185,JV2=-178,CUT=0.5;
 function jump(){
-  if(hero.ground){hero.vy=JV;hero.ground=false;hero.jumps=1;hero.hold=true;react()}
-  else if(hero.jumps<2){hero.vy=JV2;hero.jumps=2;hero.hold=true;hero.dj=0.25;fx(FX.burst,{x:HX,y:hero.y+2,seed:7,light:0.5},false)}
+  if(hero.ground){hero.vy=JV;hero.ground=false;hero.jumps=1;hero.hold=true;sfx('jump');react()}
+  else if(hero.jumps<2){hero.vy=JV2;hero.jumps=2;hero.hold=true;hero.dj=0.25;sfx('jump2');fx(FX.burst,{x:HX,y:hero.y+2,seed:7,light:0.5},false)}
 }
 function press(){
   if(asking)return;
@@ -175,7 +177,7 @@ function release(){if(!hero.hold)return;hero.hold=false;if(hero.vy<0)hero.vy*=CU
 const JUMP_KEYS=['Space','ArrowUp','KeyW'],START_KEYS=['Enter','NumpadEnter'];
 const visible=()=>mounted&&root.isConnected&&!root.closest('[hidden]');
 const typingEl=()=>{const a=document.activeElement;return a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'||a.isContentEditable)};
-function onKey(e){if(!visible()||typingEl())return;const c=e.code||e.key;
+function onKey(e){if(!visible()||typingEl())return;const c=e.code||e.key;sndUnlock();
   if(asking&&!asking.res){const k={ArrowLeft:0,Digit1:0,KeyA:0,Numpad1:0,ArrowRight:1,Digit2:1,KeyD:1,Numpad2:1}[c];if(k!==undefined){e.preventDefault();answer(k);return}}
   if(asking&&(JUMP_KEYS.includes(c)||e.key===' ')){e.preventDefault();return}
   if(JUMP_KEYS.includes(c)||START_KEYS.includes(c)||e.key===' '){
@@ -183,6 +185,71 @@ function onKey(e){if(!visible()||typingEl())return;const c=e.code||e.key;
     e.preventDefault();if(e.repeat)return;
     if(START_KEYS.includes(c)&&(state==='play'||state==='race'))return;press()}}
 function onKeyUp(e){if(!visible())return;const c=e.code||e.key;if(JUMP_KEYS.includes(c)||e.key===' ')release()}
+
+// ── 소리 (Web Audio로 직접 만든 8비트 효과음·배경 음악, 파일 없음) ──
+// 선생님이 '게임 소리'를 끄면(runSound=false) 반 전체가 조용해요. 학생은 🔊(효과음)·♪(배경 음악) 버튼으로 각자 끄고 켜요.
+// 처음에는 효과음 켜짐, 배경 음악 꺼짐. 고른 것은 이 기기에 기억해요.
+const SND={ac:null,out:null,bgmOut:null,pref:{s:1,m:0},bgmT:0,step:0,next:0};
+try{const p=JSON.parse(localStorage.getItem('rg-snd')||'null');if(p)SND.pref={s:p.s?1:0,m:p.m?1:0}}catch(_){}
+const sndOn=()=>!!(host&&host.cfg().sound!==false);
+function au(){
+  if(!sndOn())return null;
+  if(!SND.ac){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
+    try{SND.ac=new AC();SND.out=SND.ac.createGain();SND.out.gain.value=0.32;SND.out.connect(SND.ac.destination);
+      SND.bgmOut=SND.ac.createGain();SND.bgmOut.gain.value=0.11;SND.bgmOut.connect(SND.ac.destination)}catch(_){SND.ac=null;return null}}
+  if(SND.ac.state==='suspended')SND.ac.resume().catch(()=>{});
+  return SND.ac;
+}
+function sndUnlock(){const a=au();if(!a)return;try{const b=a.createBuffer(1,1,22050),s=a.createBufferSource();s.buffer=b;s.connect(a.destination);s.start(0)}catch(_){}}
+function tone(f0,f1,dur,type,vol,delay,dest){
+  const a=au();if(!a)return;const t0=a.currentTime+(delay||0),o=a.createOscillator(),g=a.createGain();
+  o.type=type||'square';o.frequency.setValueAtTime(f0,t0);if(f1!==f0)o.frequency.exponentialRampToValueAtTime(Math.max(30,f1),t0+dur);
+  g.gain.setValueAtTime(0.0001,t0);g.gain.linearRampToValueAtTime(vol||0.15,t0+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  o.connect(g);g.connect(dest||SND.out);o.start(t0);o.stop(t0+dur+0.02);
+}
+function noise(dur,vol,freq,delay){
+  const a=au();if(!a)return;const t0=a.currentTime+(delay||0),n=Math.max(1,Math.floor(a.sampleRate*dur)),b=a.createBuffer(1,n,a.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);
+  const s=a.createBufferSource(),f=a.createBiquadFilter(),g=a.createGain();s.buffer=b;f.type='lowpass';f.frequency.value=freq||1200;g.gain.value=vol||0.2;
+  s.connect(f);f.connect(g);g.connect(SND.out);s.start(t0);
+}
+const SFX={
+  jump:()=>tone(300,620,0.11,'square',0.11),
+  jump2:()=>tone(520,1040,0.1,'square',0.1),
+  coin:()=>{tone(988,988,0.05,'square',0.09);tone(1319,1319,0.13,'square',0.09,0.05)},
+  hit:()=>{noise(0.22,0.28,900);tone(220,70,0.26,'sawtooth',0.14)},
+  ok:()=>[523,659,784,1047].forEach((f,i)=>tone(f,f,0.1,'square',0.09,i*0.07)),
+  ng:()=>{tone(330,247,0.16,'square',0.1);tone(247,165,0.26,'square',0.1,0.15)},
+  heart:()=>{tone(784,784,0.08,'triangle',0.16);tone(1175,1175,0.16,'triangle',0.16,0.08)},
+  gate:()=>{tone(660,660,0.07,'triangle',0.14);tone(880,880,0.12,'triangle',0.14,0.08)},
+  beep:()=>tone(440,440,0.12,'square',0.11),
+  go:()=>tone(880,880,0.32,'square',0.12),
+  fire:()=>{noise(0.3,0.18,600);tone(180,90,0.3,'sawtooth',0.07)},
+  dive:()=>tone(900,180,0.35,'sawtooth',0.07),
+  over:()=>[523,415,349,262].forEach((f,i)=>tone(f,f*0.98,0.2,'square',0.1,i*0.17)),
+  best:()=>[523,659,784,659,784,1047].forEach((f,i)=>tone(f,f,i===5?0.35:0.11,'square',0.1,i*0.1)),
+  finish:()=>[784,988,1175,1568].forEach((f,i)=>tone(f,f,0.14,'square',0.1,i*0.09)),
+};
+function sfx(k){if(SND.pref.s&&SFX[k])try{SFX[k]()}catch(_){}}
+// 배경 음악: 직접 지은 짧은 8비트 곡(32박을 되풀이). 달리는 동안에만 나와요.
+const BGM_BPM=150,BGM_MEL=[72,0,76,79,0,76,72,0,74,0,77,81,0,77,74,0,76,0,79,84,0,79,76,0,79,77,76,74,72,0,67,0],
+  BGM_BAS=[48,48,55,55,48,48,55,55,50,50,57,57,50,50,57,57,52,52,59,59,52,52,59,59,53,53,55,55,48,48,43,43];
+const mtof=m=>440*Math.pow(2,(m-69)/12);
+function bgmTick(){
+  const want=SND.pref.m&&sndOn()&&visible()&&(state==='play'||state==='race'&&!meDone)&&!asking;
+  if(!want){SND.next=0;return}
+  const a=au();if(!a||a.state!=='running')return;const sp=60/BGM_BPM/2;
+  if(!SND.next||SND.next<a.currentTime)SND.next=a.currentTime+0.05;
+  while(SND.next<a.currentTime+0.2){const i=SND.step%32,m=BGM_MEL[i],b=BGM_BAS[i],d=SND.next-a.currentTime;
+    if(m)tone(mtof(m),mtof(m),sp*0.9,'square',0.5,d,SND.bgmOut);
+    if(i%2===0)tone(mtof(b),mtof(b),sp*1.8,'triangle',0.8,d,SND.bgmOut);
+    SND.step++;SND.next+=sp}
+}
+function sndSave(){try{localStorage.setItem('rg-snd',JSON.stringify(SND.pref))}catch(_){}}
+function sndUi(){const on=sndOn(),a=$('rgSfx'),b=$('rgBgm');if(!a||!b)return;
+  a.classList.toggle('rg-hidden',!on);b.classList.toggle('rg-hidden',!on);
+  a.textContent=SND.pref.s?'🔊':'🔇';a.title=a.ariaLabel=SND.pref.s?'효과음 끄기':'효과음 켜기';
+  b.textContent='♪';b.classList.toggle('off',!SND.pref.m);b.title=b.ariaLabel=SND.pref.m?'배경 음악 끄기':'배경 음악 켜기'}
 
 // ── 몬스터 ──
 const MON={
@@ -307,7 +374,7 @@ function wildStep(o,dt){
     else if(o.shots>0||o.rest>0){const tx=W-62;o.vx=-speed+Math.max(-10,Math.min(90,(o.x-tx)*2.2));
       if(o.shots>0){if(o.x<W-26){o.st-=dt;if(o.st<=0){skullFire(o,k);o.shots--;o.st=1.0+o.r()*0.3;o.acts++;if(!o.shots)o.rest=0.85+o.r()*0.3}}}
       else o.rest-=dt}
-    else{o.vx=o.bvx;const tr=tReach(o);if(o.dive&&tr<1.75&&tr>0.95){o.diving=1;o.dv=0;o.acts++;fx(FX.burst,{x:o.x,y:GY-62,light:0.7},false).scroll=1}}
+    else{o.vx=o.bvx;const tr=tReach(o);if(o.dive&&tr<1.75&&tr>0.95){o.diving=1;o.dv=0;o.acts++;sfx('dive');fx(FX.burst,{x:o.x,y:GY-62,light:0.7},false).scroll=1}}
   }
 }
 // 해골 불덩이: 캐릭터 바로 앞 땅(85~130px 앞)을 겨눠 내리꽂힌 뒤, 땅을 따라 캐릭터 쪽으로 빠르게 굴러와요 → 뛰어넘어요.
@@ -317,7 +384,7 @@ function skullFire(o,k){
   const sx=o.x-8,sy=GY-60,tx=HX+Math.min(sx-HX-40,85+o.r()*45),ty=GY-5,d=Math.hypot(sx-tx,sy-ty);   // 캐릭터 바로 앞 땅을 겨눠요
   const S=speed*1.1+60*k,tf=d/S;
   const b=addMon('fireball',0);b.x=sx;b.y=sy;b.vy=(ty-sy)/tf;b.vx=(sx-tx)/tf-speed;b.fb=1;
-  fx(FX.burst,{x:sx,y:sy,light:0.9},false).scroll=1;
+  fx(FX.burst,{x:sx,y:sy,light:0.9},false).scroll=1;sfx('fire');
 }
 // 따라 하기: 캐릭터가 땅에서 뛰는 순간, 곧 닿을 몬스터가 확률(DF.react)로 반응해요. 몬스터마다 한 번만.
 //  땅 몬스터(슬라임·개구리·눈알): 따라 뛰어올라요(높이 22~34) → 길게 누르거나 2단 점프로 넘어요
@@ -356,7 +423,7 @@ function clearAhead(x){return !obs.some(o=>Math.abs(o.x-x)<36)}
 // ══ 퀴즈 문 ══
 // 문이 캐릭터 앞에 오면 달리기와 몬스터가 멈추고 문제가 나와요. 대결에서는 내 시계는 계속 흘러요.
 function ask(g){
-  asking={g,res:null};const q=g.q;qAll++;
+  asking={g,res:null};sfx('gate');const q=g.q;qAll++;
   $('rgQuiz').innerHTML=`<div class="qk">❓ 퀴즈 문${q.review?' · 오답 복습':''} · ${q.kind==='sd'?'속담':q.kind==='hs'?'역사':'맞춤법'}</div>
     <div class="qs">${esc(q.s).replace('___','<u>&nbsp;?&nbsp;</u>')}</div>
     <div class="qo${q.opts.some(o=>String(o).length>10)?' long':''}"><button type="button" id="rgQa0">${esc(q.opts[0])}</button><button type="button" id="rgQa1">${esc(q.opts[1])}</button></div>
@@ -368,11 +435,11 @@ function answer(i){
   if(!asking||asking.res)return;const g=asking.g,q=g.q,ok=q.opts[i]===q.ans;asking.res=ok?'ok':'ng';g.ok=ok;
   $('rgQa'+i).classList.add(ok?'ok':'ng');if(!ok)$('rgQa'+(1-i)).classList.add('ok');
   if(ok){qRight++;$('rgQf').innerHTML='정답! '+(mode==='race'?'🚀 잠깐 빨라져요':hearts<3?'❤️ 하트 1개 회복':'🪙 코인 +1');
-    if(mode==='race')hero.boost=1.6;else if(hearts<3)hearts++;else coins++;
+    const healed=mode!=='race'&&hearts<3;if(mode==='race')hero.boost=1.6;else if(hearts<3)hearts++;else coins++;sfx('ok');if(healed)setTimeout(()=>sfx('heart'),330);
     fx(FX.burst,{x:g.x,y:GY-40,light:0.9},false).scroll=1}
   else{const pen=mode==='race'?host.cfg().pen:0;
     $('rgQf').innerHTML=`땡! 정답은 <b>${esc(q.ans)}</b>${q.e?' — '+q.e:''}`+(pen?`<div class="qpen">⏳ 벌점! <b id="rgPenT">${pen}</b>초 동안 멈춰요</div>`:'');
-    if(mode==='race'){mePw+=pen;asking.pen=pen}else wrongs.push(q)}
+    if(mode==='race'){mePw+=pen;asking.pen=pen}else wrongs.push(q);sfx('ng')}
   if(mode==='solo')host.markQ(q,ok);
   // 대결 오답: 벌점 시간만큼 문 앞에 멈춰 있어요 (시계는 계속 가요). 화면을 눌러도 풀리지 않아요.
   asking.wait=ok?0.7:Math.max(1.9,asking.pen||0);hud();if(mode==='race')sendNow=true;
@@ -442,7 +509,7 @@ function raceSend(dt){
   sendT-=dt;if(!sendNow&&sendT>0)return;sendT=0.3;sendNow=false;
   host.raceSend(rid,{x:Math.round(meX),y:Math.round(hero.y),s:hero.stun>0||hero.hurtT<0.6?1:0,q:asking?1:0,pen:mePen,pw:mePw,ok:qRight,...(meDone?{done:true,tm:Math.round(meTime*100)/100}:{})}).catch(()=>{});
 }
-function meFinish(){meDone=true;meTime=raceT;overT=0;sendNow=true;raceSend(0);
+function meFinish(){meDone=true;meTime=raceT;overT=0;sendNow=true;raceSend(0);sfx('finish');
   const myRec=meTime+mePen,better=host.racePlayers(rid).filter(p=>!p.me&&p.done&&p.tm+(p.pen||0)<myRec).length;newBest=better<3;
   if(newBest){fx(FX.confetti,{x:60,y:GY},false);fx(FX.confetti,{x:180,y:GY,seed:5},false)}
   hud();setTimeout(()=>{if(state==='race')showResult()},1500)}
@@ -622,7 +689,7 @@ function worldStep(dt,dx){
     if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
-    const cy=c.y-19;if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
+    const cy=c.y-19;if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;sfx('coin');fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
   items=items.filter(c=>c.x>-20&&!c.got);
   inv=Math.max(0,inv-dt);
   fxs.forEach(e=>{if(e.scroll)e.fx.options.x-=dx});
@@ -637,7 +704,7 @@ function endAnim(dt){
 // ── 업데이트 ──
 function update(dt){
   if(state==='scount'){
-    scT-=dt;hero.key=idleKey();$('rgCount').textContent=scT>0?Math.ceil(scT):'출발!';if(scT<=0){state='play';cntHide=0.7}
+    const pc=Math.ceil(scT);scT-=dt;hero.key=idleKey();$('rgCount').textContent=scT>0?Math.ceil(scT):'출발!';if(Math.ceil(scT)!==pc)sfx(scT>0?'beep':'go');if(scT<=0){state='play';cntHide=0.7}
   }else if(state==='play'){
     if(cntHide>0){cntHide-=dt;if(cntHide<=0)$('rgCount').classList.add('rg-hidden')}
     if(!asking)t+=dt;speed=baseSpeed(t);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;   // 코인을 먹으면 잠깐 빨라져요
@@ -651,6 +718,7 @@ function update(dt){
     hero.key=idleKey();raceWatch();
   }else if(state==='count'){
     const left=(startLocal-host.now())/1000;$('rgCount').textContent=left>3?'준비!':left>0?Math.ceil(left):'출발!';hero.key=idleKey();
+    {const c=left>3?9:left>0?Math.ceil(left):0;if(SND.cd!==c){if(SND.cd!=null&&c<=3)sfx(c?'beep':'go');SND.cd=c}}
     if(left<=0&&state==='count'){state='race';raceT=Math.max(0,-left);sendNow=true}
     raceWatch();
   }else if(state==='race'||state==='result'){
@@ -674,7 +742,7 @@ function update(dt){
   fxs.forEach(e=>e.fx.update(dt));fxs=fxs.filter(e=>e.keep||!e.fx.done());
 }
 function hit(o){
-  shake=0.25;hero.hurtT=0;
+  shake=0.25;sfx('hit');hero.hurtT=0;
   fx(FX.blunt,{x:HX+4,y:hero.y-18,height:16,light:0.8},false);
   const p=fx(FX.poof,{x:o.x,y:o.y,light:0.5},false);p.scroll=1;o.gone=1;
   if(mode==='race'){hero.stun=1.0;inv=1.4;sendNow=true;return} // 대결: 탈락 없이 1초 비틀
@@ -684,7 +752,7 @@ async function gameOver(){
   state='over';overT=0;cntHide=0;$('rgCount').classList.add('rg-hidden');const d=Math.floor(dist);
   let res={reward:0,best:host.best(),newBest:false,today:0};
   try{res=await host.soloEnd({dist:d,right:qRight,all:qAll,coins})}catch(e){}
-  newBest=res.newBest;
+  newBest=res.newBest;sfx(newBest?'best':'over');
   if(newBest){fx(FX.confetti,{x:60,y:GY},false);fx(FX.confetti,{x:180,y:GY,seed:5},false)}
   setTimeout(()=>{if(state!=='over')return;const c=host.cfg(),tl=host.ticketsLeft(),sb=host.soloBlock();
     showBox(`<h2>${newBest?'<span class="new">새 최고 기록!</span>':'수고했어요!'}</h2><p class="big">${d}m</p>
@@ -743,7 +811,7 @@ function render(dt){
 }
 let last=0;
 function loop(ts){raf=requestAnimationFrame(loop);const dt=Math.min(0.033,(ts-(last||ts))/1000);last=ts;
-  if(!visible()||!atlas)return;update(dt);render(dt)}
+  bgmTick();if(!visible()||!atlas)return;update(dt);render(dt)}
 
 // ── 붙이기 / 떼기 ──
 function mount(el,h){
@@ -754,7 +822,10 @@ function mount(el,h){
   fB=null;HF=P.createFrame(14,44);
   AT=window.RUN_ATLAS;const im=new Image();im.onload=()=>{atlas=im};im.src=AT.src;
   const gm=$('rgGame');
-  gm.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;e.preventDefault();gm.focus({preventScroll:true});press()});
+  gm.addEventListener('pointerdown',e=>{sndUnlock();if(e.target.closest('button'))return;e.preventDefault();gm.focus({preventScroll:true});press()});
+  gm.addEventListener('touchend',sndUnlock,{passive:true});
+  const sb=(id,k)=>{const b=$(id);b.addEventListener('pointerdown',e=>e.stopPropagation());b.onclick=e=>{e.stopPropagation();SND.pref[k]=SND.pref[k]?0:1;sndSave();sndUi();if(k==='s'&&SND.pref.s)sfx('coin');gm.focus({preventScroll:true})}};
+  sb('rgSfx','s');sb('rgBgm','m');sndUi();
   window.addEventListener('pointerup',release);window.addEventListener('pointercancel',release);
   window.addEventListener('keydown',onKey);window.addEventListener('keyup',onKeyUp);window.addEventListener('resize',onResize);
   mounted=true;menu();last=0;raf=requestAnimationFrame(loop);
@@ -767,7 +838,7 @@ function unmount(){
 // 창 크기가 바뀌면 게임 중이 아닐 때만 혼자 연습 화면 폭을 다시 맞춰요.
 let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&mode==='solo'&&(state==='menu'||state==='ready'))setView(soloW())},200)}
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
-function refresh(){if(!mounted)return;if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
+function refresh(){if(!mounted)return;sndUi();if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
   _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF}}};
 })();

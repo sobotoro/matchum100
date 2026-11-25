@@ -1661,7 +1661,7 @@ function setupData(user){
   offAll();
   on(R("config"),s=>{CFG={...DEF_CFG,...(s.val()||{})};renderBrand();rerender();popCheck()});
   on(R("shop"),s=>{SHOP=s.exists()?s.val():DEF_SHOP;if(role==="teacher"&&current==="teacher"&&!typing())TSHOP=null;rerender()});
-  on(R("students"),s=>{STUDENTS=s.val()||{};renderBrand();if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender();popCheck()}}else rerender()});
+  on(R("students"),s=>{STUDENTS=s.val()||{};renderBrand();if(typeof runBoardLive==="function")try{runBoardLive()}catch(_){}if(role==="student"){const mine=STUDENTS[KEY];if(mine){const first=!ME;ME=mine;renderMe();if(first){payInterest();showTab(location.hash.slice(1)||"quiz")}else rerender();popCheck()}}else rerender()});
   if(role==="student"){
     on(R("logs/"+KEY).limitToLast(25),s=>{LOGS=Object.values(s.val()||{}).sort((a,b)=>b.t-a.t);renderBell();if(current==="bank")rerender()});
     on(R("purchases/"+KEY),s=>{BUYS=Object.entries(s.val()||{}).map(([id,v])=>({id,...v})).sort((a,b)=>b.t-a.t);renderBell();if(current==="shop")rerender()});
