@@ -269,7 +269,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",subjs:"",hUnits:"1,2,3",hTimer:30,sRange:"1-25",sTimer:30,feeRate:0,feeMin:1,shortDays:3,shortRate:0,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,passPct:0,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",subjs:"",hUnits:"1,2,3",hTimer:30,sRange:"1-25",sTimer:30,feeRate:0,feeMin:1,shortDays:3,shortRate:0,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -834,6 +834,8 @@ function pools(){
           hs:!c.sub.has("hs")?[]:ALL.filter(q=>q.type==="hs"&&c.hunits.has(q.u))};
 }
 function pool(){const p=pools();return [...p.sp,...p.sd,...p.hs]}
+const passPct=()=>Math.max(0,Math.min(100,Math.round(+CFG.passPct||0)));   // 기준 점수(0이면 끔). 이보다 낮으면 오늘의 도전 코인이 없어요
+const passNeed=n=>{const p=passPct();if(!p||!n)return 0;for(let r=0;r<=n;r++)if(Math.round(r/n*100)>=p)return r;return n};
 const takeN=()=>{const n=pool().length,k=+CFG.count||0;return k&&k<n?k:n};
 /* 오늘 낼 문제: 속담은 되도록 서로 다른 속담에서 뽑고, 과목을 여러 개 고르면 고른 과목끼리 똑같이 나눠 내요.
    한 과목의 문제가 모자라면 남는 몫은 다른 과목이 채워요. */
@@ -917,7 +919,7 @@ function renderStart(){
     <p class="kind">오늘의 도전 · ${md(today())}</p>
     <h2>${subjTitle(c)} 퀴즈 ${n}문제</h2>
     <p class="t-help">하루에 한 번만 도전할 수 있어요. 시작하면 끝까지 풀어야 해요.</p>
-    <ul class="rules">${tline?`<li>${tline} 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li><li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
+    <ul class="rules">${tline?`<li>${tline} 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li>${passPct()?`<li class="pass-rule"><b>기준 점수 ${passPct()}점</b>: ${takeN()}문제 중 <b>${passNeed(takeN())}문제 이상</b> 맞혀야 코인을 받아요. 기준 점수보다 낮으면 이번에는 코인이 없어요.</li>`:""}<li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
     <p class="msg" id="startMsg" role="status"></p>
     <div class="actions"><button type="button" class="primary" id="goBtn" ${n?"":"disabled"}>도전 시작</button></div>
   </article>`;
@@ -935,7 +937,7 @@ function renderDoneOnly(qz){
   $("#stage").innerHTML=`<article class="card">
     <p class="kind">오늘의 도전 · ${md(today())}</p>
     <h2>오늘 도전은 끝났어요</h2>
-    <p class="t-help">${qz.total?`${qz.total}문제 중 ${qz.right}문제를 맞혀서 ${fmt(qz.coins)}코인을 받았어요. `:""}내일 또 도전할 수 있어요. 그동안 오답 노트로 연습해 보세요.</p>
+    <p class="t-help">${qz.total?(qz.below?`${qz.total}문제 중 ${qz.right}문제를 맞혔어요. 기준 점수 ${qz.below}점보다 낮아서 코인은 없었어요. `:`${qz.total}문제 중 ${qz.right}문제를 맞혀서 ${fmt(qz.coins)}코인을 받았어요. `):""}내일 또 도전할 수 있어요. 그동안 오답 노트로 연습해 보세요.</p>
   </article>`;
 }
 function resumeChallenge(qz){
@@ -1015,14 +1017,15 @@ function finishChallenge(){
   const send=()=>act(null,$("#doneMsg"),async()=>{
     const cur=(await R("students/"+KEY).once("value")).val()||{};
     const qz=cur.quiz||{};
-    if(qz.state==="완료"){Q.coins=qz.coins||0;return}
+    if(qz.state==="완료"){Q.coins=qz.coins||0;Q.below=qz.below||0;return}
     const msAll={...(qz.ms||{}),...(Q.ms||{})},fs=(+CFG.fastSec||5)*1000;
     const fast=+CFG.fastBonus>0?Q.res.filter((r,i)=>r.ok&&baseSec(r.q)>0&&msAll[i]!=null&&+msAll[i]<=fs).length:0;
-    const coins=right*(+CFG.coinPer||0)+(right===total&&total>0?(+CFG.bonus||0):0)+fast*(+CFG.fastBonus||0);
+    const pp=passPct(),score=total?Math.round(right/total*100):0,below=pp>0&&score<pp;
+    const coins=below?0:right*(+CFG.coinPer||0)+(right===total&&total>0?(+CFG.bonus||0):0)+fast*(+CFG.fastBonus||0);
     await upd({wallet:r2((+cur.wallet||0)+coins),qCount:(+cur.qCount||0)+1,qRight:(+cur.qRight||0)+right,
-      quiz:{date:qz.date||today(),state:"완료",right,total,coins,fast}});
+      quiz:{date:qz.date||today(),state:"완료",right,total,coins,fast,...(below?{below:pp}:{})}});
     if(coins>0)await log(`오늘의 퀴즈 (${total}문제 중 ${right}문제)`,coins);
-    Q.coins=coins;
+    Q.coins=coins;Q.below=below?pp:0;
   }).then(ok=>{if(ok){Q.finished=true;renderEnd();renderNotes()}else if($("#doneBtn")){$("#doneBtn").hidden=false}});
   $("#doneBtn").onclick=send;send();
 }
@@ -1040,7 +1043,7 @@ function renderEnd(){
     <div class="score"><div class="score-num">${score}점${score>=80?CIRCLE.replace('class="mark"','class=""'):""}</div>
       <div class="score-txt"><strong>${total}문제 중 ${right}문제 맞혔어요</strong>
       ${avg?`<span class="empty">한 문제 평균 ${avg.toFixed(1)}초${lateN?` · 시간 초과 ${lateN}문제`:""}</span>`:""}
-      ${ch?`<p class="earned">+${fmt(Q.coins||0)}코인을 지갑에 넣었어요</p><span class="empty">내일 또 도전할 수 있어요.</span>${typeof runLeft==="function"&&runLeft()>0?`<p class="run-ticket">🎫 달리기 티켓 ${runLeft()}장을 받았어요! <a href="#run">달리러 가기 →</a></p>`:""}`:""}</div></div>
+      ${ch?`${Q.below?`<p class="earned below">기준 점수 ${Q.below}점보다 낮아서 이번에는 코인이 없어요</p>`:`<p class="earned">+${fmt(Q.coins||0)}코인을 지갑에 넣었어요</p>`}<span class="empty">내일 또 도전할 수 있어요.</span>${typeof runLeft==="function"&&runLeft()>0?`<p class="run-ticket">🎫 달리기 티켓 ${runLeft()}장을 받았어요! <a href="#run">달리러 가기 →</a></p>`:""}`:""}</div></div>
     ${wrong.length?`<p class="kind">다시 보기</p>`:""}
     ${list}
     <div class="actions">
@@ -1455,8 +1458,10 @@ function renderTeacher(){
       <div class="row2">
         <label class="t-field" for="cPer">맞힌 문제당 코인<input type="number" id="cPer" min="0" step="1" value="${esc(c.coinPer)}"></label>
         <label class="t-field" for="cBonus">만점 보너스 코인<input type="number" id="cBonus" min="0" step="1" value="${esc(c.bonus)}"></label>
+        <label class="t-field" for="cPass">기준 점수 (점, 0이면 끄기)<input type="number" id="cPass" min="0" max="100" step="5" inputmode="numeric" value="${esc(+c.passPct||0)}"></label>
         <label class="t-field" for="cRate">은행 금리 (1주일 이율 %)<input type="number" id="cRate" min="0" max="50" step="0.05" value="${esc(c.rate)}"></label>
       </div>
+      <p class="t-help">오늘의 도전 점수(맞힌 문제 ÷ 문제 수 × 100)가 기준 점수보다 낮으면 그날은 코인(번개·만점 보너스 포함)을 주지 않아요. 달리기 티켓은 그대로 받아요.</p>
       <p class="t-help">한국은행 기준금리는 연 3.00%예요(2026년 10월 22일 동결, 다음 결정 11월 26일). 바뀌면 숫자만 고쳐 저장하세요.</p>
     </div>
     <div class="t-sec"><h3>주식 수수료</h3>
@@ -1532,7 +1537,7 @@ function renderTeacher(){
   tMsgTxt="";
   $("#cSave").onclick=()=>{
     const v={feeRate:r2(clampN($("#cFeeRate").value,0,10)),feeMin:r2(clampN($("#cFeeMin").value,0,1e6)),shortDays:+$("#cShortDays").value||0,shortRate:r2(clampN($("#cShortRate").value,0,10)),...subjSave(),sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
-      coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
+      coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),passPct:Math.max(0,Math.min(100,Math.round(+$("#cPass").value||0))),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
       className:$("#cClass").value.trim()||"우리 반",siteName:$("#cSite").value.trim().slice(0,20)||"CLASS LAB",classTag:$("#cTag").value.trim().slice(0,12),tagline:$("#cTagline").value.trim().slice(0,40),board:$("#cBoard").value,boardName:$("#cBName").value,
       mealOn:$("#cMealOn").value==="1",mealLink:$("#cMealLink").value==="1",mealCoins:Math.max(0,Math.round(+$("#cMealCoins").value||0)),
       mealFrom:$("#cMealFrom").value||"12:30",mealTo:$("#cMealTo").value||"13:40",mealSeen:$("#cMealSeen").value==="1"};

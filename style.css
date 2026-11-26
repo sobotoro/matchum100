@@ -159,6 +159,8 @@ button.ghost:disabled,button.secondary:disabled{opacity:.4;cursor:not-allowed}
 .rules{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:2px}
 .rules b{font-family:var(--f-display);font-weight:700;color:var(--coin)}
 .earned{margin:0;font-family:var(--f-display);font-weight:700;font-size:1.25rem;color:var(--coin)}
+.earned.below{color:var(--muted);font-size:1.05rem}
+.rules .pass-rule{color:var(--ink)}
 .lbl{font-size:.82rem;color:var(--muted)}
 .acct{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:480px){.acct{grid-template-columns:1fr}}
