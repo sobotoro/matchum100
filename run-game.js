@@ -110,7 +110,7 @@ function setView(w){if(w===W&&fB)return;W=w;cv.width=W;cv.height=H;ctx=cv.getCon
   fB=P.createFrame(W,H+2*FM,0,-FM);fF=P.createFrame(W,H+2*FM,0,-FM);LB=mkLayer();LF=mkLayer();$('rgGame').style.aspectRatio=W+'/'+H;root.style.setProperty('--rg-ar',(W/H).toFixed(3))}
 const FM=70;   // 몬스터·코인 그림판은 화면 위아래로 70씩 더 넓어요 (언덕·다리 위에서 위쪽이 잘리지 않게)
 function mkLayer(){const c=document.createElement('canvas');c.width=W;c.height=H+2*FM;return{c,x:c.getContext('2d'),d:new ImageData(W,H+2*FM)}}
-function clearWorld(){setDiff();terReset(mode==='race'?0:host.cfg().hill);setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
+function clearWorld(){FORKS=[];FORK.req=0;FORK.met=0;FORK.every=mode==='race'?0:(+host.cfg().fork||0);FORK.next=FORK.every?Math.round(FORK.every*0.5):0;setDiff();terReset(mode==='race'?0:host.cfg().hill);setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.plat=false;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
   obs=[];items=[];fxs=[];camY=0;inv=0;shake=0;coins=0;dist=0;t=0;met.clear();toastT=0;$('rgToast').classList.remove('show');
   gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0;mePw=0}
 function hud(){
@@ -165,7 +165,7 @@ let scT=0,cntHide=0;
 // 점프: 공중에 약 1.1초, 높이 약 52. 짧게 누르면 낮게. 공중에서 한 번 더 = 2단 점프.
 const G=330,FALL_G=1.0,JV=-185,JV2=-178,CUT=0.5;
 function jump(){
-  if(hero.ground){hero.vy=JV-Math.max(0,SLP(HX))*speed*0.55;hero.ground=false;hero.jumps=1;hero.hold=true;sfx('jump');react()}
+  if(hero.ground){const fb=hero.plat;hero.vy=JV-Math.max(0,SLP(HX))*speed*0.55;hero.ground=false;hero.plat=false;hero.jumps=1;hero.hold=true;sfx('jump');if(!fb)react()}
   else if(hero.jumps<2){hero.vy=JV2;hero.jumps=2;hero.hold=true;hero.dj=0.25;sfx('jump2');fx(FX.burst,{x:HX,y:hero.y+2,seed:7,light:0.5},false)}
 }
 function press(){
@@ -271,22 +271,76 @@ function terStep(R,L,limit){   // 다음 한 조각(평지 또는 비탈). limit
   const len=Math.min(room,Math.max(90,Math.abs(nh-TER.h)*L.len)+R()*60);TER.segs.push({x0:TER.end,x1:TER.end+len,a:TER.h,b:nh});TER.end+=len;TER.h=nh}
 function terReset(lvl){TER.lvl=lvl|0;TER.race=0;TER.h=0;TER.sf=1;const x=scroll+W+60;TER.segs=[{x0:scroll-2000,x1:x,a:0,b:0}];TER.end=x}
 function terGen(upto){const L=TER_LV[TER.lvl];if(!L||TER.race)return;
-  while(TER.end<upto)terStep(Math.random,L,Infinity);
+  while(TER.end<upto){if(FORK.req){const len=FORK_LEN+420;TER.segs.push({x0:TER.end,x1:TER.end+len,a:TER.h,b:TER.h});forkMake(TER.end+200);TER.end+=len;FORK.req=0;FORK.next=dist+FORK.every;continue}terStep(Math.random,L,Infinity)}
   while(TER.segs.length>2&&TER.segs[1].x1<scroll-120)TER.segs.shift()}
-function terBuildRace(seed,lvl,gts){
+function terBuildRace(seed,lvl,gts,every,mons){
   TER.lvl=lvl|0;TER.race=1;TER.h=0;TER.sf=1;const L=TER_LV[TER.lvl];
+  // 갈림길 자리: 퀴즈 문(±220)·출발(1500 전)·결승선(앞 900)과 겹치지 않는 곳. 그 구간의 몬스터는 빼고 아랫길 슬라임 2마리를 넣어요.
+  FORKS=[];if(every>0){const R2=rng((seed^0x2545f491)>>>0),bl=[[-1e9,1500],...gts.map(g=>[g.x-220,g.x+220]),[FIN-900,1e9]].sort((a,b)=>a[0]-b[0]);let lastS=-1e9;
+    for(let i=0;i+1<bl.length;i++){const a=bl[i][1]+200,b=bl[i+1][0]-FORK_LEN-160;if(b<a)continue;   // 퀴즈 문 사이 빈 구간마다 가운데쯤 하나
+      const s0=Math.round((a+b)/2+(R2()-0.5)*Math.min(200,b-a));if(s0-lastS<every*PXM*0.75)continue;lastS=s0;
+      withSeed((R2()*1e9)|0,()=>forkMake(s0));const f=FORKS[FORKS.length-1];f.gaps=f.gaps.slice(0,1);
+      for(let k=mons.length-1;k>=0;k--)if(mons[k].x>s0-260&&mons[k].x<f.e+160)mons.splice(k,1);
+      mons.push({x:s0+200,type:'slime',sd:(R2()*1e9)|0,under:1},{x:s0+340,type:'slime',sd:(R2()*1e9)|0,under:1})}
+    mons.sort((a,b)=>a.x-b.x)}
   TER.segs=[{x0:-1e6,x1:540,a:0,b:0}];TER.end=540;if(!L){TER.segs[0].x1=1e9;TER.end=1e9;return}
-  const R=rng((seed^0x5bd1e995)>>>0),prot=[...gts.map(g=>[g.x-180,g.x+180]),[FIN-260,FIN+4000]];
+  const R=rng((seed^0x5bd1e995)>>>0),prot=[...gts.map(g=>[g.x-180,g.x+180]),...FORKS.map(f=>[f.s-200,f.e+160]),[FIN-260,FIN+4000]].sort((a,b)=>a[0]-b[0]);
   while(TER.end<FIN+3000){const p=prot.find(([a,b])=>b>TER.end);
     if(p&&p[0]<=TER.end+1){TER.segs.push({x0:TER.end,x1:p[1],a:TER.h,b:TER.h});TER.end=p[1];continue}
     terStep(R,L,p?p[0]:Infinity)}
 }
-function TH(sx){if(!TER_LV[TER.lvl])return 0;const w=terW(sx);if(!TER.race&&w>TER.end-2)terGen(w+400);
+function THb(sx){if(!TER_LV[TER.lvl])return 0;const w=terW(sx);if(!TER.race&&w>TER.end-2)terGen(w+400);
   for(const g of TER.segs)if(w<g.x1){if(w<g.x0)return g.a;const k=(w-g.x0)/(g.x1-g.x0),e=k*k*(3-2*k);return g.a+(g.b-g.a)*e}return TER.h}
 const SLP=sx=>(TH(sx+3)-TH(sx-3))/6;   // 오른쪽으로 오르면 +
 const flatAt=(sx,r)=>{const h=TH(sx);for(let d=-r;d<=r;d+=20)if(Math.abs(TH(sx+d)-h)>0.5)return false;return true};
 // 오르막에서는 느려지고(가파를수록 더) 내리막에서는 빨라져요(최대 1.3배). 비탈 위를 달릴 때만이고, 평지나 공중에서는 곧바로 원래 속도로 돌아와요.
 function terSpeed(dt){const sl=hero.ground&&!hero.plat?SLP(HX):0,tf=Math.max(0.55,Math.min(1.3,sl>0?1-0.95*sl:1+0.9*-sl));TER.sf+=(tf-TER.sf)*Math.min(1,dt*(Math.abs(tf-1)<Math.abs(TER.sf-1)?8:3));return TER.sf}   // 비탈을 벗어나면(평지·공중) 0.3초 안에 원래 속도로
+
+
+// ══ 갈림길 ══
+// ⬆⬆ 표지판 뒤에서 2단 점프로 나무다리(윗길)에 오르거나, 그냥 아래로 내려가는 길(아랫길)로 가요. 다리가 끝나기 전에 아랫길이 원래 높이로 올라와 두 길이 만나요.
+// 윗길: 코인(혼자 연습)이 있지만 다리에 틈이 있어 떨어지면 아랫길로. 아랫길: 낮은 몬스터 2마리, 다리 밑에서도 한 번 뛸 공간이 있어요.
+// 혼자 연습은 선생님이 정한 간격(runFork m)마다, 대결은 대결 번호로 모두 같은 자리에(퀴즈 문·출발·결승선과 겹치지 않게) 나와요.
+const BR=62,DIP=48,FORK_LEN=640;   // 다리 높이(한 번 점프(52)로는 안 닿고 2단 점프로만), 아랫길 깊이(다리 밑에서도 한 번 점프할 공간), 갈림길 길이
+let FORKS=[],FORK={every:0,next:0,req:0,met:0};
+function forkMake(s0){const b0=s0+60,b1=s0+FORK_LEN,n=DF.name==='쉬움'||DF.name==='보통'?1:2,gw=DF.name==='아주 어려움'?52:44,gaps=[];
+  for(let i=0;i<n;i++){for(let k=0;k<20;k++){const a=b0+90+Math.random()*(b1-b0-220);if(gaps.every(g=>Math.abs(g[0]-a)>140)){gaps.push([a,a+gw]);break}}}
+  FORKS.push({s:s0,b0,b1,e:b1,gaps,sp:0})}
+function forkDip(w){let d=0;for(const f of FORKS){const sm=k=>{k=Math.max(0,Math.min(1,k));return k*k*(3-2*k)};
+    if(w>f.s-20&&w<f.b1-100)d=Math.max(d,DIP*(w<f.s+120?sm((w-f.s+20)/140):w>f.b1-240?1-sm((w-f.b1+240)/140):1))}return d}
+function TH(sx){return THb(sx)-(FORKS.length?forkDip(terW(sx)):0)}
+function platY(sx){const w=terW(sx);for(const f of FORKS)if(w>=f.b0&&w<=f.b1&&!f.gaps.some(g=>w>=g[0]&&w<=g[1]))return GY-THb(sx)-BR;return null}
+const terS=w=>w-(TER.race?meX-HX:scroll);   // 언덕 지도 위치 → 화면 x
+function forkNear(sx,r){const w=terW(sx);return FORKS.some(f=>w>f.s-r-140&&w<f.e+r)}
+
+function forkStep(){
+  if(!FORK.every||mode!=='solo')return;
+  if(dist>=FORK.next&&!FORK.req){if(TER_LV[TER.lvl])FORK.req=1;else{forkMake(scroll+W+220);FORK.next=dist+FORK.every}}
+  FORKS=FORKS.filter(f=>f.e+200>scroll);
+  for(const f of FORKS){if(f.sp||f.s-120-scroll>W+40)continue;f.sp=1;
+    if(!FORK.met){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(코인·틈 조심), 아니면 아랫길(몬스터)')}
+    const at=w=>w-scroll;
+    // 아랫길 몬스터 2마리 (다리 밑에서도 피할 수 있는 낮은 몬스터만)
+    [f.s+200,f.s+340].forEach((w,i)=>{const k=['slime','snake','iceslime'][(Math.random()*3)|0];const o=addMon(k,0);o.x=at(w);o.under=1;if(DF.wild)wildify(o,DF.wild)});
+    // 윗길 코인 (틈 위에서는 높게)
+    for(let w=f.b0+40;w<f.b1-20;w+=64){const g=f.gaps.some(q=>w>q[0]-30&&w<q[1]+30);items.push({x:at(w),y:GY-14+19-(g?18:0),br:1,fx:P.createFx(FX.coinSpin,{x:0,y:0,seed:(w|0)%7})})}
+    // 아랫길 코인 3개
+    for(let i=0;i<3;i++)addCoin(at(f.s+270+i*14),GY-14+19);
+  }
+}
+function drawForks(){
+  for(const f of FORKS){
+    // 표지판
+    const sx=Math.round(terS(f.s-60));if(sx>-20&&sx<W+20){const gy=Math.round(GY-THb(sx));ctx.fillStyle='#6b4423';ctx.fillRect(sx,gy-26,2,26);
+      ctx.fillStyle='#ffd34d';ctx.fillRect(sx-11,gy-38,24,14);ctx.fillStyle='#7a4a12';ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillText('⬆⬆',sx+1,gy-27);ctx.textAlign='left'}
+    // 다리: 기둥 → 판자 (틈은 비워요)
+    const o0=TER.race?meX-HX:scroll;for(let w=Math.max(f.b0,o0-4);w<=Math.min(f.b1,o0+W+4);w++){const x=Math.round(w-o0);if(f.gaps.some(g=>w>=g[0]&&w<=g[1]))continue;
+      const top=Math.round(GY-THb(x)-BR);
+      if((Math.round(w)-Math.round(f.b0))%40<3){ctx.fillStyle='#5a3a1e';ctx.fillRect(x,top+5,1,Math.round(GY-TH(x))-top-5)}
+      ctx.fillStyle='#c08a4a';ctx.fillRect(x,top,1,2);ctx.fillStyle='#8b5a2b';ctx.fillRect(x,top+2,1,3);
+      if((Math.round(w)%12)===0){ctx.fillStyle='#6b4423';ctx.fillRect(x,top,1,5)}}
+  }
+}
 
 // ── 몬스터 ──
 const MON={
@@ -362,7 +416,7 @@ function gapAfter(d,sp,group,R){const lvl=Math.min(1,d/(700*DF.at)),vxMax=Math.m
   const g=(Math.max(170,sp*(2.3-lvl*0.7))+R()*(170-lvl*60))*DF.gap;
   return Math.max(g,170,sp*1.15)+vxMax*1.2}   // 점프 한 번(약 1.1초) 뒤 바로 다시 뛸 수 있는 간격은 꼭 남겨요
 let lastMon=null;
-function spawnObs(){const g=pickGroup(dist,Math.random,lastMon);lastMon=g[0][0];nextObs=spawnGroup(g,DF.wild)}
+function spawnObs(){if(FORKS.length&&forkNear(W+30,60)){nextObs=30;return}const g=pickGroup(dist,Math.random,lastMon);lastMon=g[0][0];nextObs=spawnGroup(g,DF.wild)}
 function spawnGroup(g,wild){const o=addMon(g[0][0],0);if(wild)wildify(o,wild);
   return gapAfter(dist,speed,g,Math.random)}
 // ── 변칙 움직임 (혼자 연습 '보통' 이상: 모든 몬스터) ──
@@ -428,7 +482,7 @@ function skullFire(o,k){
 //  뱀·얼음 슬라임: 잠깐 멈칫해요 → 캐릭터가 몬스터 앞에 떨어지니 한 번 더 뛰어요
 //  하늘 몬스터(박쥐·새)가 낮게 오고 있으면: 위로 솟구쳐요 → 2단 점프로 더 높이 넘어요 (나비는 따라 뛰어요)
 function react(){
-  if(mode!=='solo'||!(DF.react>0))return;
+  if(mode!=='solo'||!(DF.react>0)||hero.plat)return;
   obs.forEach(o=>{if(!o.wm&&!o.move)return;if(o.reacted||o.dead||o.fb||o.type==='skull')return;const tr=tReach(o);if(tr<0.12||tr>1.15)return;
     o.reacted=1;if(Math.random()>=DF.react)return;
     const t=o.type,k=o.wk||1,dl=0.03+Math.random()*0.12;
@@ -513,7 +567,7 @@ let course=null,ci=0,cci=0,gci=0,meX=0,raceT=0,meDone=false,meTime=0,cnt=0,ghost
 function raceOff(){cntHide=0;$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
 function raceLobby(){
   const rs=host.race();if(!rs||rs.st!=='lobby'){menu();return}
-  mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);terBuildRace(rs.seed,rs.hill,course.gts);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
+  mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);terBuildRace(rs.seed,rs.hill,course.gts,rs.fork,course.mons);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
   $('rgTrack').classList.remove('rg-hidden');hud();
   host.raceJoin(rid).catch(()=>{toast('대결에 들어가지 못했어요. 새로 고쳐 주세요.')});
   lobbyBox();
@@ -538,7 +592,8 @@ function raceWatch(){
 }
 let lobbyN=0;
 function raceSpawn(){
-  while(ci<course.mons.length&&course.mons[ci].x-meX<=W+30-HX){const e=course.mons[ci++];const o=withSeed(e.sd,()=>addMon(e.type,(e.x-meX)-(W+30-HX)));if(e.calm)o.calm=1}
+  if(!FORK.met&&FORKS.some(f=>terS(f.s)<W+60)){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(틈 조심), 아니면 아랫길(슬라임)')}
+  while(ci<course.mons.length&&course.mons[ci].x-meX<=W+30-HX){const e=course.mons[ci++];const o=withSeed(e.sd,()=>addMon(e.type,(e.x-meX)-(W+30-HX)));if(e.calm)o.calm=1;if(e.under)o.under=1}
   while(cci<course.cns.length&&course.cns[cci][0]-meX<=W+20-HX){const c=course.cns[cci++];addCoin(HX+(c[0]-meX),c[1])}
   while(gci<course.gts.length&&course.gts[gci].x-meX<=W+40-HX){const g=course.gts[gci++];gates.push({x:HX+(g.x-meX),q:g.q})}
 }
@@ -597,7 +652,7 @@ function drawZone(z){
   z.draw();
   bgFx(z.fx);
   const [g0,g1,g2,g3]=z.ground;
-  if(!TER_LV[TER.lvl]){
+  if(!TER_LV[TER.lvl]&&!FORKS.length){
   ctx.fillStyle=g0;ctx.fillRect(0,GY,W,4);ctx.fillStyle=g1;ctx.fillRect(0,GY+4,W,1);
   ctx.fillStyle=g2;ctx.fillRect(0,GY+5,W,H-GY-5);ctx.fillStyle=g3;
   const px=loopX(-scroll,24);for(let x=px-24;x<W;x+=24){ctx.fillRect(x,GY+10,3,2);ctx.fillRect(x+12,GY+16,2,2);ctx.fillRect(x+6,GY+20,4,1)}
@@ -719,9 +774,13 @@ function bgFx(kind){
 
 // ── 캐릭터(나) 한 걸음 ──
 function heroStep(dt,sp){
-  const gy=GY-TH(HX);hero.dj=Math.max(0,(hero.dj||0)-dt);
-  if(hero.ground){hero.y=gy}else{const g=hero.vy<0?G:G*FALL_G;hero.vy+=g*dt;hero.y+=hero.vy*dt}   // 땅에 있으면 언덕을 따라가요
-  if(hero.y>=gy){hero.hold=false;if(!hero.ground){hero.land=0.09;if(hero.vy>120)shake=Math.max(shake,0.05)}hero.y=gy;hero.vy=0;hero.ground=true;hero.jumps=0}
+  const gy=GY-TH(HX),pl=FORKS.length?platY(HX):null,py=hero.y;hero.dj=Math.max(0,(hero.dj||0)-dt);
+  if(hero.ground){if(hero.plat){if(pl!=null)hero.y=pl;else{hero.ground=false;hero.plat=false;hero.vy=0}}else hero.y=gy}   // 땅에 있으면 언덕을 따라가요
+  if(!hero.ground){const g=hero.vy<0?G:G*FALL_G;hero.vy+=g*dt;hero.y+=hero.vy*dt;
+    if(pl!=null){const bot=pl+5;
+      if(hero.vy>=0&&py<=pl+2&&hero.y>=pl){hero.y=pl;hero.vy=0;hero.ground=true;hero.plat=true;hero.jumps=0;hero.hold=false;hero.land=0.09}   // 다리에 내려앉기 (조금 낮아도 올려 줘요)
+      else if(hero.vy<0&&hero.y-46<bot&&py-46>=bot-3){hero.y=bot+46;hero.vy=0}}}   // 다리 밑에서 뛰면 머리가 막혀요
+  if(hero.y>=gy){hero.plat=false;hero.hold=false;if(!hero.ground){hero.land=0.09;if(hero.vy>120)shake=Math.max(shake,0.05)}hero.y=gy;hero.vy=0;hero.ground=true;hero.jumps=0}
   const rp=Math.max(0.035,0.075-sp/4000);hero.ft+=dt;if(hero.ft>rp){hero.ft=0;hero.f=(hero.f+1)%10}
   hero.hurtT+=dt;hero.land=Math.max(0,hero.land-dt);
   if(!hero.ground)hero.key=hero.dj>0.17?'jump2':hero.vy<-110?'jump3':hero.vy<0?'jump4':hero.vy<140?'jump5':'jump6';
@@ -736,7 +795,7 @@ function worldStep(dt,dx){
     if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
-    const cy=c.y-19-TH(c.x);if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;sfx('coin');fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
+    const cy=c.y-19-(c.br?THb(c.x)+BR:TH(c.x));if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;sfx('coin');fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
   items=items.filter(c=>c.x>-20&&!c.got);
   inv=Math.max(0,inv-dt);
   fxs.forEach(e=>{if(e.scroll)e.fx.options.x-=dx});
@@ -756,9 +815,9 @@ function update(dt){
     if(cntHide>0){cntHide-=dt;if(cntHide<=0)$('rgCount').classList.add('rg-hidden')}
     if(!asking)t+=dt;speed=baseSpeed(t)*terSpeed(dt);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;   // 코인을 먹으면 잠깐 빨라져요
     heroStep(dt,asking?0:speed);if(asking&&hero.ground)hero.key=idleKey();
-    if(!asking){nextObs-=dx;if(nextObs<=0)spawnObs();
+    if(!asking){forkStep();nextObs-=dx;if(nextObs<=0)spawnObs();
       nextCoin-=dt;if(nextCoin<=0){if(clearAhead(W+40))spawnCoins();else nextCoin=0.3}
-      if(dist>=nextGateM&&flatAt(W+40,110)&&!obs.some(o=>o.x>W-110)&&!gates.some(g=>g.state!=='done')){gates.push({x:W+40,q:host.pickQ(Math.random,true)});nextGateM=Math.max(nextGateM,dist)+host.cfg().gateEvery;nextObs=Math.max(nextObs,260)}}
+      if(dist>=nextGateM&&!forkNear(W+40,150)&&flatAt(W+40,110)&&!obs.some(o=>o.x>W-110)&&!gates.some(g=>g.state!=='done')){gates.push({x:W+40,q:host.pickQ(Math.random,true)});nextGateM=Math.max(nextGateM,dist)+host.cfg().gateEvery;nextObs=Math.max(nextObs,260)}}
     gateStep(dt,dx);worldStep(dt,dx);
     if(Math.floor(dist)%5===0)hud();
   }else if(state==='lobby'){
@@ -783,7 +842,7 @@ function update(dt){
     if(state==='ready'||state==='menu')hero.key=idleKey();
     if(state==='over'){endAnim(dt);obs.forEach(o=>o.fx.update(dt));items.forEach(c=>c.fx.update(dt))}
   }
-  camY+=(Math.max(0,74-hero.y)-camY)*Math.min(1,dt*10);
+  camY+=((hero.y<74?74-hero.y:hero.y>GY+6?GY+6-hero.y:0)-camY)*Math.min(1,dt*10);
   if(toastT>0){toastT-=dt;if(toastT<=0)$('rgToast').classList.remove('show')}
   shake=Math.max(0,shake-dt);
   fxs.forEach(e=>e.fx.update(dt));fxs=fxs.filter(e=>e.keep||!e.fx.done());
@@ -815,7 +874,7 @@ function drawKey(key,x,y,alpha){
   ctx.drawImage(atlas,(i%AT.cols)*AT.w,Math.floor(i/AT.cols)*AT.h,AT.w,AT.h,Math.round(x)-42,Math.round(y)-80,AT.w,AT.h);ctx.globalAlpha=1;
 }
 function drawRunner(r,x,y,alpha,blink){
-  ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.ellipse(x,GY-TH(x)+1-(r.lane||0),Math.max(4,10-(GY-TH(x)-r.y)/8),2.5,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.ellipse(x,(r===hero&&hero.plat?platY(x)??GY-TH(x):GY-TH(x))+1-(r.lane||0),Math.max(4,10-(GY-TH(x)-r.y)/8),2.5,0,0,7);ctx.fill();
   if(blink)return;drawKey(r.key,x,y-(r.hop||0)-(r.lane||0),alpha);
 }
 function drawLines(){const GY0L=GY;
@@ -838,9 +897,9 @@ function ghostStep(dt){
 function render(dt){
   const sx=shake>0?Math.round((Math.random()-.5)*4):0,sy=shake>0?Math.round((Math.random()-.5)*3):0;
   ctx.fillStyle=bgTop;ctx.fillRect(0,0,W,H);
-  ctx.save();ctx.translate(sx,sy+Math.round(camY));drawBg();drawLines();drawGates();
+  ctx.save();ctx.translate(sx,sy+Math.round(camY));drawBg();drawForks();drawLines();drawGates();
   P.clearFrame(fB);P.clearFrame(fF);
-  items.forEach(c=>{c.fx.options.x=Math.round(c.x);c.fx.options.y=Math.round(c.y-TH(c.x));c.fx.draw(fF,'front')});
+  items.forEach(c=>{c.fx.options.x=Math.round(c.x);c.fx.options.y=Math.round(c.y-(c.br?THb(c.x)+BR:TH(c.x)));c.fx.draw(fF,'front')});
   obs.forEach(o=>{monPos(o);o.fx.draw(fB,'back');o.fx.draw(fF,'front')});
   fxs.forEach(e=>{e.fx.draw(fB,'back');e.fx.draw(fF,'front')});
   P.composite(fB,LB.d.data,null);LB.x.putImageData(LB.d,0,0);P.composite(fF,LF.d.data,null);LF.x.putImageData(LF.d,0,0);
@@ -887,5 +946,5 @@ let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;sndUi();if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
-  _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF},TH:x=>TH(x),get TER(){return TER}}};
+  _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF},TH:x=>TH(x),get TER(){return TER},get FORKS(){return FORKS},get onBridge(){return !!hero.plat},forkS:()=>{const w=terW(HX);const f=FORKS.find(f=>f.s>w-120);return f?w-f.s:null},gap:()=>{const w=terW(HX)+18;let m=null;for(const f of FORKS)for(const g of f.gaps){const d=g[0]-w;if(d>-5&&(m==null||d<m))m=d}return m}}};
 })();
