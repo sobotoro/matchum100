@@ -281,7 +281,7 @@ function terBuildRace(seed,lvl,gts,every,mons){
       const s0=Math.round((a+b)/2+(R2()-0.5)*Math.min(200,b-a));if(s0-lastS<every*PXM*0.75)continue;lastS=s0;
       withSeed((R2()*1e9)|0,()=>forkMake(s0));const f=FORKS[FORKS.length-1];f.gaps=f.gaps.slice(0,1);
       for(let k=mons.length-1;k>=0;k--)if(mons[k].x>s0-260&&mons[k].x<f.e+160)mons.splice(k,1);
-      mons.push({x:s0+200,type:'slime',sd:(R2()*1e9)|0,under:1},{x:s0+340,type:'slime',sd:(R2()*1e9)|0,under:1})}
+      mons.push({x:s0+200,type:'slime',sd:(R2()*1e9)|0,under:1},{x:s0+340,type:'slime',sd:(R2()*1e9)|0,under:1},{x:f.top,type:'slime',sd:(R2()*1e9)|0,top:1})}
     mons.sort((a,b)=>a.x-b.x)}
   TER.segs=[{x0:-1e6,x1:540,a:0,b:0}];TER.end=540;if(!L){TER.segs[0].x1=1e9;TER.end=1e9;return}
   const R=rng((seed^0x5bd1e995)>>>0),prot=[...gts.map(g=>[g.x-180,g.x+180]),...FORKS.map(f=>[f.s-200,f.e+160]),[FIN-260,FIN+4000]].sort((a,b)=>a[0]-b[0]);
@@ -301,11 +301,13 @@ function terSpeed(dt){const sl=hero.ground&&!hero.plat?SLP(HX):0,tf=Math.max(0.5
 // ⬆⬆ 표지판 뒤에서 2단 점프로 나무다리(윗길)에 오르거나, 그냥 아래로 내려가는 길(아랫길)로 가요. 다리가 끝나기 전에 아랫길이 원래 높이로 올라와 두 길이 만나요.
 // 윗길: 코인(혼자 연습)이 있지만 다리에 틈이 있어 떨어지면 아랫길로. 아랫길: 낮은 몬스터 2마리, 다리 밑에서도 한 번 뛸 공간이 있어요.
 // 혼자 연습은 선생님이 정한 간격(runFork m)마다, 대결은 대결 번호로 모두 같은 자리에(퀴즈 문·출발·결승선과 겹치지 않게) 나와요.
-const BR=62,DIP=48,FORK_LEN=640;   // 다리 높이(한 번 점프(52)로는 안 닿고 2단 점프로만), 아랫길 깊이(다리 밑에서도 한 번 점프할 공간), 갈림길 길이
+const BR=62,DIP=48,FORK_LEN=640,TOP_MIN=260,TOP_GAP=150;   // 다리 높이(한 번 점프(52)로는 안 닿고 2단 점프로만), 아랫길 깊이(다리 밑에서도 한 번 점프할 공간), 갈림길 길이
 let FORKS=[],FORK={every:0,next:0,req:0,met:0};
 function forkMake(s0){const b0=s0+60,b1=s0+FORK_LEN,n=DF.name==='쉬움'||DF.name==='보통'?1:2,gw=DF.name==='아주 어려움'?52:44,gaps=[];
-  for(let i=0;i<n;i++){for(let k=0;k<20;k++){const a=b0+90+Math.random()*(b1-b0-220);if(gaps.every(g=>Math.abs(g[0]-a)>140)){gaps.push([a,a+gw]);break}}}
-  FORKS.push({s:s0,b0,b1,e:b1,gaps,sp:0})}
+  // 윗길 몬스터: 다리에 내려선 뒤 숨 돌릴 거리를 두고, 틈과는 한 번씩 따로 뛸 수 있게 떨어뜨려요
+  const top=Math.round(b0+TOP_MIN+Math.random()*(b1-80-b0-TOP_MIN));
+  for(let i=0;i<n;i++){const ok=[];for(let a=b0+90;a<=b1-130;a+=4)if(gaps.every(g=>Math.abs(g[0]-a)>140)&&(a+gw<=top-TOP_GAP||a>=top+TOP_GAP))ok.push(a);if(!ok.length)break;const a=ok[(Math.random()*ok.length)|0];gaps.push([a,a+gw])}
+  FORKS.push({s:s0,b0,b1,e:b1,gaps,top,sp:0})}
 function forkDip(w){let d=0;for(const f of FORKS){const sm=k=>{k=Math.max(0,Math.min(1,k));return k*k*(3-2*k)};
     if(w>f.s-20&&w<f.b1-100)d=Math.max(d,DIP*(w<f.s+120?sm((w-f.s+20)/140):w>f.b1-240?1-sm((w-f.b1+240)/140):1))}return d}
 function TH(sx){return THb(sx)-(FORKS.length?forkDip(terW(sx)):0)}
@@ -318,12 +320,14 @@ function forkStep(){
   if(dist>=FORK.next&&!FORK.req){if(TER_LV[TER.lvl])FORK.req=1;else{forkMake(scroll+W+220);FORK.next=dist+FORK.every}}
   FORKS=FORKS.filter(f=>f.e+200>scroll);
   for(const f of FORKS){if(f.sp||f.s-120-scroll>W+40)continue;f.sp=1;
-    if(!FORK.met){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(코인·틈 조심), 아니면 아랫길(몬스터)')}
+    if(!FORK.met){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(코인, 틈·몬스터 조심), 아니면 아랫길(몬스터)')}
     const at=w=>w-scroll;
     // 아랫길 몬스터 2마리 (다리 밑에서도 피할 수 있는 낮은 몬스터만)
     [f.s+200,f.s+340].forEach((w,i)=>{const k=['slime','snake','iceslime'][(Math.random()*3)|0];const o=addMon(k,0);o.x=at(w);o.under=1;if(DF.wild)wildify(o,DF.wild)});
-    // 윗길 코인 (틈 위에서는 높게)
-    for(let w=f.b0+40;w<f.b1-20;w+=64){const g=f.gaps.some(q=>w>q[0]-30&&w<q[1]+30);items.push({x:at(w),y:GY-14+19-(g?18:0),br:1,fx:P.createFx(FX.coinSpin,{x:0,y:0,seed:(w|0)%7})})}
+    // 윗길 몬스터 1마리 (다리 위 제자리에서 통통)
+    if(f.top){const o=addMon('slime',0);o.x=at(f.top);o.top=1}
+    // 윗길 코인 (틈 위에서는 높게, 몬스터 자리는 빼고)
+    for(let w=f.b0+40;w<f.b1-20;w+=64){if(f.top&&Math.abs(w-f.top)<24)continue;const g=f.gaps.some(q=>w>q[0]-30&&w<q[1]+30);items.push({x:at(w),y:GY-14+19-(g?18:0),br:1,fx:P.createFx(FX.coinSpin,{x:0,y:0,seed:(w|0)%7})})}
     // 아랫길 코인 3개
     for(let i=0;i<3;i++)addCoin(at(f.s+270+i*14),GY-14+19);
   }
@@ -399,7 +403,7 @@ function batTable(seed){if(BATC[seed])return BATC[seed];const w=128,h=112,f=P.cr
   for(let i=0;i<48;i++){P.clearFrame(f);g.draw(f,'back');g.draw(f,'front');let sx=0,sy=0,n=0;const C=f.color;
     for(let k=0;k<C.length;k++)if((C[k]>>>24)>=250){sx+=k%w;sy+=(k/w)|0;n++}out.push(n?[sx/n-64,sy/n-56]:[0,0]);g.update(2.4/48)}
   return BATC[seed]=out}
-function monPos(o){let x=o.x,y=o.y-(o.hy||0)-TH(o.x);   // hy: 따라 뛰기·솟구치기·내려오기로 바뀐 높이
+function monPos(o){let x=o.x,y=o.y-(o.hy||0)-(o.top?THb(o.x)+BR:TH(o.x));   // hy: 따라 뛰기·솟구치기·내려오기로 바뀐 높이
   if(o.ct){const t=((o.fx.t%2.4)+2.4)%2.4,c=o.ct[Math.floor(t/2.4*48)%48];x+=o.fx.options.flip?c[0]:-c[0];y-=c[1]}
   o.fx.options.x=Math.round(x);o.fx.options.y=Math.round(y)}
 function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;o.fx.options.flip=true;obs.push(o);   // 모든 몬스터가 캐릭터(왼쪽)를 보도록 좌우를 뒤집어 그려요
@@ -592,8 +596,8 @@ function raceWatch(){
 }
 let lobbyN=0;
 function raceSpawn(){
-  if(!FORK.met&&FORKS.some(f=>terS(f.s)<W+60)){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(틈 조심), 아니면 아랫길(슬라임)')}
-  while(ci<course.mons.length&&course.mons[ci].x-meX<=W+30-HX){const e=course.mons[ci++];const o=withSeed(e.sd,()=>addMon(e.type,(e.x-meX)-(W+30-HX)));if(e.calm)o.calm=1;if(e.under)o.under=1}
+  if(!FORK.met&&FORKS.some(f=>terS(f.s)<W+60)){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(틈·슬라임 조심), 아니면 아랫길(슬라임)')}
+  while(ci<course.mons.length&&course.mons[ci].x-meX<=W+30-HX){const e=course.mons[ci++];const o=withSeed(e.sd,()=>addMon(e.type,(e.x-meX)-(W+30-HX)));if(e.calm)o.calm=1;if(e.under)o.under=1;if(e.top)o.top=1}
   while(cci<course.cns.length&&course.cns[cci][0]-meX<=W+20-HX){const c=course.cns[cci++];addCoin(HX+(c[0]-meX),c[1])}
   while(gci<course.gts.length&&course.gts[gci].x-meX<=W+40-HX){const g=course.gts[gci++];gates.push({x:HX+(g.x-meX),q:g.q})}
 }
