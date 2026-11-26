@@ -10,13 +10,13 @@
            runGate 퀴즈 문 간격(m), runPen 대결 오답 벌점(초, 문 앞에서 멈춰요), runPrize "10,8,6,4,2" 대결 1~5등 코인
    students/학번/run  {d 날짜, used 쓴 판, coin 받은 코인, best 최고 기록(m), wr 틀린 문제 id 목록,
                        ep 기록이 속한 전광판 회차, bt 최고 기록 시각, wk 이번 주 월요일, wb 이번 주 최고, wt 그 시각}
-   config  runSound 게임 소리(false면 반 전체 끔), runBoardEp 전광판 회차(선생님이 '새로 시작'하면 1 늘어요)
+   config  runHill 언덕(0 평평~4 아주 가파름, 혼자 연습·대결 모두), runSound 게임 소리(false면 반 전체 끔), runBoardEp 전광판 회차(선생님이 '새로 시작'하면 1 늘어요)
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261125a";
+const RUN_V="20261126a";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
-const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal",runSound:true,runBoardEp:0};
+const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal",runSound:true,runBoardEp:0,runHill:3};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
 
 /* 코인 숫자: 0 이상이면 얼마든지 (소수 둘째 자리까지) */
@@ -25,7 +25,7 @@ function runCfg(){
   const c={...RUN_DEF,...CFG};
   return {open:c.runOpen!==false,max:Math.max(1,+c.runMax||3),quizT:Math.max(0,+c.runQuizT||0),perfT:Math.max(0,+c.runPerfT||0),
     lockOn:c.runLock!==false,from:c.runFrom||"09:00",to:c.runTo||"12:10",coin:Math.max(0,+c.runCoin||0),coinMax:Math.max(0,+c.runCoinMax||0),
-    gateEvery:Math.max(60,+c.runGate||120),pen:Math.max(0,+c.runPen||0),len:[500,800,1000,1500,2000].includes(+c.runLen)?+c.runLen:1000,diff:["easy","normal","hard","crazy"].includes(c.runDiff)?c.runDiff:"normal",sound:c.runSound!==false,ep:Math.max(0,+c.runBoardEp||0),
+    gateEvery:Math.max(60,+c.runGate||120),pen:Math.max(0,+c.runPen||0),len:[500,800,1000,1500,2000].includes(+c.runLen)?+c.runLen:1000,diff:["easy","normal","hard","crazy"].includes(c.runDiff)?c.runDiff:"normal",sound:c.runSound!==false,hill:[0,1,2,3,4].includes(+c.runHill)?+c.runHill:3,ep:Math.max(0,+c.runBoardEp||0),
     prize:String(c.runPrize==null?RUN_DEF.runPrize:c.runPrize).split(",").map(x=>runNum(x)).concat([0,0,0,0,0]).slice(0,5)};
 }
 const runNow=()=>Date.now()+RUN_OFF;
@@ -106,7 +106,7 @@ function runPlayers(rid){
   return Object.entries(p).filter(([k,v])=>v&&v.rid===rid).map(([k,v])=>({k,n:v.n||((STUDENTS[k]||{}).name)||k,x:+v.x||0,y:+v.y||126,s:!!v.s,q:!!v.q,pen:+v.pen||0,pw:+v.pw||0,ok:+v.ok||0,done:!!v.done,tm:+v.tm||0,j:+v.j||0,me:k===KEY}))
     .sort((a,b)=>(a.j||0)-(b.j||0));
 }
-function runRaceState(){const s=RACE&&RACE.state;if(!s||!s.rid)return null;return {rid:s.rid,st:s.st||"off",seed:+s.seed||1,at:+s.at||0,len:+s.len||500}}
+function runRaceState(){const s=RACE&&RACE.state;if(!s||!s.rid)return null;return {rid:s.rid,st:s.st||"off",seed:+s.seed||1,at:+s.at||0,len:+s.len||500,hill:s.hill==null?0:+s.hill||0}}
 const RUN_HOST={
   title:()=>ME&&ME.grade&&ME.cls?`${ME.grade}학년 ${ME.cls}반`:(CFG.className||"우리 반"),
   cfg:runCfg,soloBlock:runBlock,ticketsLeft:runLeft,needQuiz:()=>!runQuizDone()&&runCfg().open&&!runLocked(),
@@ -267,6 +267,7 @@ function runTeacherHtml(){
       <label class="t-field">혼자 연습 한 판 최대 코인 <small>(먹은 코인만큼 받아요)</small><input type="number" inputmode="decimal" min="0" step="any" id="runCoinIn" value="${c.coin}"></label>
       <label class="t-field">혼자 연습 하루 최대 코인<input type="number" inputmode="decimal" min="0" step="any" id="runCoinMaxIn" value="${c.coinMax}"></label>
       <label class="t-field">혼자 연습 난이도${opt("runDiffIn",c.diff,[["easy","쉬움 (예전과 같아요)"],["normal","보통"],["hard","어려움"],["crazy","아주 어려움"]])}</label>
+      <label class="t-field">언덕 (혼자 연습·대결)${opt("runHillIn",c.hill,[[0,"평평"],[1,"완만 (약 10°)"],[2,"보통 (약 14°)"],[3,"가파름 (약 19°)"],[4,"아주 가파름 (약 24°)"]])}</label>
       <label class="t-field">퀴즈 문 간격 (혼자 연습)${opt("runGateIn",c.gateEvery,[[80,"80m마다"],[120,"120m마다"],[200,"200m마다"]])}</label>
       <label class="t-field">대결 오답 벌점 <small>(문 앞에서 멈추는 시간)</small>${opt("runPenIn",c.pen,[[0,"없음"],[2,"2초"],[3,"3초"],[5,"5초"]])}</label>
       <label class="t-field">대결 거리${opt("runLenIn",c.len,[[500,"500m (약 1분)"],[800,"800m"],[1000,"1000m (약 1분 40초)"],[1500,"1500m"],[2000,"2000m (약 3분)"]])}</label>
@@ -282,7 +283,7 @@ function runTeacherBind(){
   $("#runSave").onclick=()=>{runTMsg="";
     const v={runSound:$("#runSoundIn").checked,runLock:$("#runLockIn").checked,runFrom:$("#runFromIn").value||"09:00",runTo:$("#runToIn").value||"12:10",
       runMax:+$("#runMaxIn").value,runQuizT:+$("#runQuizTIn").value,runPerfT:+$("#runPerfTIn").value,runCoin:runNum($("#runCoinIn").value),runCoinMax:runNum($("#runCoinMaxIn").value),
-      runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runLen:+$("#runLenIn").value,runDiff:$("#runDiffIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
+      runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runLen:+$("#runLenIn").value,runDiff:$("#runDiffIn").value,runHill:+$("#runHillIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
     act($("#runSave"),m,()=>R("config").update(v)).then(ok=>{if(ok){say("달리기 설정을 저장했어요.");renderRun()}})};
   const b=id=>$("#"+id);
   if(b("runTabTg"))b("runTabTg").onclick=()=>{const on=!runCfg().open;
@@ -290,7 +291,7 @@ function runTeacherBind(){
     act(b("runTabTg"),m,()=>R("config").update({runOpen:on})).then(ok=>{if(ok){say(on?"학생 메뉴에 달리기 탭이 보여요.":"달리기 탭을 숨겼어요.");renderRun()}})};
   if(b("runOpenRace"))b("runOpenRace").onclick=()=>act(b("runOpenRace"),m,async()=>{
     if(!runCfg().open)await R("config").update({runOpen:true});
-    const rid=R("race/state").push().key;await R("race").set({state:{rid,st:"lobby",seed:(Math.random()*1e9)|0,len:runCfg().len,t:SV.TIMESTAMP}});
+    const rid=R("race/state").push().key;await R("race").set({state:{rid,st:"lobby",seed:(Math.random()*1e9)|0,len:runCfg().len,hill:runCfg().hill,t:SV.TIMESTAMP}});
   }).then(ok=>{if(ok){say("대결을 열었어요. 학생들이 '달리기 → 친구들과 대결'로 들어오면 '출발!'을 눌러 주세요.");renderRun()}});
   if(b("runGo"))b("runGo").onclick=()=>act(b("runGo"),m,()=>R("race/state").update({st:"run",at:runNow()+4500}))
     .then(ok=>{if(ok){say("출발! 3·2·1 뒤에 다 같이 달려요.");renderRun()}});

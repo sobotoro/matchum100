@@ -109,7 +109,7 @@ function soloW(){const pe=root&&root.parentElement,cw=Math.min(1320,(pe&&pe.clie
 function setView(w){if(w===W&&fB)return;W=w;cv.width=W;cv.height=H;ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
   fB=P.createFrame(W,H);fF=P.createFrame(W,H);LB=mkLayer();LF=mkLayer();$('rgGame').style.aspectRatio=W+'/'+H;root.style.setProperty('--rg-ar',(W/H).toFixed(3))}
 function mkLayer(){const c=document.createElement('canvas');c.width=W;c.height=H;return{c,x:c.getContext('2d'),d:new ImageData(W,H)}}
-function clearWorld(){setDiff();setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
+function clearWorld(){setDiff();terReset(mode==='race'?0:host.cfg().hill);setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
   obs=[];items=[];fxs=[];camY=0;inv=0;shake=0;coins=0;dist=0;t=0;met.clear();toastT=0;$('rgToast').classList.remove('show');
   gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0;mePw=0}
 function hud(){
@@ -164,7 +164,7 @@ let scT=0,cntHide=0;
 // 점프: 공중에 약 1.1초, 높이 약 52. 짧게 누르면 낮게. 공중에서 한 번 더 = 2단 점프.
 const G=330,FALL_G=1.0,JV=-185,JV2=-178,CUT=0.5;
 function jump(){
-  if(hero.ground){hero.vy=JV;hero.ground=false;hero.jumps=1;hero.hold=true;sfx('jump');react()}
+  if(hero.ground){hero.vy=JV-Math.max(0,SLP(HX))*speed*0.55;hero.ground=false;hero.jumps=1;hero.hold=true;sfx('jump');react()}
   else if(hero.jumps<2){hero.vy=JV2;hero.jumps=2;hero.hold=true;hero.dj=0.25;sfx('jump2');fx(FX.burst,{x:HX,y:hero.y+2,seed:7,light:0.5},false)}
 }
 function press(){
@@ -251,6 +251,42 @@ function sndUi(){const on=sndOn(),a=$('rgSfx'),b=$('rgBgm');if(!a||!b)return;
   a.textContent=SND.pref.s?'🔊':'🔇';a.title=a.ariaLabel=SND.pref.s?'효과음 끄기':'효과음 켜기';
   b.textContent='♪';b.classList.toggle('off',!SND.pref.m);b.title=b.ariaLabel=SND.pref.m?'배경 음악 끄기':'배경 음악 켜기'}
 
+
+// ══ 언덕 ══
+// 평지와 비탈을 번갈아 만들어요. TH(x)는 화면 x에서 땅이 기본선(GY)보다 몇 픽셀 높은지(위가 +).
+// 몬스터·코인·퀴즈 문·불덩이는 '땅에서 몇 칸 위'로 움직이던 그대로 두고, 그 아래 땅 높이만큼 함께 올려 그려요.
+// 혼자 연습: 달린 만큼(scroll) 앞쪽을 그때그때 만들어요. 퀴즈 문은 평평한 곳에서만 나와요.
+// 대결: 대결 번호(seed)로 코스 전체를 미리 만들어서 모두 같은 언덕이에요. 출발·퀴즈 문·결승선 근처는 평평해요.
+// 단계(선생님 설정 runHill): 0 평평 · 1 완만(약 10°) · 2 보통(약 14°) · 3 가파름(약 19°) · 4 아주 가파름(약 24°)
+const TER={lvl:0,segs:[],end:0,h:0,sf:1,race:0};
+const TER_LV={0:null,1:{len:9,hi:22,lo:-8,flat:0.55},2:{len:6,hi:32,lo:-12,flat:0.42},3:{len:4.3,hi:40,lo:-14,flat:0.3},4:{len:3.3,hi:46,lo:-14,flat:0.25}};
+const terW=sx=>TER.race?meX+(sx-HX):scroll+sx;   // 화면 x → 언덕 지도 위치
+function terStep(R,L,limit){   // 다음 한 조각(평지 또는 비탈). limit을 넘지 않아요
+  const last=TER.segs[TER.segs.length-1],room=limit-TER.end;
+  if(last.a!==last.b||R()<L.flat||room<90){const len=Math.min(room,100+R()*170);TER.segs.push({x0:TER.end,x1:TER.end+len,a:TER.h,b:TER.h});TER.end+=len;return}
+  let nh,tries=0;do{nh=Math.round(L.lo+R()*(L.hi-L.lo))}while(Math.abs(nh-TER.h)<10&&++tries<20);
+  const maxDh=(room-10)/L.len;if(Math.abs(nh-TER.h)>maxDh)nh=Math.round(TER.h+Math.sign(nh-TER.h)*maxDh);
+  if(Math.abs(nh-TER.h)<6){const len=Math.min(room,100+R()*170);TER.segs.push({x0:TER.end,x1:TER.end+len,a:TER.h,b:TER.h});TER.end+=len;return}
+  const len=Math.min(room,Math.max(90,Math.abs(nh-TER.h)*L.len)+R()*60);TER.segs.push({x0:TER.end,x1:TER.end+len,a:TER.h,b:nh});TER.end+=len;TER.h=nh}
+function terReset(lvl){TER.lvl=lvl|0;TER.race=0;TER.h=0;TER.sf=1;const x=scroll+W+60;TER.segs=[{x0:scroll-2000,x1:x,a:0,b:0}];TER.end=x}
+function terGen(upto){const L=TER_LV[TER.lvl];if(!L||TER.race)return;
+  while(TER.end<upto)terStep(Math.random,L,Infinity);
+  while(TER.segs.length>2&&TER.segs[1].x1<scroll-120)TER.segs.shift()}
+function terBuildRace(seed,lvl,gts){
+  TER.lvl=lvl|0;TER.race=1;TER.h=0;TER.sf=1;const L=TER_LV[TER.lvl];
+  TER.segs=[{x0:-1e6,x1:540,a:0,b:0}];TER.end=540;if(!L){TER.segs[0].x1=1e9;TER.end=1e9;return}
+  const R=rng((seed^0x5bd1e995)>>>0),prot=[...gts.map(g=>[g.x-180,g.x+180]),[FIN-260,FIN+4000]];
+  while(TER.end<FIN+3000){const p=prot.find(([a,b])=>b>TER.end);
+    if(p&&p[0]<=TER.end+1){TER.segs.push({x0:TER.end,x1:p[1],a:TER.h,b:TER.h});TER.end=p[1];continue}
+    terStep(R,L,p?p[0]:Infinity)}
+}
+function TH(sx){if(!TER_LV[TER.lvl])return 0;const w=terW(sx);if(!TER.race&&w>TER.end-2)terGen(w+400);
+  for(const g of TER.segs)if(w<g.x1){if(w<g.x0)return g.a;const k=(w-g.x0)/(g.x1-g.x0),e=k*k*(3-2*k);return g.a+(g.b-g.a)*e}return TER.h}
+const SLP=sx=>(TH(sx+3)-TH(sx-3))/6;   // 오른쪽으로 오르면 +
+const flatAt=(sx,r)=>{const h=TH(sx);for(let d=-r;d<=r;d+=20)if(Math.abs(TH(sx+d)-h)>0.5)return false;return true};
+// 오르막에서는 느려지고(가파를수록 더) 내리막에서는 빨라져요. 땅에 있을 때만 바뀌어서 공중에서는 속도가 그대로예요.
+function terSpeed(dt){const sl=SLP(HX),tf=sl>0?1-0.95*sl:1+1.2*-sl;if(hero.ground)TER.sf+=(Math.max(0.55,Math.min(1.5,tf))-TER.sf)*Math.min(1,dt*3);return TER.sf}
+
 // ── 몬스터 ──
 const MON={
   slime:{name:'슬라임',at:0,tip:'멈칫하거나 확 달려들어요. 내가 뛰면 따라 뛰기도 해요!',make:()=>({fx:P.createFx(FX.slime,{x:0,y:0,hop:3,seed:rnd(99)}),by:GY})},
@@ -308,7 +344,7 @@ function batTable(seed){if(BATC[seed])return BATC[seed];const w=128,h=112,f=P.cr
   for(let i=0;i<48;i++){P.clearFrame(f);g.draw(f,'back');g.draw(f,'front');let sx=0,sy=0,n=0;const C=f.color;
     for(let k=0;k<C.length;k++)if((C[k]>>>24)>=250){sx+=k%w;sy+=(k/w)|0;n++}out.push(n?[sx/n-64,sy/n-56]:[0,0]);g.update(2.4/48)}
   return BATC[seed]=out}
-function monPos(o){let x=o.x,y=o.y-(o.hy||0);   // hy: 따라 뛰기·솟구치기·내려오기로 바뀐 높이
+function monPos(o){let x=o.x,y=o.y-(o.hy||0)-TH(o.x);   // hy: 따라 뛰기·솟구치기·내려오기로 바뀐 높이
   if(o.ct){const t=((o.fx.t%2.4)+2.4)%2.4,c=o.ct[Math.floor(t/2.4*48)%48];x+=o.fx.options.flip?c[0]:-c[0];y-=c[1]}
   o.fx.options.x=Math.round(x);o.fx.options.y=Math.round(y)}
 function addMon(type,dx=0){const m=MON[type],o=Object.assign({type,x:W+30+dx,t:0,vx:0},m.make());o.y=o.by;o.fx.options.flip=true;obs.push(o);   // 모든 몬스터가 캐릭터(왼쪽)를 보도록 좌우를 뒤집어 그려요
@@ -449,11 +485,11 @@ function gateStep(dt,dx){
   if(asking&&asking.res){asking.wait-=dt;if(asking.pen){const e=$('rgPenT');if(e)e.textContent=Math.max(1,Math.ceil(asking.wait))}if(asking.wait<=0){$('rgQuiz').classList.add('rg-hidden');asking.g.state='done';asking=null}}
 }
 function drawGates(){
-  for(const g of gates){const x=Math.round(g.x);if(x<-30||x>W+30)continue;const open=g.state==='done',lift=open?Math.min(18,(g.lift=(g.lift||0)+1.2)):0;
+  for(const g of gates){const x=Math.round(g.x);if(x<-30||x>W+30)continue;const GY0=GY;{const GY=GY0-Math.round(TH(x));const open=g.state==='done',lift=open?Math.min(18,(g.lift=(g.lift||0)+1.2)):0;
     ctx.fillStyle='#7b5a3a';ctx.fillRect(x-16,GY-50,4,50);ctx.fillRect(x+12,GY-50,4,50);
     ctx.fillStyle=open?(g.ok?'#2f9e44':'#e03131'):'#f08c00';ctx.fillRect(x-18,GY-58-lift,36,12);
     ctx.fillStyle='#fff';ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillText(open?(g.ok?'O':'X'):'?',x,GY-49-lift);ctx.textAlign='left';
-    if(!open){ctx.fillStyle='rgba(255,220,120,.35)';ctx.fillRect(x-12,GY-46,24,46)}}
+    if(!open){ctx.fillStyle='rgba(255,220,120,.35)';ctx.fillRect(x-12,GY-46,24,46)}}}
 }
 
 // ══ 친구들과 대결 ══
@@ -476,7 +512,7 @@ let course=null,ci=0,cci=0,gci=0,meX=0,raceT=0,meDone=false,meTime=0,cnt=0,ghost
 function raceOff(){cntHide=0;$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
 function raceLobby(){
   const rs=host.race();if(!rs||rs.st!=='lobby'){menu();return}
-  mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
+  mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);terBuildRace(rs.seed,rs.hill,course.gts);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
   $('rgTrack').classList.remove('rg-hidden');hud();
   host.raceJoin(rid).catch(()=>{toast('대결에 들어가지 못했어요. 새로 고쳐 주세요.')});
   lobbyBox();
@@ -554,15 +590,24 @@ function drawBg(){
   if(i!==bgZone){if(bgZone>=0&&(state==='play'||state==='race')&&d>=ZONE_FADE)toast(`${z.name}에 들어왔어요!`);bgZone=i}
 }
 function drawZone(z){
-  const g=ctx.createLinearGradient(0,0,0,GY);g.addColorStop(0,z.sky[0]);g.addColorStop(1,z.sky[1]);ctx.fillStyle=g;ctx.fillRect(0,-60,W,GY+60);
+  const g=ctx.createLinearGradient(0,0,0,GY);g.addColorStop(0,z.sky[0]);g.addColorStop(1,z.sky[1]);ctx.fillStyle=g;ctx.fillRect(0,-60,W,H+120);
   if(z.cloud){ctx.fillStyle=z.cloud;clouds.forEach((c,i)=>{if(i>=3&&W<300)return;const cx=c[0]*W/240,x=loopX(cx-scroll*0.08,W+60)-40,s=c[2]?1:0.8;
     ctx.fillRect(x,c[1],26*s,6);ctx.fillRect(x+5,c[1]-4,14*s,5);ctx.fillRect(x+3,c[1]+6,20*s,2)})}
   z.draw();
   bgFx(z.fx);
   const [g0,g1,g2,g3]=z.ground;
+  if(!TER_LV[TER.lvl]){
   ctx.fillStyle=g0;ctx.fillRect(0,GY,W,4);ctx.fillStyle=g1;ctx.fillRect(0,GY+4,W,1);
   ctx.fillStyle=g2;ctx.fillRect(0,GY+5,W,H-GY-5);ctx.fillStyle=g3;
   const px=loopX(-scroll,24);for(let x=px-24;x<W;x+=24){ctx.fillRect(x,GY+10,3,2);ctx.fillRect(x+12,GY+16,2,2);ctx.fillRect(x+6,GY+20,4,1)}
+  }else{   // 언덕: 한 줄씩 땅 높이를 따라 그려요. 땅이 기본선보다 낮은 곳은 뒤쪽 들판(g3)이 보여요.
+    ctx.fillStyle=g3;ctx.fillRect(0,GY,W,H+60);
+    const tops=new Array(W+1);for(let x=0;x<=W;x++)tops[x]=Math.round(GY-TH(x));
+    ctx.fillStyle=g2;for(let x=0;x<W;x++)ctx.fillRect(x,tops[x]+5,1,H+60);
+    ctx.fillStyle=g1;for(let x=0;x<W;x++)ctx.fillRect(x,tops[x]+4,1,1);
+    ctx.fillStyle=g0;for(let x=0;x<W;x++)ctx.fillRect(x,tops[x],1,4);
+    ctx.fillStyle=g3;const px=loopX(-scroll,24);for(let x=px-24;x<W;x+=24)[[0,10,3,2],[12,16,2,2],[6,20,4,1]].forEach(([dx,dy,w,h])=>{const xx=Math.round(x+dx);if(xx>=0&&xx<W)ctx.fillRect(xx,tops[xx]+dy,w,h)});
+  }
 }
 const clouds=[[20,18,1],[110,12,0],[190,24,1],[150,30,0]];
 function bgSchool(){
@@ -673,8 +718,9 @@ function bgFx(kind){
 
 // ── 캐릭터(나) 한 걸음 ──
 function heroStep(dt,sp){
-  const g=hero.vy<0?G:G*FALL_G;hero.vy+=g*dt;hero.y+=hero.vy*dt;hero.dj=Math.max(0,(hero.dj||0)-dt);
-  if(hero.y>=GY){hero.hold=false;if(!hero.ground){hero.land=0.09;if(hero.vy>120)shake=Math.max(shake,0.05)}hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0}
+  const gy=GY-TH(HX);hero.dj=Math.max(0,(hero.dj||0)-dt);
+  if(hero.ground){hero.y=gy}else{const g=hero.vy<0?G:G*FALL_G;hero.vy+=g*dt;hero.y+=hero.vy*dt}   // 땅에 있으면 언덕을 따라가요
+  if(hero.y>=gy){hero.hold=false;if(!hero.ground){hero.land=0.09;if(hero.vy>120)shake=Math.max(shake,0.05)}hero.y=gy;hero.vy=0;hero.ground=true;hero.jumps=0}
   const rp=Math.max(0.035,0.075-sp/4000);hero.ft+=dt;if(hero.ft>rp){hero.ft=0;hero.f=(hero.f+1)%10}
   hero.hurtT+=dt;hero.land=Math.max(0,hero.land-dt);
   if(!hero.ground)hero.key=hero.dj>0.17?'jump2':hero.vy<-110?'jump3':hero.vy<0?'jump4':hero.vy<140?'jump5':'jump6';
@@ -689,7 +735,7 @@ function worldStep(dt,dx){
     if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
-    const cy=c.y-19;if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;sfx('coin');fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
+    const cy=c.y-19-TH(c.x);if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;sfx('coin');fx(FX.burst,{x:c.x,y:c.y-10,light:0.8},false);hud()}});
   items=items.filter(c=>c.x>-20&&!c.got);
   inv=Math.max(0,inv-dt);
   fxs.forEach(e=>{if(e.scroll)e.fx.options.x-=dx});
@@ -707,11 +753,11 @@ function update(dt){
     const pc=Math.ceil(scT);scT-=dt;hero.key=idleKey();$('rgCount').textContent=scT>0?Math.ceil(scT):'출발!';if(Math.ceil(scT)!==pc)sfx(scT>0?'beep':'go');if(scT<=0){state='play';cntHide=0.7}
   }else if(state==='play'){
     if(cntHide>0){cntHide-=dt;if(cntHide<=0)$('rgCount').classList.add('rg-hidden')}
-    if(!asking)t+=dt;speed=baseSpeed(t);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;   // 코인을 먹으면 잠깐 빨라져요
+    if(!asking)t+=dt;speed=baseSpeed(t)*terSpeed(dt);const dx=asking?0:speed*dt;scroll+=dx;dist+=dx/PXM;   // 코인을 먹으면 잠깐 빨라져요
     heroStep(dt,asking?0:speed);if(asking&&hero.ground)hero.key=idleKey();
     if(!asking){nextObs-=dx;if(nextObs<=0)spawnObs();
       nextCoin-=dt;if(nextCoin<=0){if(clearAhead(W+40))spawnCoins();else nextCoin=0.3}
-      if(dist>=nextGateM&&!obs.some(o=>o.x>W-110)&&!gates.some(g=>g.state!=='done')){gates.push({x:W+40,q:host.pickQ(Math.random,true)});nextGateM=Math.max(nextGateM,dist)+host.cfg().gateEvery;nextObs=Math.max(nextObs,260)}}
+      if(dist>=nextGateM&&flatAt(W+40,110)&&!obs.some(o=>o.x>W-110)&&!gates.some(g=>g.state!=='done')){gates.push({x:W+40,q:host.pickQ(Math.random,true)});nextGateM=Math.max(nextGateM,dist)+host.cfg().gateEvery;nextObs=Math.max(nextObs,260)}}
     gateStep(dt,dx);worldStep(dt,dx);
     if(Math.floor(dist)%5===0)hud();
   }else if(state==='lobby'){
@@ -725,7 +771,7 @@ function update(dt){
     if(raceT>0.7&&!$('rgCount').classList.contains('rg-hidden'))$('rgCount').classList.add('rg-hidden');
     if(!meDone){
       raceT=Math.max(0,(host.now()-startLocal)/1000);
-      speed=asking?0:baseSpeed(raceT)*(hero.stun>0?0.45:1)*(hero.boost>0?(hero.boost>1.25?1.45:1.3):1);const dx=speed*dt;meX+=dx;scroll+=dx;dist=meX/PXM;
+      speed=asking?0:baseSpeed(raceT)*terSpeed(dt)*(hero.stun>0?0.45:1)*(hero.boost>0?(hero.boost>1.25?1.45:1.3):1);const dx=speed*dt;meX+=dx;scroll+=dx;dist=meX/PXM;
       hero.stun=Math.max(0,hero.stun-dt);if(!asking)hero.boost=Math.max(0,hero.boost-dt);
       raceSpawn();heroStep(dt,speed);if(asking&&hero.ground)hero.key=idleKey();gateStep(dt,dx);worldStep(dt,dx);
       if(meX>=FIN)meFinish();
@@ -768,12 +814,12 @@ function drawKey(key,x,y,alpha){
   ctx.drawImage(atlas,(i%AT.cols)*AT.w,Math.floor(i/AT.cols)*AT.h,AT.w,AT.h,Math.round(x)-42,Math.round(y)-80,AT.w,AT.h);ctx.globalAlpha=1;
 }
 function drawRunner(r,x,y,alpha,blink){
-  ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.ellipse(x,GY+1-(r.lane||0),Math.max(4,10-(GY-r.y)/8),2.5,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.ellipse(x,GY-TH(x)+1-(r.lane||0),Math.max(4,10-(GY-TH(x)-r.y)/8),2.5,0,0,7);ctx.fill();
   if(blink)return;drawKey(r.key,x,y-(r.hop||0)-(r.lane||0),alpha);
 }
-function drawLines(){
+function drawLines(){const GY0L=GY;
   if(mode!=='race')return;
-  for(const [wx,fin] of [[0,false],[FIN,true]]){const sx=Math.round(wx-meX+HX);if(sx<-10||sx>W+10)continue;
+  for(const [wx,fin] of [[0,false],[FIN,true]]){const sx=Math.round(wx-meX+HX);if(sx<-10||sx>W+10)continue;const GY=Math.round(GY0L-TH(sx));
     if(!fin){ctx.fillStyle='#fff';ctx.fillRect(sx,GY,2,H-GY)}else{for(let y=GY;y<H;y+=3)for(let i=0;i<2;i++){ctx.fillStyle=((y/3+i)%2)?'#222':'#fff';ctx.fillRect(sx+i*3,y,3,3)}
       ctx.fillStyle='#7b5a3a';ctx.fillRect(sx-1,GY-50,2,50);ctx.fillStyle='#e03131';ctx.fillRect(sx+1,GY-50,14,9);ctx.fillStyle='#fff';ctx.fillRect(sx+4,GY-48,8,1)}}
 }
@@ -793,7 +839,7 @@ function render(dt){
   ctx.fillStyle=bgTop;ctx.fillRect(0,0,W,H);
   ctx.save();ctx.translate(sx,sy+Math.round(camY));drawBg();drawLines();drawGates();
   P.clearFrame(fB);P.clearFrame(fF);
-  items.forEach(c=>{c.fx.options.x=Math.round(c.x);c.fx.options.y=Math.round(c.y);c.fx.draw(fF,'front')});
+  items.forEach(c=>{c.fx.options.x=Math.round(c.x);c.fx.options.y=Math.round(c.y-TH(c.x));c.fx.draw(fF,'front')});
   obs.forEach(o=>{monPos(o);o.fx.draw(fB,'back');o.fx.draw(fF,'front')});
   fxs.forEach(e=>{e.fx.draw(fB,'back');e.fx.draw(fF,'front')});
   P.composite(fB,LB.d.data,null);LB.x.putImageData(LB.d,0,0);P.composite(fF,LF.d.data,null);LF.x.putImageData(LF.d,0,0);
@@ -840,5 +886,5 @@ let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;sndUi();if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
 window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
-  _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF}}};
+  _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF},TH:x=>TH(x),get TER(){return TER}}};
 })();
