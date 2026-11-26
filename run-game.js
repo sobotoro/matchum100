@@ -107,8 +107,9 @@ function withSeed(seed,fn){const R0=Math.random;Math.random=rng(seed);try{return
 
 function soloW(){const pe=root&&root.parentElement,cw=Math.min(1320,(pe&&pe.clientWidth)||(root&&root.clientWidth)||880);return Math.max(240,Math.min(400,Math.round(Math.max(cw/VIEW_SCALE,Math.min(300,cw/2.5))/4)*4))}   // 태블릿은 시야를 조금 넓혀요(300)
 function setView(w){if(w===W&&fB)return;W=w;cv.width=W;cv.height=H;ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
-  fB=P.createFrame(W,H);fF=P.createFrame(W,H);LB=mkLayer();LF=mkLayer();$('rgGame').style.aspectRatio=W+'/'+H;root.style.setProperty('--rg-ar',(W/H).toFixed(3))}
-function mkLayer(){const c=document.createElement('canvas');c.width=W;c.height=H;return{c,x:c.getContext('2d'),d:new ImageData(W,H)}}
+  fB=P.createFrame(W,H+2*FM,0,-FM);fF=P.createFrame(W,H+2*FM,0,-FM);LB=mkLayer();LF=mkLayer();$('rgGame').style.aspectRatio=W+'/'+H;root.style.setProperty('--rg-ar',(W/H).toFixed(3))}
+const FM=70;   // 몬스터·코인 그림판은 화면 위아래로 70씩 더 넓어요 (언덕·다리 위에서 위쪽이 잘리지 않게)
+function mkLayer(){const c=document.createElement('canvas');c.width=W;c.height=H+2*FM;return{c,x:c.getContext('2d'),d:new ImageData(W,H+2*FM)}}
 function clearWorld(){setDiff();terReset(mode==='race'?0:host.cfg().hill);setView(mode==='race'?RACE_W:soloW());hero.y=GY;hero.vy=0;hero.ground=true;hero.jumps=0;hero.hurtT=9;hero.stun=0;hero.boost=0;hero.hop=0;
   obs=[];items=[];fxs=[];camY=0;inv=0;shake=0;coins=0;dist=0;t=0;met.clear();toastT=0;$('rgToast').classList.remove('show');
   gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0;mePw=0}
@@ -284,8 +285,8 @@ function TH(sx){if(!TER_LV[TER.lvl])return 0;const w=terW(sx);if(!TER.race&&w>TE
   for(const g of TER.segs)if(w<g.x1){if(w<g.x0)return g.a;const k=(w-g.x0)/(g.x1-g.x0),e=k*k*(3-2*k);return g.a+(g.b-g.a)*e}return TER.h}
 const SLP=sx=>(TH(sx+3)-TH(sx-3))/6;   // 오른쪽으로 오르면 +
 const flatAt=(sx,r)=>{const h=TH(sx);for(let d=-r;d<=r;d+=20)if(Math.abs(TH(sx+d)-h)>0.5)return false;return true};
-// 오르막에서는 느려지고(가파를수록 더) 내리막에서는 빨라져요. 땅에 있을 때만 바뀌어서 공중에서는 속도가 그대로예요.
-function terSpeed(dt){const sl=SLP(HX),tf=sl>0?1-0.95*sl:1+1.2*-sl;if(hero.ground)TER.sf+=(Math.max(0.55,Math.min(1.5,tf))-TER.sf)*Math.min(1,dt*3);return TER.sf}
+// 오르막에서는 느려지고(가파를수록 더) 내리막에서는 빨라져요(최대 1.3배). 비탈 위를 달릴 때만이고, 평지나 공중에서는 곧바로 원래 속도로 돌아와요.
+function terSpeed(dt){const sl=hero.ground&&!hero.plat?SLP(HX):0,tf=Math.max(0.55,Math.min(1.3,sl>0?1-0.95*sl:1+0.9*-sl));TER.sf+=(tf-TER.sf)*Math.min(1,dt*(Math.abs(tf-1)<Math.abs(TER.sf-1)?8:3));return TER.sf}   // 비탈을 벗어나면(평지·공중) 0.3초 안에 원래 속도로
 
 // ── 몬스터 ──
 const MON={
@@ -843,7 +844,7 @@ function render(dt){
   obs.forEach(o=>{monPos(o);o.fx.draw(fB,'back');o.fx.draw(fF,'front')});
   fxs.forEach(e=>{e.fx.draw(fB,'back');e.fx.draw(fF,'front')});
   P.composite(fB,LB.d.data,null);LB.x.putImageData(LB.d,0,0);P.composite(fF,LF.d.data,null);LF.x.putImageData(LF.d,0,0);
-  ctx.drawImage(LB.c,0,0);ctx.drawImage(LF.c,0,0);
+  ctx.drawImage(LB.c,0,-FM);ctx.drawImage(LF.c,0,-FM);
   const gs=ghostStep(dt),tags=[];
   for(const g of [...gs].sort((a,b)=>b.lane-a.lane)){const x=HX+(g.x-meX)+g.ox;if(x<-30||x>W+30)continue;drawRunner(g,x,g.y,0.5);tags.push([g,x])}
   drawRunner(hero,HX,hero.y,1,(state==='play'||state==='race')&&inv>0&&hero.hurtT>0.6&&Math.floor(inv*14)%2===0);
