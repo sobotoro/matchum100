@@ -14,7 +14,7 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261127e";
+const RUN_V="20261127f";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
 const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal",runSound:true,runBoardEp:0,runHill:3,runFork:250,runAuto:true,runAutoT:"08:45,12:45,15:00,18:00",runAutoLead:10,runAutoMin:5};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
@@ -139,7 +139,7 @@ const RUN_HOST_T={...RUN_HOST,
   soloBlock:()=>"",ticketsLeft:()=>runCfg().max,needQuiz:()=>false,best:()=>RUN_T_BEST,
   useTicket:async()=>true,markQ:()=>{},
   soloEnd:async({dist,coins})=>{const rw=runReward(coins,0),reward=rw.r,why=rw.why,newBest=dist>RUN_T_BEST&&dist>0;RUN_T_BEST=Math.max(RUN_T_BEST,dist);return {reward,best:RUN_T_BEST,newBest,today:reward,why,preview:true}},
-  noRace:"대결은 학생만 참여해요. 위의 '친구들과 대결' 칸에서 열고 출발시켜 주세요.",
+  noRace:"대결은 학생만 참여해요. 위의 '친구들과 대결' 칸에서 열고 출발시켜 주세요.",spectate:true,
   raceJoin:()=>Promise.reject(new Error("teacher")),raceSend:()=>Promise.resolve(),raceLeave:()=>Promise.resolve()
 };
 
@@ -161,8 +161,8 @@ function renderRun(){
     if(w&&window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){w.innerHTML=runTeacherHtml();runTeacherBind();runBoardDraw();RunGame.refresh();return}
     v.innerHTML=`<div id="runTWrap">${runTeacherHtml()}</div>${runBoardCard()}
     <article class="card run-card">
-      <div class="t-head"><h2>학생 화면으로 연습해 보기</h2><span class="rstate">미리보기</span></div>
-      <p class="t-help">학생이 보는 달리기 화면과 똑같아요. 선생님은 티켓·수업 시간 잠금 없이 몇 번이든 해 볼 수 있고, 코인·기록은 저장되지 않아요. 퀴즈 문은 지금 정한 오늘의 퀴즈 범위에서 나와요.</p>
+      <div class="t-head"><h2>학생 화면으로 연습해 보기 · 대결 보기</h2><span class="rstate">미리보기</span></div>
+      <p class="t-help">대결이 열리면 '👀 대결 보기'를 눌러 학생들이 달리는 모습을 학생 화면처럼 실시간으로 볼 수 있어요(맨 앞 친구를 따라가고, 화면을 누르거나 ←/→로 다른 친구를 따라가요). 학생이 보는 달리기 화면과 똑같아요. 선생님은 티켓·수업 시간 잠금 없이 몇 번이든 해 볼 수 있고, 코인·기록은 저장되지 않아요. 퀴즈 문은 지금 정한 오늘의 퀴즈 범위에서 나와요.</p>
       <div id="runMount"><p class="empty">게임을 불러오는 중…</p></div>
       <p class="run-credit">효과: pixelfx (Patch, MIT License)</p>
     </article>`;
@@ -273,6 +273,7 @@ function runTeacherHtml(){
       ${st==="off"||st==="end"?`<button type="button" class="primary" id="runOpenRace">대결 열기</button>`:""}
       ${st==="lobby"?`<button type="button" class="primary" id="runGo" ${n?"":"disabled"}>출발! (${n}명)</button>`:""}
       ${st==="run"?`<button type="button" class="primary" id="runFinish">대결 마치고 1~5등 보상 주기</button>`:""}
+      ${st!=="off"?`<button type="button" class="ghost" id="runWatch">👀 대결 화면 보기</button>`:""}
       ${st!=="off"?`<button type="button" class="ghost" id="runClose">${st==="end"?"결과 닫기":"대결 닫기 (보상 없음)"}</button>`:""}
     </div>
     <div id="runLive">${runLiveHtml()}</div>
@@ -324,6 +325,8 @@ function runTeacherBind(){
   }).then(ok=>{if(ok){say("대결을 열었어요. 학생들이 '달리기 → 친구들과 대결'로 들어오면 '출발!'을 눌러 주세요.");renderRun()}});
   if(b("runGo"))b("runGo").onclick=()=>act(b("runGo"),m,()=>R("race/state").update({st:"run",at:runNow()+4500}))
     .then(ok=>{if(ok){say("출발! 3·2·1 뒤에 다 같이 달려요.");renderRun()}});
+  if(b("runWatch"))b("runWatch").onclick=()=>{const mt=$("#runMount");if(mt)mt.scrollIntoView({behavior:"smooth",block:"center"});
+    if(window.RunGame&&RunGame.mounted)RunGame.watch();else say("게임 화면을 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요.")};
   if(b("runClose"))b("runClose").onclick=()=>{if(!confirm("대결을 닫을까요? 들어와 있던 학생들은 첫 화면으로 돌아가요."))return;
     act(b("runClose"),m,()=>R("race").set({state:{rid:"",st:"off"}})).then(ok=>{if(ok){say("대결을 닫았어요.");renderRun()}})};
   if(b("runFinish"))b("runFinish").onclick=()=>{

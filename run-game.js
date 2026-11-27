@@ -49,6 +49,7 @@ const CSS=`.rg-game{outline:none;position:relative;border-radius:14px;overflow:h
 .rg-track .flag{position:absolute;right:-8px;top:0;font-size:14px}
 .rg-track .dot{position:absolute;top:4px;width:16px;height:16px;margin-left:-8px;border-radius:50%;border:2px solid #fff;font-size:9px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .rg-track .dot.rg-me{width:20px;height:20px;margin-left:-10px;top:2px;z-index:5;font-size:10px}
+.rg-tag.rg-follow{z-index:2;font-size:clamp(11px,1.9vw,15px);box-shadow:0 0 0 2px #fff,0 2px 6px rgba(0,0,0,.35)}
 .rg-tag{position:absolute;transform:translate(-50%,-100%);font-size:clamp(9px,1.6vw,13px);font-weight:700;color:#fff;padding:1px 6px;border-radius:8px;white-space:nowrap;pointer-events:none}
 .rg-prev{margin:0 0 6px;font-size:clamp(11px,1.6vw,13px);font-weight:700;color:#8a5a00;background:#fff3cd;border-radius:999px;padding:3px 10px;display:inline-block}
 .rg-quiz .qpen{margin-top:6px;font-size:clamp(13px,2.4vw,18px);font-weight:800;color:#e03131}
@@ -115,6 +116,8 @@ function clearWorld(){FORKS=[];FORK.req=0;FORK.met=0;FORK.every=mode==='race'?0:
   obs=[];items=[];fxs=[];camY=0;inv=0;shake=0;coins=0;dist=0;t=0;met.clear();toastT=0;$('rgToast').classList.remove('show');
   gates=[];asking=null;$('rgQuiz').classList.add('rg-hidden');nextGateM=Math.round(host.cfg().gateEvery*0.8);qRight=0;qAll=0;wrongs=[];mePen=0;mePw=0}
 function hud(){
+  if(mode==='race'&&spec){const o=rid?specOrder():[],lead=o.find(e=>!e.p.done),tg=o.find(e=>e.p.k===specK&&!e.p.done)||lead,fin=o.filter(e=>e.p.done).length;
+    $('rgDist').textContent='⏱ '+raceT.toFixed(1)+'초';$('rgCoin').textContent='👀 '+(tg?tg.p.n:'관전');$('rgHearts').textContent=lead?'🏁 '+Math.max(0,Math.ceil(FIN_M-(+lead.p.x||0)/PXM))+'m · 완주 '+fin+'/'+o.length:'완주 '+fin+'/'+o.length;return}
   if(mode==='race'){$('rgDist').textContent='⏱ '+raceT.toFixed(1)+'초'+(mePw?` (벌점 ${mePw}초)`:'');$('rgCoin').textContent='🪙 '+coins;
     $('rgHearts').textContent=meDone?'완주!':'🏁 '+Math.max(0,Math.ceil(FIN_M-dist))+'m';return}
   $('rgDist').textContent=Math.floor(dist)+'m';$('rgCoin').textContent='🪙 '+coins;$('rgHearts').textContent='❤️'.repeat(Math.max(0,hearts))+'🤍'.repeat(Math.max(0,3-Math.max(0,hearts)))}
@@ -131,10 +134,10 @@ function menu(){
   const raceOpen=rs&&(rs.st==='lobby'||rs.st==='run');
   showBox(`${host.preview?`<p class="rg-prev">${esc(host.preview)}</p>`:''}<h2>달려라, ${esc(host.title())}!</h2><p><span class="rg-tickets">🎫 오늘 남은 판 ${tl} / ${c.max}</span></p>
   <div class="rg-modes"><button type="button" id="rgSolo" class="${sb?'off':''}"><b>🏃 혼자 연습</b><span>${sb?esc(sb):`티켓 1장 · 하트 3개 · ${DF.name}<br>내 최고 기록 ${host.best()}m`}</span></button>
-  <button type="button" id="rgRace" class="${raceOpen?'':'off'}"><b>👫 친구들과 대결</b><span>${raceOpen?(rs.st==='run'?'대결이 벌써 시작했어요':rs.auto?`⏰ ${esc(rs.auto.hm)} 자동 대결!<br>${rs.auto.min}명 이상 모이면 출발`:'선생님이 연 대결!<br>1~5등 코인 보상'):raceIdleTxt()}</span></button></div>`);
+  <button type="button" id="rgRace" class="${raceOpen||host.spectate&&rs&&rs.st==='end'?'':'off'}">${host.spectate?`<b>👀 대결 보기</b><span>${raceOpen||rs&&rs.st==='end'?'학생들 화면 그대로 따라가요':'대결이 열리면 볼 수 있어요'}</span>`:`<b>👫 친구들과 대결</b><span>${raceOpen?(rs.st==='run'?'대결이 벌써 시작했어요':rs.auto?`⏰ ${esc(rs.auto.hm)} 자동 대결!<br>${rs.auto.min}명 이상 모이면 출발`:'선생님이 연 대결!<br>1~5등 코인 보상'):raceIdleTxt()}</span>`}</button></div>`);
   $('rgSolo').onclick=e=>{e.stopPropagation();soloReady()};
   if(!raceOpen){const f=host.raceFew&&host.raceFew();if(f&&f.hm!==fewSeen&&host.now()-f.t<10*60e3){fewSeen=f.hm;toast(`${esc(f.hm)} 자동 대결은 ${f.n}명만 모여서 쉬었어요. (${f.min}명 이상이면 출발)`)}}
-  $('rgRace').onclick=e=>{e.stopPropagation();if(host.noRace){toast(host.noRace);return}const r=host.race();if(r&&r.st==='lobby')raceLobby();else{const nx=host.autoNext&&host.autoNext();toast(r&&r.st==='run'?'대결이 이미 시작했어요. 다음 대결을 기다려요!':nx?`다음 자동 대결은 ${nx.day} ${esc(nx.hm)}이에요. 대기실이 열리면 알려 줄게요!`:'선생님이 대결을 열면 들어갈 수 있어요')}};
+  $('rgRace').onclick=e=>{e.stopPropagation();if(host.spectate){const r=host.race();if(r&&(r.st==='lobby'||r.st==='run'||r.st==='end'))raceSpectate();else toast('대결이 열리면 학생들이 달리는 모습을 볼 수 있어요. 위에서 대결을 열어 주세요.');return}if(host.noRace){toast(host.noRace);return}const r=host.race();if(r&&r.st==='lobby')raceLobby();else{const nx=host.autoNext&&host.autoNext();toast(r&&r.st==='run'?'대결이 이미 시작했어요. 다음 대결을 기다려요!':nx?`다음 자동 대결은 ${nx.day} ${esc(nx.hm)}이에요. 대기실이 열리면 알려 줄게요!`:'선생님이 대결을 열면 들어갈 수 있어요')}};
   hud();
 }
 
@@ -173,6 +176,7 @@ function jump(){
   else if(hero.jumps<2){hero.vy=JV2;hero.jumps=2;hero.hold=true;hero.dj=0.25;sfx('jump2');fx(FX.burst,{x:HX,y:hero.y+2,seed:7,light:0.5},false)}
 }
 function press(){
+  if(spec){if(state==='race')specNext(1);return}
   if(asking)return;
   if(state==='ready'){soloStart();return}
   if(state==='over'){if(overT>1){if(host.soloBlock())menu();else soloReady()}return}
@@ -185,6 +189,7 @@ const typingEl=()=>{const a=document.activeElement;return a&&(a.tagName==='INPUT
 function onKey(e){if(!visible()||typingEl())return;const c=e.code||e.key;sndUnlock();
   if(asking&&!asking.res){const k={ArrowLeft:0,Digit1:0,KeyA:0,Numpad1:0,ArrowRight:1,Digit2:1,KeyD:1,Numpad2:1}[c];if(k!==undefined){e.preventDefault();answer(k);return}}
   if(asking&&(JUMP_KEYS.includes(c)||e.key===' ')){e.preventDefault();return}
+  if(spec&&state==='race'&&(c==='ArrowLeft'||c==='ArrowRight')){e.preventDefault();specNext(c==='ArrowRight'?1:-1);return}
   if(JUMP_KEYS.includes(c)||START_KEYS.includes(c)||e.key===' '){
     if(state==='menu'&&!START_KEYS.includes(c))return; // 첫 화면에서는 스페이스로 스크롤 가능
     e.preventDefault();if(e.repeat)return;
@@ -549,7 +554,7 @@ function answer(i){
   asking.wait=ok?0.7:Math.max(1.9,asking.pen||0);hud();if(mode==='race')sendNow=true;
 }
 function gateStep(dt,dx){
-  gates.forEach(g=>{g.x-=dx;if(!g.state&&g.x-HX<30){g.state='asked';ask(g)}});gates=gates.filter(g=>g.x>-40);
+  gates.forEach(g=>{g.x-=dx;if(!spec&&!g.state&&g.x-HX<30){g.state='asked';ask(g)}});gates=gates.filter(g=>g.x>-40);
   if(asking&&asking.res){asking.wait-=dt;if(asking.pen){const e=$('rgPenT');if(e)e.textContent=Math.max(1,Math.ceil(asking.wait))}if(asking.wait<=0){$('rgQuiz').classList.add('rg-hidden');asking.g.state='done';asking=null}}
 }
 function drawGates(){
@@ -576,8 +581,9 @@ function makeCourse(seed){
   return{mons:mons.filter(m=>!near(m.x)),cns:cns.filter(c=>!near(c[0])),gts};
 }
 const COLORS=['#e8590c','#2f9e44','#9c36b5','#1098ad','#d6336c','#5c940d','#f08c00','#1c7ed6','#c2255c','#087f5b','#5f3dc4','#e67700'];
+let spec=false,specK=null,specEnd=0;   // 선생님 관전: 학생들 화면처럼 대결을 따라가요 (나는 안 달려요)
 let course=null,ci=0,cci=0,gci=0,meX=0,raceT=0,meDone=false,meTime=0,cnt=0,ghosts={},rid=null,startLocal=0,sendT=0,sendNow=false,resultShown=false;
-function raceOff(){cntHide=0;$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
+function raceOff(){spec=false;specK=null;specEnd=0;cntHide=0;$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
 function raceLobby(){
   const rs=host.race();if(!rs||rs.st!=='lobby'){menu();return}
   mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);terBuildRace(rs.seed,rs.hill,course.gts,rs.fork,course.mons,course.cns);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
@@ -585,7 +591,45 @@ function raceLobby(){
   host.raceJoin(rid).catch(()=>{toast('대결에 들어가지 못했어요. 새로 고쳐 주세요.')});
   lobbyBox();
 }
+function raceSpectate(){
+  const rs=host.race();if(!rs||!(rs.st==='lobby'||rs.st==='run'||rs.st==='end')){menu();return}
+  mode='race';state='lobby';clearWorld();spec=true;specK=null;specEnd=0;rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);terBuildRace(rs.seed,rs.hill,course.gts,rs.fork,course.mons,course.cns);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
+  $('rgTrack').classList.remove('rg-hidden');inv=1e9;
+  if(rs.st==='lobby'){lobbyBox();hud();return}
+  startLocal=rs.at;hideBox();state='race';raceT=Math.max(0,(host.now()-startLocal)/1000);
+  const ps=host.racePlayers(rid);meX=ps.length?Math.max(...ps.map(p=>p.done?FIN:(+p.x||0))):0;hud();
+}
+function specCur(){const o=specOrder();const t=o.find(e=>e.p.k===specK&&!e.p.done)||o.find(e=>!e.p.done)||o[0];return t&&t.p.k}
+function specOrder(){return host.racePlayers(rid).map(p=>({p,g:ghosts[p.k],x:p.done?FIN+1e6-(p.tm+(p.pen||0)):(+p.x||0)})).sort((a,b)=>b.x-a.x)}
+function specNext(d){const o=specOrder();if(!o.length)return;const cur=specCur();let i=o.findIndex(e=>e.p.k===cur);i=i<0?0:(i+d+o.length)%o.length;specK=o[i].p.k;toast(`👀 ${esc(o[i].p.n)} 친구를 따라가요 (${i+1}위)`)}
+function specStep(dt){
+  raceT=state==='race'?Math.max(0,(host.now()-startLocal)/1000):raceT;
+  const o=specOrder(),run=o.filter(e=>!e.p.done);let tg=o.find(e=>e.p.k===specK&&!e.p.done);
+  if(!tg)tg=run[0]||o[0];
+  const g=tg&&ghosts[tg.p.k],want=g?g.x:meX,old=meX;meX+=(want-meX)*Math.min(1,dt*5);if(meX>FIN+40)meX=FIN+40;
+  const dx=meX-old;scroll+=dx;dist=meX/PXM;if(g)hero.y=g.y;inv=1e9;
+  raceSpawn();gateStep(dt,dx);worldStep(dt,dx);
+  const rs=host.race(),all=o.length>0&&run.length===0;
+  if((all||(rs&&rs.st==='end'))&&!specEnd)specEnd=1.2;
+  if(specEnd>0){specEnd-=dt;if(specEnd<=0){specEnd=-1;resT=0;state='result'}}
+  if(state==='result'){resT-=dt;if(resT<=0){resT=1;showSpecResult()}}
+  hud();
+}
+function showSpecResult(){
+  resultShown=true;const N=course.gts.length,c=host.cfg(),ps=host.racePlayers(rid);
+  const fin=ps.filter(p=>p.done).map(p=>Object.assign({},p,{rec:p.tm+(p.pen||0)})).sort((a,b)=>a.rec-b.rec),run=ps.filter(p=>!p.done).sort((a,b)=>(b.x||0)-(a.x||0)),medal=['🥇','🥈','🥉'];
+  showBox(`<h2>🏁 대결 결과${run.length?' <span style="font-size:13px;color:#868e96">(들어오는 중)</span>':''}</h2>
+  <table class="rg-rank"><tr style="color:#868e96"><td></td><td>이름</td><td>기록</td><td>정답</td><td>보상</td></tr>${fin.map((r,i)=>`<tr><td>${medal[i]||(i+1)+'등'}</td><td>${esc(r.n)}</td><td>${r.rec.toFixed(1)}초${r.pw?` <span style="color:#e03131;font-size:11px">(벌점 ${r.pw}초 포함)</span>`:''}</td><td>${r.ok||0}/${N}${(r.ok||0)===N?' 🎯':''}</td><td>${c.prize[i]?'🪙+'+c.prize[i]:''}</td></tr>`).join('')}
+    ${run.map(r=>`<tr><td>-</td><td>${esc(r.n)}</td><td>${Math.min(FIN_M,Math.round((r.x||0)/PXM))}m 달리는 중</td><td></td><td></td></tr>`).join('')}</table>
+  <p class="tip">👀 선생님 관전 화면이에요. 보상은 ${(host.race()||{}).auto?'대결이 끝나면 저절로':'위의 \'대결 마치고 1~5등 보상 주기\'를 누르면'} 지갑에 들어가요.</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
+  $('rgMenu').onclick=e=>{e.stopPropagation();menu()};
+}
 function lobbyBox(){
+  if(spec){const ps=host.racePlayers(rid),au=(host.race()||{}).auto;
+    showBox(`<h2>👀 ${au?`${esc(au.hm)} 자동 대결`:'대결'} 관전</h2><p>🏁 ${FIN_M}m 달리기 · 출발하면 학생들 화면처럼 따라가요. 화면을 누르거나 ←/→로 따라갈 친구를 바꿔요.</p>${au?`<p class="rg-auto" id="rgAutoT">${autoLeft(au)}</p>`:''}
+    <div class="rg-chips" id="rgChips">${ps.map((p,i)=>`<span class="rg-chip" style="background:${COLORS[i%COLORS.length]}">${esc(p.n)}</span>`).join('')}</div>
+    <p class="tip">${ps.length}명 들어왔어요${au&&ps.length<au.min?` · ${au.min-ps.length}명 더 모여야 출발해요`:''}</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
+    $('rgMenu').onclick=e=>{e.stopPropagation();menu()};return}
   const ps=host.racePlayers(rid),c=host.cfg(),au=(host.race()||{}).auto;
   showBox(`<h2>👫 ${au?`${esc(au.hm)} 자동 대결`:'대결'} 대기실</h2><p>🏁 ${FIN_M}m 달리기 · ${au?`<b>${au.min}명 이상</b> 모이면 ${esc(au.hm)}에 3·2·1 다 같이 시작해요.`:'선생님이 "출발"을 누르면 3·2·1 다 같이 시작해요.'}</p>${au?`<p class="rg-auto" id="rgAutoT">${autoLeft(au)}</p>`:''}<p><span class="rg-tickets">🏆 ${prizeLine(c.prize)}</span></p>
   <div class="rg-chips" id="rgChips">${ps.map((p,i)=>`<span class="rg-chip" style="background:${p.me?'#2456e6':COLORS[i%COLORS.length]}">${esc(p.me?'나':p.n)}</span>`).join('')}</div>
@@ -599,12 +643,13 @@ function raceWatch(){
   // 선생님이 바꾼 대결 상태를 따라가요
   const rs=host.race();
   if(state==='lobby'){
+    if(spec&&(!rs||rs.rid!==rid||rs.st==='off')){const f=host.raceFew&&host.raceFew();menu();toast(f?`${f.n}명만 모여서 이번 자동 대결은 쉬어요.`:'대결이 닫혔어요');return}
     if(!rs||rs.rid!==rid||rs.st==='off'){const f=host.raceFew&&host.raceFew();if(f)fewSeen=f.hm;menu();toast(f?`${f.n}명만 모여서 이번 대결은 쉬어요. (${f.min}명 이상이면 출발) 다음에 또 만나요!`:'선생님이 대결을 닫았어요');return}
     if(rs.auto){const el=$('rgAutoT');if(el){const t=autoLeft(rs.auto);if(t!==autoTxt){autoTxt=t;el.innerHTML=t}}}
     if(rs.st==='run'&&rs.at){startLocal=rs.at;hideBox();state='count';$('rgCount').classList.remove('rg-hidden');fitView()}
     else{const n=host.racePlayers(rid).length;if(n!==lobbyN){lobbyN=n;lobbyBox()}}
   }
-  if((state==='race'||state==='result'||state==='count')&&(!rs||rs.rid!==rid)){toast('선생님이 대결을 닫았어요');menu()}
+  if((state==='race'||state==='result'||state==='count')&&(!rs||rs.rid!==rid)){menu();toast(spec?'대결이 닫혔어요':'선생님이 대결을 닫았어요')}
 }
 let lobbyN=0;
 function raceSpawn(){
@@ -808,10 +853,10 @@ function worldStep(dt,dx){
   if(asking){obs.forEach(o=>o.fx.update(dt));items.forEach(c=>c.fx.update(dt));return}
   const hx0=HX-7,hy0=hero.y-46,hy1=hero.y-2;
   obs.forEach(o=>{o.t+=dt;if(o.move)o.move(o,dt);if(o.wm)wildStep(o,dt);if(o.rx)reactStep(o,dt);if(o.follow&&!o.follow.gone&&obs.includes(o.follow))o.vx=o.follow.vx||0;o.x-=dx+(o.vx||0)*dt;o.fx.update(dt);
-    if(!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
+    if(!spec&&!o.dead&&inv<=0&&pixHit(o,hx0,hy0)){o.dead=1;hit(o)}});
   obs=obs.filter(o=>o.x>-70&&!o.gone);
   items.forEach(c=>{c.x-=dx;c.fx.update(dt);
-    const cy=c.y-19-(c.br?THb(c.x)+BR:TH(c.x));if(!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;sfx('coin');fx(FX.burst,{x:c.x,y:cy+9,light:0.8},false);hud()}});
+    const cy=c.y-19-(c.br?THb(c.x)+BR:TH(c.x));if(!spec&&!c.got&&Math.abs(c.x-HX)<11&&cy<hy1+4&&cy>hy0-4){c.got=1;coins++;sfx('coin');fx(FX.burst,{x:c.x,y:cy+9,light:0.8},false);hud()}});
   items=items.filter(c=>c.x>-20&&!c.got);
   inv=Math.max(0,inv-dt);
   fxs.forEach(e=>{if(e.scroll)e.fx.options.x-=dx});
@@ -843,6 +888,9 @@ function update(dt){
     {const c=left>3?9:left>0?Math.ceil(left):0;if(SND.cd!==c){if(SND.cd!=null&&c<=3)sfx(c?'beep':'go');SND.cd=c}}
     if(left<=0&&state==='count'){state='race';raceT=Math.max(0,-left);sendNow=true}
     raceWatch();
+  }else if(spec&&(state==='race'||state==='result')){
+    if(raceT>0.7&&!$('rgCount').classList.contains('rg-hidden'))$('rgCount').classList.add('rg-hidden');
+    specStep(dt);hero.key=idleKey();raceWatch();
   }else if(state==='race'||state==='result'){
     if(raceT>0.7&&!$('rgCount').classList.contains('rg-hidden'))$('rgCount').classList.add('rg-hidden');
     if(!meDone){
@@ -907,7 +955,7 @@ function ghostStep(dt){
     const tx=p.done?FIN+30:(p.x||0);g.x+=(tx-g.x)*Math.min(1,dt*6);if(!p.done&&!p.q&&state==='race')g.x+=baseSpeed(raceT)*dt*0.6;if(g.x>tx+40)g.x=tx+40;
     g.y+=((p.y||GY)-g.y)*Math.min(1,dt*12);g.ft+=dt;if(g.ft>0.05){g.ft=0;g.f=(g.f+1)%10}
     g.key=p.done?idleKey():p.q?idleKey():p.s?'hurt'+(1+(g.f%12)):g.y<GY-2?'jump4':(state==='race'||state==='result')?'run'+(g.f+1):idleKey();
-    g.n=p.n;g.done=p.done;out.push(g)});
+    g.n=p.n;g.k=p.k;g.done=p.done;out.push(g)});
   return out;
 }
 function render(dt){
@@ -921,13 +969,13 @@ function render(dt){
   P.composite(fB,LB.d.data,null);LB.x.putImageData(LB.d,0,0);P.composite(fF,LF.d.data,null);LF.x.putImageData(LF.d,0,0);
   ctx.drawImage(LB.c,0,-FM);ctx.drawImage(LF.c,0,-FM);
   const gs=ghostStep(dt),tags=[];
-  for(const g of [...gs].sort((a,b)=>b.lane-a.lane)){const x=HX+(g.x-meX)+g.ox;if(x<-30||x>W+30)continue;drawRunner(g,x,g.y,0.5);tags.push([g,x])}
-  drawRunner(hero,HX,hero.y,1,(state==='play'||state==='race')&&inv>0&&hero.hurtT>0.6&&Math.floor(inv*14)%2===0);
+  for(const g of [...gs].sort((a,b)=>b.lane-a.lane)){const x=HX+(g.x-meX)+g.ox;if(x<-30||x>W+30)continue;drawRunner(g,x,g.y,spec?1:0.5);tags.push([g,x])}
+  if(!spec)drawRunner(hero,HX,hero.y,1,(state==='play'||state==='race')&&inv>0&&hero.hurtT>0.6&&Math.floor(inv*14)%2===0);
   ctx.restore();
   if(mode==='race'){
-    let h='';for(const [g,x] of tags)h+=`<div class="rg-tag" style="left:${x/W*100}%;top:${(g.y-g.lane-66+camY)/H*100}%;background:${g.color}">${esc(g.n)}</div>`;$('rgTags').innerHTML=h;
+    let h='';for(const [g,x] of tags)h+=`<div class="rg-tag${spec&&g.k===specCur()?' rg-follow':''}" style="left:${x/W*100}%;top:${(g.y-g.lane-66+camY)/H*100}%;background:${g.color}">${esc(g.n)}</div>`;$('rgTags').innerHTML=h;
     let d='';for(const g of gs){const p=Math.max(0,Math.min(1,g.x/FIN))*100;d+=`<div class="dot" style="left:${p}%;background:${g.color}">${esc((g.n||'?')[0])}</div>`}
-    d+=`<div class="dot rg-me" style="left:${Math.max(0,Math.min(1,meX/FIN))*100}%;background:#2456e6">나</div>`;
+    if(!spec)d+=`<div class="dot rg-me" style="left:${Math.max(0,Math.min(1,meX/FIN))*100}%;background:#2456e6">나</div>`;
     $('rgTrack').querySelectorAll('.dot').forEach(n=>n.remove());$('rgTrack').insertAdjacentHTML('beforeend',d);
   }
 }
@@ -961,6 +1009,6 @@ function unmount(){
 let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&mode==='solo'&&(state==='menu'||state==='ready'))setView(soloW())},200)}
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;sndUi();if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
-window.RunGame={mount,unmount,refresh,inRace:()=>mode==='race'&&(state==='lobby'||state==='count'||state==='race'),get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
+window.RunGame={mount,unmount,refresh,inRace:()=>mode==='race'&&!spec&&(state==='lobby'||state==='count'||state==='race'),watch:()=>{if(mounted)raceSpectate()},get spectating(){return spec},get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
   _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF},TH:x=>TH(x),get TER(){return TER},get FORKS(){return FORKS},get onBridge(){return !!hero.plat},forkS:()=>{const w=terW(HX);const f=FORKS.find(f=>f.s>w-120);return f?w-f.s:null},gap:()=>{const w=terW(HX)+18;let m=null;for(const f of FORKS)for(const g of f.gaps){const d=g[0]-w;if(d>-5&&(m==null||d<m))m=d}return m}}};
 })();
