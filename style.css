@@ -75,6 +75,7 @@ button:focus-visible,summary:focus-visible,input:focus-visible{outline:3px solid
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:.85rem;color:var(--muted)}
 .prog{font-family:var(--f-display);font-weight:700;font-size:1rem;color:var(--ink);font-variant-numeric:tabular-nums}
 .tag{background:var(--chip);border-radius:6px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.tag.review{background:var(--accent-soft);color:var(--accent);font-weight:700}
 .bar{flex:1 1 100%;height:4px;background:var(--grid);border-radius:4px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);transition:width .3s}
 .kind{margin:0;font-size:.85rem;letter-spacing:.04em;color:var(--accent)}

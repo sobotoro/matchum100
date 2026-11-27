@@ -269,7 +269,7 @@ const STOCKS=[
 ["039030","이오테크닉스","KOSDAQ","레이저 장비"],["222800","심텍","KOSDAQ","반도체 기판"],["240810","원익IPS","KOSDAQ","반도체 장비"],["058470","리노공업","KOSDAQ","반도체 검사 부품"]
 ];
 const SEED_MARKET={label:"11월 4일 종가",prices:{"005930":[218000,219500],"000660":[1322000,1398000],"402340":[899000,899000],"009150":[1105000,1105000],"373220":[339500,338000],"207940":[1495000,1452000],"005380":[283500,277500],"105560":[151400,151400],"032830":[260000,261500],"028260":[299500,309500],"196170":[201500,213500],"086520":[69900,70200],"247540":[87600,87600],"036930":[163000,155100],"277810":[347000,348000],"028300":[33300,40700],"039030":[363500,358000],"222800":[120800,112300],"240810":[84500,84500],"058470":[54700,53500]}};
-const DEF_CFG={rate:3,coinPer:10,bonus:50,passPct:0,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",subjs:"",hUnits:"1,2,3",hTimer:30,sRange:"1-25",sTimer:30,feeRate:0,feeMin:1,shortDays:3,shortRate:0,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
+const DEF_CFG={rate:3,coinPer:10,bonus:50,passPct:0,reviewPct:100,count:10,timer:20,fastSec:5,fastBonus:0,range:"1-25",random:false,type:"둘다",subject:"맞춤법",subjs:"",hUnits:"1,2,3",hTimer:30,sRange:"1-25",sTimer:30,feeRate:0,feeMin:1,shortDays:3,shortRate:0,note:"",board:"상위5",boardName:"이름",className:"우리 반",siteName:"CLASS LAB",classTag:"",tagline:"우리 반 실험실",mealOn:true,mealLink:true,mealCoins:250,mealFrom:"12:30",mealTo:"13:40",mealSeen:true,roomOn:true,roomFrom:"08:00",roomTo:"16:00",roomWeekend:false,roomUntil:0};
 const DEF_SHOP={p1:{name:"칭찬 카드 1개",price:100,desc:"선생님께 칭찬 카드 1장을 받아요.",on:true},p2:{name:"칭찬 카드 2개",price:190,desc:"칭찬 카드 2장 묶음이에요.",on:true},p3:{name:"칭찬 카드 3개",price:270,desc:"칭찬 카드 3장 묶음이에요.",on:true}};
 
 /* ---------- 도구 ---------- */
@@ -839,8 +839,19 @@ const passNeed=n=>{const p=passPct();if(!p||!n)return 0;for(let r=0;r<=n;r++)if(
 const takeN=()=>{const n=pool().length,k=+CFG.count||0;return k&&k<n?k:n};
 /* 오늘 낼 문제: 속담은 되도록 서로 다른 속담에서 뽑고, 과목을 여러 개 고르면 고른 과목끼리 똑같이 나눠 내요.
    한 과목의 문제가 모자라면 남는 몫은 다른 과목이 채워요. */
-function pickToday(){
-  const p=pools(),n=takeN();
+/* 오답 우선: 가장 최근 결과가 '틀림'인 문제(오늘 범위 밖 지난 범위도 포함, 고른 과목 안에서)를 하루 문제 수의 reviewPct%까지 맨 앞에 내요.
+   오래전에 틀린 문제부터. 다시 맞히면(도전·연습 모두) 빠지고, 또 틀리면 남아요. */
+const reviewPct=()=>{const v=CFG.reviewPct;return v==null||v===""?100:Math.max(0,Math.min(100,Math.round(+v||0)))};
+const subjOf=q=>q.type==="hs"?"hs":q.type==="sd"?"sd":"sp";
+function reviewQs(n){
+  const pct=reviewPct(),k=Math.floor(n*pct/100);if(!k||role!=="student"||!ME||!ME.qh)return [];
+  const c=cfg();
+  return shuffle(ALL.filter(q=>c.sub.has(subjOf(q))).map(q=>({q,h:qHist(q.id)})).filter(x=>x.h&&!x.h.ok))
+    .sort((a,b)=>a.h.d<b.h.d?-1:a.h.d>b.h.d?1:0).slice(0,k).map(x=>x.q);
+}
+function pickChallenge(){const n=takeN(),rv=reviewQs(n),ex=new Set(rv.map(q=>q.id));return {rv:shuffle(rv),main:shuffle(pickToday(n-rv.length,ex))}}
+function pickToday(n=takeN(),ex){
+  const p0=pools(),p=ex&&ex.size?{sp:p0.sp.filter(q=>!ex.has(q.id)),sd:p0.sd.filter(q=>!ex.has(q.id)),hs:p0.hs.filter(q=>!ex.has(q.id))}:p0;if(n<=0)return [];
   const sdPick=k=>{const seen=new Set(),first=[],rest=[];pickQs(p.sd,p.sd.length).forEach(q=>{if(seen.has(q.sd))rest.push(q);else{seen.add(q.sd);first.push(q)}});return [...first,...rest].slice(0,k)};
   const pick={sp:k=>pickQs(p.sp,k),sd:sdPick,hs:k=>pickQs(p.hs,k)};
   const g=SUBJ_KEYS.filter(k=>p[k].length);if(!g.length)return [];
@@ -919,13 +930,13 @@ function renderStart(){
     <p class="kind">오늘의 도전 · ${md(today())}</p>
     <h2>${subjTitle(c)} 퀴즈 ${n}문제</h2>
     <p class="t-help">하루에 한 번만 도전할 수 있어요. 시작하면 끝까지 풀어야 해요.</p>
-    <ul class="rules">${tline?`<li>${tline} 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li>${passPct()?`<li class="pass-rule"><b>기준 점수 ${passPct()}점</b>: ${takeN()}문제 중 <b>${passNeed(takeN())}문제 이상</b> 맞혀야 코인을 받아요. 기준 점수보다 낮으면 이번에는 코인이 없어요.</li>`:""}<li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
+    <ul class="rules">${tline?`<li>${tline} 안에 골라야 해요. 시간이 지나면 틀린 것으로 쳐요.</li>`:""}${(()=>{const r=reviewQs(n).length;return r?`<li class="review-rule">🔁 예전에 틀린 문제 <b>${r}문제</b>가 맨 앞에 나와요. 이번에 맞히면 다음부터는 안 나와요.</li>`:""})()}<li>맞힌 문제마다 <b>${fmt(CFG.coinPer)}코인</b></li>${tl&&+CFG.fastBonus?`<li>${+CFG.fastSec||5}초 안에 맞히면 번개 보너스 <b>+${fmt(CFG.fastBonus)}코인</b></li>`:""}<li>모두 맞히면 보너스 <b>${fmt(CFG.bonus)}코인</b></li>${passPct()?`<li class="pass-rule"><b>기준 점수 ${passPct()}점</b>: ${takeN()}문제 중 <b>${passNeed(takeN())}문제 이상</b> 맞혀야 코인을 받아요. 기준 점수보다 낮으면 이번에는 코인이 없어요.</li>`:""}<li>받은 코인은 지갑에 들어가요. 저금하거나 주식을 사거나 상점에서 쓸 수 있어요.</li></ul>
     <p class="msg" id="startMsg" role="status"></p>
     <div class="actions"><button type="button" class="primary" id="goBtn" ${n?"":"disabled"}>도전 시작</button></div>
   </article>`;
   $("#goBtn").onclick=()=>{
-    const qs=shuffle(pickToday()).map(q=>withVar(q,pickVar(q)));
-    const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),shown:qs.map(q=>q.fixed?[...q.opts]:shuffle(q.opts)),vi:qs.map(q=>q.vi||0),picks:[]};
+    const pk=pickChallenge(),qs=[...pk.rv,...pk.main].map(q=>withVar(q,pickVar(q)));
+    const qz={date:today(),state:"시작",qids:qs.map(q=>q.id),rv:pk.rv.length,shown:qs.map(q=>q.fixed?[...q.opts]:shuffle(q.opts)),vi:qs.map(q=>q.vi||0),picks:[]};
     act($("#goBtn"),$("#startMsg"),async()=>{
       const cur=(await R(`students/${KEY}/quiz`).once("value")).val()||{};
       if(cur.date===today())throw new Error("오늘의 도전은 이미 시작했어요.");
@@ -967,7 +978,7 @@ function renderQ(){
   const lab=Q.mode==="challenge"?"오늘의 도전":"연습 · 코인 없음";
   $("#stage").innerHTML=`<article class="card">
     <div class="meta"><span class="prog">${Q.i+1} / ${Q.qs.length}</span>
-      <span class="tag">${lab}</span>
+      <span class="tag">${lab}</span>${Q.mode==="challenge"&&Q.qz&&Q.i<(+Q.qz.rv||0)?`<span class="tag review">🔁 다시 도전</span>`:""}
       <span class="tag">${qTag(q)}</span>
       <div class="bar"><i style="width:${(Q.i/Q.qs.length)*100}%"></i></div></div>
     ${limitSec()?`<div class="tbar" id="tbar" role="timer" aria-label="남은 시간"><span class="tlbl" aria-hidden="true">⏱</span><span class="track"><i></i></span><span class="sec">${limitSec()}초</span></div>`:""}
@@ -1441,6 +1452,7 @@ function renderTeacher(){
       <p class="t-help">과목을 바꿔도 코인이 걸린 도전은 하루 1번이에요. 역사 문제는 4지선다, O/X, 빈칸 세 가지가 섞여 나오고, 위 단원 스위치를 켠 단원에서만 나와요. 속담 문제는 완성하기, 뜻 고르기, 상황에 맞는 속담 고르기 세 가지가 섞여 나오고 보기는 4개예요. 속담도 교재처럼 하루 4개씩 25일차예요.</p>
       <div class="row2">
         <label class="t-field" for="cCount">하루 문제 수${sel("cCount",[[10,"10문제"],[20,"20문제"],[30,"30문제"],[0,"범위 안 모든 문제"]],c.count)}</label>
+        <label class="t-field" for="cReview">오답 우선 (지난 범위 포함)${sel("cReview",[[100,"최대 (전부 오답이어도)"],[50,"절반까지"],[30,"30%까지"],[0,"없음"]],reviewPct())}</label>
         <label class="t-field" for="cType">맞춤법 문제 유형${sel("cType",[["둘다","고르기 + 빈칸"],["고르기","바른 말·뜻 고르기만"],["빈칸","문장 빈칸만"]],c.type)}</label>
         <label class="t-field" for="cRandom">출제 방식${sel("cRandom",[["0","범위 안에서"],["1","범위 없이 전체에서 무작위"]],c.random?1:0)}</label>
       </div>
@@ -1452,6 +1464,7 @@ function renderTeacher(){
         <label class="t-field" for="cFastS">번개 기준${sel("cFastS",[[3,"3초 안에 맞히면"],[5,"5초 안에 맞히면"],[7,"7초 안에 맞히면"],[10,"10초 안에 맞히면"]],+c.fastSec||5)}</label>
       </div>
       <p class="t-help">시간이 지나면 틀린 것으로 처리하고 정답을 보여 줘요. 새로고침해도 시간은 처음부터 다시 시작되지 않아요. 학생마다 시간을 늘리려면 아래 학생 명단에서 '수정·리셋'을 눌러요.</p>
+      <p class="t-help">오답 우선: 학생마다 가장 최근에 틀린 문제(지금 범위 밖 지난 범위도 포함, 고른 과목 안에서)를 오늘의 도전 맨 앞에 내요. 오래전에 틀린 문제부터 나오고, 다시 맞히면 빠져요. 문장 예시는 지난번과 다른 것으로 바꿔 내요.</p>
       <label class="t-field" for="cNote">학생에게 보여 줄 안내 문구<input type="text" id="cNote" maxlength="80" value="${esc(c.note)}" placeholder="예: 이번 주는 5~7일차예요."></label>
     </div>
     <div class="t-sec"><h3>코인과 은행</h3>
@@ -1536,7 +1549,7 @@ function renderTeacher(){
   <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. 구글 Apps Script(CLASS LAB 주가 갱신)가 평일 장중 10분마다 네이버 시세를 가져와 Firebase에 넣어요. GitHub도 예비로 시세 파일을 올려요. 둘 중 더 새 시세를 써요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
   tMsgTxt="";
   $("#cSave").onclick=()=>{
-    const v={feeRate:r2(clampN($("#cFeeRate").value,0,10)),feeMin:r2(clampN($("#cFeeMin").value,0,1e6)),shortDays:+$("#cShortDays").value||0,shortRate:r2(clampN($("#cShortRate").value,0,10)),...subjSave(),sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
+    const v={feeRate:r2(clampN($("#cFeeRate").value,0,10)),feeMin:r2(clampN($("#cFeeMin").value,0,1e6)),shortDays:+$("#cShortDays").value||0,shortRate:r2(clampN($("#cShortRate").value,0,10)),...subjSave(),sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,reviewPct:+$("#cReview").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),passPct:Math.max(0,Math.min(100,Math.round(+$("#cPass").value||0))),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),
       className:$("#cClass").value.trim()||"우리 반",siteName:$("#cSite").value.trim().slice(0,20)||"CLASS LAB",classTag:$("#cTag").value.trim().slice(0,12),tagline:$("#cTagline").value.trim().slice(0,40),board:$("#cBoard").value,boardName:$("#cBName").value,
       mealOn:$("#cMealOn").value==="1",mealLink:$("#cMealLink").value==="1",mealCoins:Math.max(0,Math.round(+$("#cMealCoins").value||0)),
