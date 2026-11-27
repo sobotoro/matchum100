@@ -14,11 +14,13 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261127b";
+const RUN_V="20261127e";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
-const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal",runSound:true,runBoardEp:0,runHill:3,runFork:250};
+const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal",runSound:true,runBoardEp:0,runHill:3,runFork:250,runAuto:true,runAutoT:"08:45,12:45,15:00,18:00",runAutoLead:10,runAutoMin:5};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
 
+/* 자동 대결 시각 "8:45, 12:45" → ["08:45","12:45"] (겹치면 하나, 시간순) */
+function runTimes(v){return [...new Set(String(v==null?RUN_DEF.runAutoT:v).split(/[,\s]+/).map(x=>{const m=x.match(/^(\d{1,2}):(\d{2})$/);return m&&+m[1]<24&&+m[2]<60?m[1].padStart(2,"0")+":"+m[2]:""}).filter(Boolean))].sort()}
 /* 코인 숫자: 0 이상이면 얼마든지 (소수 둘째 자리까지) */
 function runNum(x){const n=+x;return isFinite(n)&&n>0?Math.round(n*100)/100:0}
 function runCfg(){
@@ -26,6 +28,7 @@ function runCfg(){
   return {open:c.runOpen!==false,max:Math.max(1,+c.runMax||3),quizT:Math.max(0,+c.runQuizT||0),perfT:Math.max(0,+c.runPerfT||0),
     lockOn:c.runLock!==false,from:c.runFrom||"09:00",to:c.runTo||"12:10",coin:Math.max(0,+c.runCoin||0),coinMax:Math.max(0,+c.runCoinMax||0),
     gateEvery:Math.max(60,+c.runGate||120),pen:Math.max(0,+c.runPen||0),len:[500,800,1000,1500,2000].includes(+c.runLen)?+c.runLen:1000,diff:["easy","normal","hard","crazy"].includes(c.runDiff)?c.runDiff:"normal",sound:c.runSound!==false,hill:[0,1,2,3,4].includes(+c.runHill)?+c.runHill:3,fork:[0,120,250].includes(+c.runFork)?+c.runFork:250,ep:Math.max(0,+c.runBoardEp||0),
+    auto:{on:c.runAuto!==false,times:runTimes(c.runAutoT),lead:[10,5,3].includes(+c.runAutoLead)?+c.runAutoLead:10,min:Math.max(2,Math.min(30,Math.round(+c.runAutoMin||5)))},
     prize:String(c.runPrize==null?RUN_DEF.runPrize:c.runPrize).split(",").map(x=>runNum(x)).concat([0,0,0,0,0]).slice(0,5)};
 }
 const runNow=()=>Date.now()+RUN_OFF;
@@ -39,6 +42,14 @@ function runKST(){const d=new Date(runNow()+9*3600e3),p=n=>String(n).padStart(2,
 const runHM=v=>{const m=String(v||"").match(/^(\d{1,2}):(\d{2})/);return m?m[1].padStart(2,"0")+":"+m[2]:""};
 function runLocked(){const c=runCfg();if(!c.lockOn)return false;const k=runKST();if(k.dow===0||k.dow===6)return false;
   const f=runHM(c.from)||"09:00",t=runHM(c.to)||"12:10";return k.hm>=f&&k.hm<t}
+/* 자동 대결: 평일 정해진 시각마다 (잠금 시간에 걸리면 건너뛰어요). 대기실은 구글 Apps Script가 열고 출발시켜요(scripts/auto-race.gs). */
+function runAutoSkip(hm){const c=runCfg();if(!c.lockOn)return false;const f=runHM(c.from)||"09:00",t=runHM(c.to)||"12:10";return hm>=f&&hm<t}
+function runAutoNext(){
+  const c=runCfg();if(!c.auto.on||!c.open||!c.auto.times.length)return null;const k=runKST(),wd=["일","월","화","수","목","금","토"];
+  const ok=c.auto.times.filter(t=>!runAutoSkip(t));if(!ok.length)return null;
+  for(let i=0;i<8;i++){const dow=(k.dow+i)%7;if(dow===0||dow===6)continue;const t=ok.find(t=>i>0||t>k.hm);if(t)return {hm:t,day:i===0?"오늘":i===1?"내일":wd[dow]+"요일"}}
+  return null;
+}
 function runBlock(){
   const c=runCfg();
   if(!c.open)return "선생님이 게임을 닫아 두었어요.";
@@ -106,13 +117,15 @@ function runPlayers(rid){
   return Object.entries(p).filter(([k,v])=>v&&v.rid===rid).map(([k,v])=>({k,n:v.n||((STUDENTS[k]||{}).name)||k,x:+v.x||0,y:+v.y||126,s:!!v.s,q:!!v.q,pen:+v.pen||0,pw:+v.pw||0,ok:+v.ok||0,done:!!v.done,tm:+v.tm||0,j:+v.j||0,me:k===KEY}))
     .sort((a,b)=>(a.j||0)-(b.j||0));
 }
-function runRaceState(){const s=RACE&&RACE.state;if(!s||!s.rid)return null;return {rid:s.rid,st:s.st||"off",seed:+s.seed||1,at:+s.at||0,len:+s.len||500,hill:s.hill==null?0:+s.hill||0,fork:+s.fork||0}}
+function runRaceState(){const s=RACE&&RACE.state;if(!s||!s.rid)return null;return {rid:s.rid,st:s.st||"off",seed:+s.seed||1,at:+s.at||0,len:+s.len||500,hill:s.hill==null?0:+s.hill||0,fork:+s.fork||0,auto:s.auto&&s.auto.hm?{hm:s.auto.hm,startAt:+s.auto.startAt||0,min:+s.auto.min||0}:null}}
+/* 자동 대결이 사람이 모자라 쉬었을 때 (state = {rid:"", st:"off", few:{hm,n,min}}) */
+function runRaceFew(){const s=RACE&&RACE.state;return s&&s.few&&s.few.hm?{hm:s.few.hm,n:+s.few.n||0,min:+s.few.min||0,t:+s.few.t||0}:null}
 const RUN_HOST={
   title:()=>ME&&ME.grade&&ME.cls?`${ME.grade}학년 ${ME.cls}반`:(CFG.className||"우리 반"),
   cfg:runCfg,soloBlock:runBlock,ticketsLeft:runLeft,needQuiz:()=>!runQuizDone()&&runCfg().open&&!runLocked(),
   goQuiz:()=>{if(location.hash!=="#quiz")location.hash="quiz";else showTab("quiz");window.scrollTo({top:0})},
   best:()=>{const r=(ME&&ME.run)||{};return (+r.ep||0)===runCfg().ep?+(r.best||0):0},useTicket:runUseTicket,soloEnd:runSoloEnd,pickQ:runPickQ,markQ:runMarkQ,
-  race:runRaceState,now:runNow,racePlayers:runPlayers,
+  race:runRaceState,raceFew:runRaceFew,autoNext:runAutoNext,now:runNow,racePlayers:runPlayers,
   raceJoin:rid=>R(`race/p/${KEY}`).set({rid,n:(ME&&ME.name)||KEY,x:0,y:126,pen:0,ok:0,j:SV.TIMESTAMP}),
   raceSend:(rid,o)=>R(`race/p/${KEY}`).update({...o,rid}),
   raceLeave:rid=>R(`race/p/${KEY}`).remove()
@@ -170,9 +183,16 @@ function renderRun(){
     .catch(()=>{const m=$("#runMount");if(m)m.innerHTML=`<p class="empty">게임을 불러오지 못했어요. 인터넷 연결을 확인하고 새로 고쳐 주세요.</p>`});
 }
 /* 대결 데이터가 바뀔 때: 첫 화면·대기실만 새로 그리고, 선생님 화면은 실시간 칸만 바꿔요 */
+let runAutoSeen=null;
 function runRaceLive(){
   const sig=JSON.stringify((RACE&&RACE.state)||{});
   const changed=sig!==runStateSig;runStateSig=sig;
+  const rs=runRaceState();
+  if(role==="student"&&rs&&rs.st==="lobby"&&rs.auto&&runCfg().open){
+    if(runAutoSeen===null)runAutoSeen=rs.rid;   // 처음 불러올 때는 조용히 (이미 열린 대기실)
+    if(runAutoSeen!==rs.rid){runAutoSeen=rs.rid;const inLobby=current==="run"&&window.RunGame&&RunGame.inRace&&RunGame.inRace();
+      if(!inLobby)runPop(`🏁 <b>${esc(rs.auto.hm)} 달리기 대결</b> 대기실이 열렸어요! ${rs.auto.min}명 이상 모이면 출발해요. <a href="#run">참가하러 가기 →</a>`,9000)}
+  }else if(runAutoSeen===null&&RACE)runAutoSeen="";
   if(role==="student"){if(changed&&window.RunGame&&RunGame.mounted)RunGame.refresh();const b=$("#view-run .rstate");if(b)b.textContent=`🎫 오늘 남은 판 ${runLeft()} / ${runCfg().max}`}
   if(role==="teacher"&&current==="run"){if(changed)rerender();else runTeacherLive()}
 }
@@ -215,19 +235,20 @@ function runBoardLive(){
   if(!fresh||fresh.k===KEY||role!=="student")return;
   runPop(`🏆 ${esc(fresh.n)} 친구가 <b>${fresh.m.toLocaleString("ko-KR")}m</b>로 이번 주 달리기 <b>${fresh.i+1}등</b>이 됐어요!`);
 }
-function runPop(h){let el=document.getElementById("runPop");if(!el){el=document.createElement("div");el.id="runPop";el.className="run-pop";el.setAttribute("role","status");document.body.appendChild(el)}
-  el.innerHTML=h;el.classList.add("show");clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove("show"),4500)}
+function runPop(h,ms=4500){let el=document.getElementById("runPop");if(!el){el=document.createElement("div");el.id="runPop";el.className="run-pop";el.setAttribute("role","status");document.body.appendChild(el)}
+  el.innerHTML=h;el.classList.add("show");clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove("show"),ms)}
 
 /* ---------- 선생님: 설정 + 대결 진행 ---------- */
 function runRanking(rid){
   return runPlayers(rid).filter(p=>p.done).map(p=>({...p,rec:Math.round((p.tm+p.pen)*100)/100})).sort((a,b)=>a.rec-b.rec);
 }
 function runLiveHtml(){
-  const s=runRaceState();if(!s||s.st==="off")return `<p class="empty">열린 대결이 없어요.</p>`;
+  const s=runRaceState();if(!s||s.st==="off"){const f=runRaceFew(),nx=runAutoNext();
+    return `<p class="empty">열린 대결이 없어요.${f?` ${esc(f.hm)} 자동 대결은 ${f.n}명만 들어와서(${f.min}명 이상 필요) 쉬었어요.`:""}${nx?` 다음 자동 대결: ${nx.day} ${nx.hm}`:""}</p>`}
   const ps=runPlayers(s.rid),c=runCfg(),N=4;
-  if(s.st==="lobby")return `<p class="t-status">대기실에 <b>${ps.length}명</b> 들어왔어요.</p><p class="run-names">${ps.map(p=>esc(p.n)).join(", ")||"아직 아무도 없어요"}</p>`;
+  if(s.st==="lobby")return `<p class="t-status">${s.auto?`⏰ <b>${esc(s.auto.hm)} 자동 대결</b> · ${s.auto.min}명 이상이면 저절로 출발 · `:""}대기실에 <b>${ps.length}명</b> 들어왔어요.</p><p class="run-names">${ps.map(p=>esc(p.n)).join(", ")||"아직 아무도 없어요"}</p>`;
   const fin=runRanking(s.rid),run=ps.filter(p=>!p.done).sort((a,b)=>b.x-a.x),medal=["🥇","🥈","🥉"];
-  return `<p class="t-status">${s.st==="end"?"끝난 대결":"달리는 중"} · 완주 ${fin.length} / ${ps.length}명</p>
+  return `<p class="t-status">${s.auto?`⏰ ${esc(s.auto.hm)} 자동 대결 · `:""}${s.st==="end"?"끝난 대결":"달리는 중"} · 완주 ${fin.length} / ${ps.length}명</p>
     <table class="run-tbl"><thead><tr><th>순위</th><th>이름</th><th>기록</th><th>정답</th><th>보상</th></tr></thead><tbody>
     ${fin.map((p,i)=>`<tr><td>${medal[i]||(i+1)+"등"}</td><td>${esc(p.n)}</td><td>${p.rec.toFixed(1)}초${p.pen?` <small>(+${p.pen})</small>`:""}${p.pw?` <small>(벌점 ${p.pw}초 포함)</small>`:""}</td><td>${p.ok}/${N}${p.ok===N?" 🎯":""}</td><td>${c.prize[i]?"🪙"+c.prize[i]:""}</td></tr>`).join("")}
     ${run.map(p=>`<tr class="run-going"><td>-</td><td>${esc(p.n)}</td><td>${Math.min(s.len,Math.round(p.x/12))}m ${p.q?"(문제 푸는 중)":""}</td><td>${p.ok}</td><td></td></tr>`).join("")}
@@ -272,6 +293,13 @@ function runTeacherHtml(){
       <label class="t-field">퀴즈 문 간격 (혼자 연습)${opt("runGateIn",c.gateEvery,[[80,"80m마다"],[120,"120m마다"],[200,"200m마다"]])}</label>
       <label class="t-field">대결 오답 벌점 <small>(문 앞에서 멈추는 시간)</small>${opt("runPenIn",c.pen,[[0,"없음"],[2,"2초"],[3,"3초"],[5,"5초"]])}</label>
       <label class="t-field">대결 거리${opt("runLenIn",c.len,[[500,"500m (약 1분)"],[800,"800m"],[1000,"1000m (약 1분 40초)"],[1500,"1500m"],[2000,"2000m (약 3분)"]])}</label>
+      <div class="run-wide run-auto"><h4>⏰ 자동 대결 (평일만)</h4>
+        ${ck("runAutoIn",c.auto.on,"정해진 시각에 대결 대기실을 저절로 열고 출발시켜요")}
+        <label class="t-field">출발 시각 <small>(쉼표로 구분)</small><input type="text" id="runAutoTIn" value="${esc(c.auto.times.join(", "))}" placeholder="08:45, 12:45, 15:00, 18:00"></label>
+        <label class="t-field">대기실 여는 때${opt("runAutoLeadIn",c.auto.lead,[[10,"출발 10분 전"],[5,"출발 5분 전"],[3,"출발 3분 전"]])}</label>
+        <label class="t-field">출발에 필요한 인원${opt("runAutoMinIn",c.auto.min,[[2,"2명 이상"],[3,"3명 이상"],[4,"4명 이상"],[5,"5명 이상"],[6,"6명 이상"],[8,"8명 이상"],[10,"10명 이상"]])}</label>
+        <p class="t-help">평일에만 열려요. 수업 시간 잠금에 걸린 시각은 건너뛰어요${c.lockOn?` (지금: ${esc(c.from)}~${esc(c.to)}${c.auto.times.filter(runAutoSkip).length?` → ${c.auto.times.filter(runAutoSkip).map(esc).join(", ")} 건너뜀`:""})`:""}. 출발 시각에 인원이 모자라면 그 대결은 쉬어요. 출발하면 모두 들어오거나 시간이 다 되면 저절로 마치고 1~5등 보상을 넣어요. 그 시각에 선생님이 연 대결이 있으면 자동 대결은 건너뛰어요. 대기실은 구글 Apps Script "CLASS LAB 주가 갱신"이 1분마다 확인해서 열어요.</p>
+      </div>
       <label class="t-field run-wide">대결 1~5등 보상 (코인)<span class="run-prize">${c.prize.map((p,i)=>`<input type="number" inputmode="decimal" min="0" step="any" id="runPz${i}" value="${p}" aria-label="${i+1}등 코인">`).join("")}</span></label>
     </div>
     <div class="actions"><button type="button" class="primary" id="runSave">설정 저장</button></div>
@@ -284,7 +312,7 @@ function runTeacherBind(){
   $("#runSave").onclick=()=>{runTMsg="";
     const v={runSound:$("#runSoundIn").checked,runLock:$("#runLockIn").checked,runFrom:$("#runFromIn").value||"09:00",runTo:$("#runToIn").value||"12:10",
       runMax:+$("#runMaxIn").value,runQuizT:+$("#runQuizTIn").value,runPerfT:+$("#runPerfTIn").value,runCoin:runNum($("#runCoinIn").value),runCoinMax:runNum($("#runCoinMaxIn").value),
-      runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runLen:+$("#runLenIn").value,runDiff:$("#runDiffIn").value,runHill:+$("#runHillIn").value,runFork:+$("#runForkIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
+      runGate:+$("#runGateIn").value,runPen:+$("#runPenIn").value,runLen:+$("#runLenIn").value,runDiff:$("#runDiffIn").value,runHill:+$("#runHillIn").value,runFork:+$("#runForkIn").value,runAuto:$("#runAutoIn").checked,runAutoT:runTimes($("#runAutoTIn").value).join(","),runAutoLead:+$("#runAutoLeadIn").value,runAutoMin:+$("#runAutoMinIn").value,runPrize:[0,1,2,3,4].map(i=>runNum($("#runPz"+i).value)).join(",")};
     act($("#runSave"),m,()=>R("config").update(v)).then(ok=>{if(ok){say("달리기 설정을 저장했어요.");renderRun()}})};
   const b=id=>$("#"+id);
   if(b("runTabTg"))b("runTabTg").onclick=()=>{const on=!runCfg().open;

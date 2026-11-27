@@ -29,6 +29,7 @@ const CSS=`.rg-game{outline:none;position:relative;border-radius:14px;overflow:h
 .rg-box .tip{color:#6b6b70;font-size:clamp(12px,1.9vw,14px);margin-top:8px}
 .rg-box .new{color:#d9480f;font-weight:700}
 .rg-hidden{display:none!important}
+.rg-box .rg-auto{margin:4px 0;font-size:clamp(14px,2.4vw,17px);color:#1c4fd8}
 .rg-tickets{display:inline-block;background:#fff4d6;color:#8a5a00;border-radius:999px;padding:1px 10px;font-weight:700;font-size:clamp(12px,2vw,14px);margin:2px 0}
 .rg-modes{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px}
 .rg-modes button{font:inherit;border:2px solid #e3e0d8;background:#fff;border-radius:14px;padding:10px 14px;cursor:pointer;min-width:min(42%,190px);text-align:center;color:#1d1d1f}
@@ -130,12 +131,15 @@ function menu(){
   const raceOpen=rs&&(rs.st==='lobby'||rs.st==='run');
   showBox(`${host.preview?`<p class="rg-prev">${esc(host.preview)}</p>`:''}<h2>달려라, ${esc(host.title())}!</h2><p><span class="rg-tickets">🎫 오늘 남은 판 ${tl} / ${c.max}</span></p>
   <div class="rg-modes"><button type="button" id="rgSolo" class="${sb?'off':''}"><b>🏃 혼자 연습</b><span>${sb?esc(sb):`티켓 1장 · 하트 3개 · ${DF.name}<br>내 최고 기록 ${host.best()}m`}</span></button>
-  <button type="button" id="rgRace" class="${raceOpen?'':'off'}"><b>👫 친구들과 대결</b><span>${raceOpen?(rs.st==='run'?'대결이 벌써 시작했어요':'선생님이 연 대결!<br>1~5등 코인 보상'):'선생님이 대결을 열면<br>들어갈 수 있어요'}</span></button></div>`);
+  <button type="button" id="rgRace" class="${raceOpen?'':'off'}"><b>👫 친구들과 대결</b><span>${raceOpen?(rs.st==='run'?'대결이 벌써 시작했어요':rs.auto?`⏰ ${esc(rs.auto.hm)} 자동 대결!<br>${rs.auto.min}명 이상 모이면 출발`:'선생님이 연 대결!<br>1~5등 코인 보상'):raceIdleTxt()}</span></button></div>`);
   $('rgSolo').onclick=e=>{e.stopPropagation();soloReady()};
-  $('rgRace').onclick=e=>{e.stopPropagation();if(host.noRace){toast(host.noRace);return}const r=host.race();if(r&&r.st==='lobby')raceLobby();else toast(r&&r.st==='run'?'대결이 이미 시작했어요. 다음 대결을 기다려요!':'선생님이 대결을 열면 들어갈 수 있어요')};
+  if(!raceOpen){const f=host.raceFew&&host.raceFew();if(f&&f.hm!==fewSeen&&host.now()-f.t<10*60e3){fewSeen=f.hm;toast(`${esc(f.hm)} 자동 대결은 ${f.n}명만 모여서 쉬었어요. (${f.min}명 이상이면 출발)`)}}
+  $('rgRace').onclick=e=>{e.stopPropagation();if(host.noRace){toast(host.noRace);return}const r=host.race();if(r&&r.st==='lobby')raceLobby();else{const nx=host.autoNext&&host.autoNext();toast(r&&r.st==='run'?'대결이 이미 시작했어요. 다음 대결을 기다려요!':nx?`다음 자동 대결은 ${nx.day} ${esc(nx.hm)}이에요. 대기실이 열리면 알려 줄게요!`:'선생님이 대결을 열면 들어갈 수 있어요')}};
   hud();
 }
 
+let fewSeen=null;
+function raceIdleTxt(){const nx=host.autoNext&&host.autoNext();return nx?`다음 자동 대결<br>⏰ ${nx.day} ${esc(nx.hm)}`:'선생님이 대결을 열면<br>들어갈 수 있어요'}
 // ── 혼자 연습 ──
 function soloReady(){
   const sb=host.soloBlock();
@@ -273,16 +277,21 @@ function terReset(lvl){TER.lvl=lvl|0;TER.race=0;TER.h=0;TER.sf=1;const x=scroll+
 function terGen(upto){const L=TER_LV[TER.lvl];if(!L||TER.race)return;
   while(TER.end<upto){if(FORK.req){const len=FORK_LEN+420;TER.segs.push({x0:TER.end,x1:TER.end+len,a:TER.h,b:TER.h});forkMake(TER.end+200);TER.end+=len;FORK.req=0;FORK.next=dist+FORK.every;continue}terStep(Math.random,L,Infinity)}
   while(TER.segs.length>2&&TER.segs[1].x1<scroll-120)TER.segs.shift()}
-function terBuildRace(seed,lvl,gts,every,mons){
+function terBuildRace(seed,lvl,gts,every,mons,cns=[]){
   TER.lvl=lvl|0;TER.race=1;TER.h=0;TER.sf=1;const L=TER_LV[TER.lvl];
-  // 갈림길 자리: 퀴즈 문(±220)·출발(1500 전)·결승선(앞 900)과 겹치지 않는 곳. 그 구간의 몬스터는 빼고 아랫길 슬라임 2마리를 넣어요.
+  // 갈림길 자리: 퀴즈 문(±220)·출발(1500 전)·결승선(앞 900)과 겹치지 않는 곳. 그 구간의 몬스터·코인은 빼고 혼자 연습처럼 채워요:
+  // 아랫길 몬스터 2마리(슬라임·뱀·얼음 슬라임)와 코인 3개, 윗길(다리) 슬라임 1마리와 코인(틈 위에서는 높게). 모두 seed로 정해서 모든 학생이 같아요.
   FORKS=[];if(every>0){const R2=rng((seed^0x2545f491)>>>0),bl=[[-1e9,1500],...gts.map(g=>[g.x-220,g.x+220]),[FIN-900,1e9]].sort((a,b)=>a[0]-b[0]);let lastS=-1e9;
     for(let i=0;i+1<bl.length;i++){const a=bl[i][1]+200,b=bl[i+1][0]-FORK_LEN-160;if(b<a)continue;   // 퀴즈 문 사이 빈 구간마다 가운데쯤 하나
       const s0=Math.round((a+b)/2+(R2()-0.5)*Math.min(200,b-a));if(s0-lastS<every*PXM*0.75)continue;lastS=s0;
       withSeed((R2()*1e9)|0,()=>forkMake(s0));const f=FORKS[FORKS.length-1];f.gaps=f.gaps.slice(0,1);
       for(let k=mons.length-1;k>=0;k--)if(mons[k].x>s0-260&&mons[k].x<f.e+160)mons.splice(k,1);
-      mons.push({x:s0+200,type:'slime',sd:(R2()*1e9)|0,under:1},{x:s0+340,type:'slime',sd:(R2()*1e9)|0,under:1},{x:f.top,type:'slime',sd:(R2()*1e9)|0,top:1})}
-    mons.sort((a,b)=>a.x-b.x)}
+      for(let k=cns.length-1;k>=0;k--)if(cns[k][0]>s0-80&&cns[k][0]<f.e+80)cns.splice(k,1);
+      const LOW=['slime','snake','iceslime'];
+      mons.push({x:s0+200,type:LOW[(R2()*3)|0],sd:(R2()*1e9)|0,under:1},{x:s0+340,type:LOW[(R2()*3)|0],sd:(R2()*1e9)|0,under:1},{x:f.top,type:'slime',sd:(R2()*1e9)|0,top:1});
+      for(let w=f.b0+40;w<f.b1-20;w+=64){if(Math.abs(w-f.top)<24)continue;const g=f.gaps.some(q=>w>q[0]-30&&w<q[1]+30);cns.push([w,GY-14+19-(g?18:0),1])}
+      for(let i=0;i<3;i++)cns.push([s0+270+i*14,GY-14+19])}
+    mons.sort((a,b)=>a.x-b.x);cns.sort((a,b)=>a[0]-b[0])}
   TER.segs=[{x0:-1e6,x1:540,a:0,b:0}];TER.end=540;if(!L){TER.segs[0].x1=1e9;TER.end=1e9;return}
   const R=rng((seed^0x5bd1e995)>>>0),prot=[...gts.map(g=>[g.x-180,g.x+180]),...FORKS.map(f=>[f.s-200,f.e+160]),[FIN-260,FIN+4000]].sort((a,b)=>a[0]-b[0]);
   while(TER.end<FIN+3000){const p=prot.find(([a,b])=>b>TER.end);
@@ -571,24 +580,27 @@ let course=null,ci=0,cci=0,gci=0,meX=0,raceT=0,meDone=false,meTime=0,cnt=0,ghost
 function raceOff(){cntHide=0;$('rgTrack').classList.add('rg-hidden');$('rgTags').innerHTML='';$('rgCount').classList.add('rg-hidden');ghosts={};rid=null}
 function raceLobby(){
   const rs=host.race();if(!rs||rs.st!=='lobby'){menu();return}
-  mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);terBuildRace(rs.seed,rs.hill,course.gts,rs.fork,course.mons);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
+  mode='race';state='lobby';clearWorld();rid=rs.rid;FIN_M=Math.max(200,+rs.len||500);FIN=FIN_M*PXM;course=makeCourse(rs.seed);terBuildRace(rs.seed,rs.hill,course.gts,rs.fork,course.mons,course.cns);ci=0;cci=0;gci=0;meX=0;raceT=0;meDone=false;meTime=0;resultShown=false;ghosts={};
   $('rgTrack').classList.remove('rg-hidden');hud();
   host.raceJoin(rid).catch(()=>{toast('대결에 들어가지 못했어요. 새로 고쳐 주세요.')});
   lobbyBox();
 }
 function lobbyBox(){
-  const ps=host.racePlayers(rid),c=host.cfg();
-  showBox(`<h2>👫 대결 대기실</h2><p>🏁 ${FIN_M}m 달리기 · 선생님이 "출발"을 누르면 3·2·1 다 같이 시작해요.</p><p><span class="rg-tickets">🏆 ${prizeLine(c.prize)}</span></p>
+  const ps=host.racePlayers(rid),c=host.cfg(),au=(host.race()||{}).auto;
+  showBox(`<h2>👫 ${au?`${esc(au.hm)} 자동 대결`:'대결'} 대기실</h2><p>🏁 ${FIN_M}m 달리기 · ${au?`<b>${au.min}명 이상</b> 모이면 ${esc(au.hm)}에 3·2·1 다 같이 시작해요.`:'선생님이 "출발"을 누르면 3·2·1 다 같이 시작해요.'}</p>${au?`<p class="rg-auto" id="rgAutoT">${autoLeft(au)}</p>`:''}<p><span class="rg-tickets">🏆 ${prizeLine(c.prize)}</span></p>
   <div class="rg-chips" id="rgChips">${ps.map((p,i)=>`<span class="rg-chip" style="background:${p.me?'#2456e6':COLORS[i%COLORS.length]}">${esc(p.me?'나':p.n)}</span>`).join('')}</div>
-  <p class="tip">${ps.length}명 들어왔어요 · 기다리는 중…</p><button type="button" class="rg-go sub" id="rgMenu">← 나가기</button>`);
+  <p class="tip">${ps.length}명 들어왔어요${au&&ps.length<au.min?` · ${au.min-ps.length}명 더 모이면 출발할 수 있어요`:''} · 기다리는 중…</p><button type="button" class="rg-go sub" id="rgMenu">← 나가기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();host.raceLeave(rid).catch(()=>{});menu()};
 }
+function autoLeft(au){const ms=au.startAt-host.now();if(ms<=0)return '곧 출발해요…';const s=Math.ceil(ms/1000);return `출발까지 <b>${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}</b>`}
+let autoTxt='';
 function prizeLine(pz){const m=['🥇','🥈','🥉','4등','5등'];return pz.map((p,i)=>p?`${m[i]} ${p}`:'').filter(Boolean).join(' · ')||'보상 없음'}
 function raceWatch(){
   // 선생님이 바꾼 대결 상태를 따라가요
   const rs=host.race();
   if(state==='lobby'){
-    if(!rs||rs.rid!==rid||rs.st==='off'){toast('선생님이 대결을 닫았어요');menu();return}
+    if(!rs||rs.rid!==rid||rs.st==='off'){const f=host.raceFew&&host.raceFew();if(f)fewSeen=f.hm;menu();toast(f?`${f.n}명만 모여서 이번 대결은 쉬어요. (${f.min}명 이상이면 출발) 다음에 또 만나요!`:'선생님이 대결을 닫았어요');return}
+    if(rs.auto){const el=$('rgAutoT');if(el){const t=autoLeft(rs.auto);if(t!==autoTxt){autoTxt=t;el.innerHTML=t}}}
     if(rs.st==='run'&&rs.at){startLocal=rs.at;hideBox();state='count';$('rgCount').classList.remove('rg-hidden');fitView()}
     else{const n=host.racePlayers(rid).length;if(n!==lobbyN){lobbyN=n;lobbyBox()}}
   }
@@ -596,9 +608,9 @@ function raceWatch(){
 }
 let lobbyN=0;
 function raceSpawn(){
-  if(!FORK.met&&FORKS.some(f=>terS(f.s)<W+60)){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(틈·슬라임 조심), 아니면 아랫길(슬라임)')}
+  if(!FORK.met&&FORKS.some(f=>terS(f.s)<W+60)){FORK.met=1;toast('<b>갈림길!</b> ⬆⬆ 2단 점프로 다리에 오르면 윗길(코인, 틈·슬라임 조심), 아니면 아랫길(몬스터)')}
   while(ci<course.mons.length&&course.mons[ci].x-meX<=W+30-HX){const e=course.mons[ci++];const o=withSeed(e.sd,()=>addMon(e.type,(e.x-meX)-(W+30-HX)));if(e.calm)o.calm=1;if(e.under)o.under=1;if(e.top)o.top=1}
-  while(cci<course.cns.length&&course.cns[cci][0]-meX<=W+20-HX){const c=course.cns[cci++];addCoin(HX+(c[0]-meX),c[1])}
+  while(cci<course.cns.length&&course.cns[cci][0]-meX<=W+20-HX){const c=course.cns[cci++];addCoin(HX+(c[0]-meX),c[1]);if(c[2])items[items.length-1].br=1}
   while(gci<course.gts.length&&course.gts[gci].x-meX<=W+40-HX){const g=course.gts[gci++];gates.push({x:HX+(g.x-meX),q:g.q})}
 }
 function raceSend(dt){
@@ -618,7 +630,7 @@ function showResult(){
   <table class="rg-rank"><tr style="color:#868e96"><td></td><td>이름</td><td>기록</td><td>정답</td><td>보상</td></tr>${fin.map((r,i)=>`<tr class="${r.me?'rg-me':''}"><td>${medal[i]||(i+1)+'등'}</td><td>${esc(r.me?'나':r.n)}</td>
     <td>${r.rec.toFixed(1)}초${r.pen?` <span style="color:#e03131;font-size:11px">(+${r.pen})</span>`:''}${r.pw?` <span style="color:#e03131;font-size:11px">(벌점 ${r.pw}초 포함)</span>`:''}</td><td>${r.ok||0}/${N}${(r.ok||0)===N?' 🎯':''}</td><td>${c.prize[i]?'🪙+'+c.prize[i]:''}</td></tr>`).join('')}
     ${run.map(r=>`<tr><td>-</td><td>${esc(r.n)}</td><td>달리는 중</td><td></td><td></td></tr>`).join('')}</table>
-  <p class="tip">기록 = 도착 시간 (틀리면 문 앞에서 ${c.pen}초 멈춰요) · 🎯 모두 맞힘 · 보상은 선생님이 대결을 마치면 지갑에 들어가요</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
+  <p class="tip">기록 = 도착 시간 (틀리면 문 앞에서 ${c.pen}초 멈춰요) · 🎯 모두 맞힘 · 보상은 ${(host.race()||{}).auto?'대결이 끝나면 저절로':'선생님이 대결을 마치면'} 지갑에 들어가요</p><button type="button" class="rg-go sub" id="rgMenu">← 모드 고르기</button>`);
   $('rgMenu').onclick=e=>{e.stopPropagation();menu()};
 }
 let resT=0;
@@ -949,6 +961,6 @@ function unmount(){
 let rzT=0;function onResize(){clearTimeout(rzT);rzT=setTimeout(()=>{if(mounted&&mode==='solo'&&(state==='menu'||state==='ready'))setView(soloW())},200)}
 // 바깥(설정·대결 상태)이 바뀌면 첫 화면을 새로 그려요. 게임 중에는 건드리지 않아요.
 function refresh(){if(!mounted)return;sndUi();if(state==='menu')menu();else if(state==='lobby')lobbyBox()}
-window.RunGame={mount,unmount,refresh,get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
+window.RunGame={mount,unmount,refresh,inRace:()=>mode==='race'&&(state==='lobby'||state==='count'||state==='race'),get state(){return state},get mounted(){return mounted&&root&&root.isConnected},
   _t:{answer,press,release,get asking(){return asking},get gates(){return gates},get speed(){return speed},get obs(){return obs},get hero(){return hero},setHearts:v=>hearts=v,get hearts(){return hearts},setT:v=>t=v,setCoins:v=>coins=v,group:(g,w)=>spawnGroup(g,w),get bgZone(){return bgZone},spawn:k=>addMon(k),setDist:v=>dist=v,noSpawn:keepGate=>{nextObs=1e9;nextCoin=1e9;if(!keepGate)nextGateM=1e9},get meX(){return meX},get DF(){return DF},TH:x=>TH(x),get TER(){return TER},get FORKS(){return FORKS},get onBridge(){return !!hero.plat},forkS:()=>{const w=terW(HX);const f=FORKS.find(f=>f.s>w-120);return f?w-f.s:null},gap:()=>{const w=terW(HX)+18;let m=null;for(const f of FORKS)for(const g of f.gaps){const d=g[0]-w;if(d>-5&&(m==null||d<m))m=d}return m}}};
 })();
