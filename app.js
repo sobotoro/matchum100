@@ -760,7 +760,8 @@ document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()
 }));
 window.addEventListener("hashchange",()=>{if(role)showTab(location.hash.slice(1))});
 $("#homeBtn").addEventListener("click",()=>{if(!role)return;const h=role==="teacher"?"teacher":"quiz";if(h==="quiz"&&Q&&Q.finished)Q=null;if(location.hash!=="#"+h)location.hash=h;else showTab(h);window.scrollTo({top:0})});
-function rerender(){if(busy||typing())return;if(role&&!$("#view-"+current).hidden)showTab(current)}
+function rerender(){if(busy||typing())return;if(document.querySelector("#view-"+current+" .t-save.dirty"))return;   // 저장 안 한 설정은 지우지 않아요
+  if(role&&!$("#view-"+current).hidden)showTab(current)}
 
 /* ---------- 급식 완식 보드 ----------
    학생 자기 기록에만 써요: meal {d,t,c,x(취소)} · mealSeen {d,k:{학번:1}} 봤어요 · mealFlag {d,k:{학번:1}} 선생님께 확인 요청 */
@@ -1422,6 +1423,32 @@ function hsSwitchBind(){
   });
 }
 
+/* ---------- 선생님 화면: 접히는 설정 칸 ----------
+   칸마다 지금 값을 한 줄로 보여 주고, 눌러서 펼쳐요. 펼친 칸은 저장한 뒤 다시 그려도 그대로 펼쳐져 있어요. */
+let TG_OPEN=new Set(store.get("cl-tg-open",[]));
+function tGrp(id,icon,title,sum,body){return `<details class="t-grp" data-g="${id}"${TG_OPEN.has(id)?" open":""}><summary><span class="tg-ic" aria-hidden="true">${icon}</span><span class="tg-tt"><b>${title}</b><small>${sum}</small></span><span class="tg-chev" aria-hidden="true"></span></summary><div class="tg-body">${body}</div></details>`}
+function tSub(t,body,hint,cls){return `<div class="t-sub${cls?" "+cls:""}">${t?`<h4>${t}</h4>`:""}<div class="t-grid">${body}</div>${hint?`<p class="t-hint">${hint}</p>`:""}</div>`}
+function tGrpBind(root){
+  root.querySelectorAll("details.t-grp").forEach(d=>{if(d._tg)return;d._tg=1;d.addEventListener("toggle",()=>{const g=d.dataset.g;if(d.open)TG_OPEN.add(g);else TG_OPEN.delete(g);store.set("cl-tg-open",[...TG_OPEN])})});
+}
+/* 저장 안 한 변경이 있으면 저장 줄에 알려요 */
+function tDirtyBind(card,bar,msg){
+  if(!card||!bar||card._td)return;card._td=1;const mark=()=>{bar.classList.add("dirty");if(msg&&!msg.dataset.busy){msg.className="msg";msg.textContent="바뀐 설정이 있어요. '설정 저장'을 눌러야 학생 화면에 반영돼요."}};
+  card.addEventListener("input",e=>{if(e.target.closest(".t-grp"))mark()});card.addEventListener("change",e=>{if(e.target.closest(".t-grp"))mark()});
+}
+const onOff=(v,t)=>v?t:"끔";
+function tSumQuiz(){const c=CFG,rv=reviewPct();return `${esc(quizScope())} · ${takeN()}문제 · 오답 우선 ${rv?(rv>=100?"최대":rv+"%"):"없음"} · 제한 시간 ${+c.timer?c.timer+"초":"없음"}${+c.fastBonus?` · 번개 +${fmt(c.fastBonus)}`:""}`}
+function tSumCoin(){const c=CFG;return `맞히면 ${fmt(c.coinPer)}코인 · 만점 +${fmt(c.bonus)} · 기준 점수 ${onOff(passPct(),passPct()+"점")} · 금리 ${fmt(c.rate)}%`}
+function tSumStock(){const c=CFG;return `수수료 ${+c.feeRate?`${fmt(+c.feeRate)}% (최소 ${fmt(c.feeMin??1)}코인)`:"없음"} · 단기 매매 ${+c.shortDays&&+c.shortRate?`${c.shortDays}일 안 +${fmt(+c.shortRate)}%`:"없음"}`}
+function tSumMeal(){const c=CFG;return c.mealOn===false?"꺼짐":`켜짐 · ${fmt(mealCoins())}코인 · ${esc(c.mealFrom||"12:30")}~${esc(c.mealTo||"13:40")}`}
+function tSumBoard(){const c=CFG;return `${esc(c.className||"우리 반")} · ${({"상위5":"상위 5명","상위10":"상위 10명","전체":"전체","숨김":"숨김"})[c.board]||esc(c.board)} · ${c.boardName==="번호"?"번호만":"이름"}`}
+function tSumSite(){const c=CFG;return `${esc(c.siteName||"CLASS LAB")} · 반 표시 ${esc(c.classTag||autoTag()||"자동")}${c.tagline?` · ${esc(c.tagline)}`:""}`}
+function tNavHtml(){
+  const n=Object.values(ALLBUYS||{}).reduce((a,ps)=>a+Object.values(ps||{}).filter(p=>!p.used&&p.kind!=="lotto").length,0);
+  const L=[["popCard","📣","알림 팝업"],["tSetCard","⚙️","설정"],["tGiveCard","🎁",`건네줄 물건${n?` <b>${n}</b>`:""}`],["bagReqCard","🎒","가방"],["tStudCard","👥","학생·코인"],["tShopCard","🛍️","상점"],["fundCard","🏦","반 기금"]];
+  return `<nav class="t-nav" aria-label="선생님 화면 바로가기">${L.map(([id,i,t])=>`<button type="button" class="ghost" data-jump="${id}"><span aria-hidden="true">${i}</span> ${t}</button>`).join("")}</nav>`;
+}
+function tNavBind(root){root.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>{const el=document.getElementById(b.dataset.jump);if(el)el.scrollIntoView({behavior:"smooth",block:"start"})})}
 function renderTeacher(){
   const c=CFG;
   if(!TSHOP)TSHOP=Object.entries(SHOP||{}).map(([id,it])=>({id,...it})).sort(byOrder);
@@ -1429,90 +1456,35 @@ function renderTeacher(){
   const pend=[];Object.entries(ALLBUYS||{}).forEach(([k,ps])=>Object.entries(ps||{}).forEach(([id,p])=>{if(!p.used&&p.kind!=="lotto")pend.push({k,id,...p,who:STUDENTS[k]?STUDENTS[k].name:k})}));
   pend.sort((a,b)=>a.t-b.t);
   const sel=(id,opts,v)=>`<select id="${id}">${opts.map(o=>`<option value="${esc(o[0])}" ${String(v)===String(o[0])?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`;
-  $("#view-teacher").innerHTML=`${popTeacherHtml()}<article class="card">
-    <div class="t-head"><h2>선생님 설정</h2><span class="t-only">선생님 계정에만 보여요</span></div>
-    <p class="t-help">'저장'을 누르면 모든 학생 화면에 바로 반영돼요.</p>
-    <div class="t-sec"><h3>사이트 이름</h3>
-      <div class="row2">
-        <label class="t-field" for="cSite">사이트 이름<input type="text" id="cSite" maxlength="20" value="${esc(c.siteName||"CLASS LAB")}"></label>
-        <label class="t-field" for="cTag">반 표시<input type="text" id="cTag" maxlength="12" value="${esc(c.classTag||"")}" placeholder="비우면 자동 (${esc(autoTag()||"예: 5-1")})"></label>
-        <label class="t-field" for="cTagline">제목 위 한 줄 문구<input type="text" id="cTagline" maxlength="40" value="${esc(c.tagline||"")}" placeholder="예: 우리 반 실험실"></label>
-      </div>
-      <p class="t-help">화면 맨 위 제목과 브라우저 탭 이름이 바뀌어요. 사이트 이름의 마지막 낱말은 파란색으로 강조돼요.</p>
-    </div>
-    <div class="t-sec"><h3>오늘의 퀴즈</h3>
-      <div class="row2">
-        <fieldset class="t-field subj-pick"><legend>과목 (여러 개 고르면 똑같이 나눠 섞여 나와요)</legend>
+  $("#view-teacher").innerHTML=`${tNavHtml()}${popTeacherHtml()}<article class="card t-set" id="tSetCard">
+    <div class="t-head"><h2>⚙️ 선생님 설정</h2><span class="t-only">선생님 계정에만 보여요</span></div>
+    <p class="t-help">칸을 눌러 펼쳐요. 고친 뒤 아래 '설정 저장'을 누르면 모든 학생 화면에 바로 반영돼요. (역사 단원 스위치는 누르면 바로 저장돼요)</p>
+    ${tGrp("quiz","📝","오늘의 퀴즈",tSumQuiz(),
+      tSub("무엇을 낼까",`<fieldset class="t-field subj-pick"><legend>과목 <small>여러 개 고르면 똑같이 나눠 섞여요</small></legend>
           ${SUBJ_KEYS.filter(k=>k!=="sd"||SDS.length).filter(k=>k!=="hs"||HSS.length).map(k=>`<label class="inline" for="cSub-${k}"><input type="checkbox" id="cSub-${k}" data-subj="${k}" ${cfg().sub.has(k)?"checked":""}> ${SUBJ_LABEL[k]}</label>`).join("")}
-        </fieldset>
-        <label class="t-field" for="cRange">맞춤법 범위 (일차)<input type="text" id="cRange" value="${esc(c.range)}" placeholder="예: 1-5 또는 1,3,6-8"></label>
-        <label class="t-field" for="cSRange">속담 범위 (일차)<input type="text" id="cSRange" value="${esc(c.sRange||"1-25")}" placeholder="예: 1-5 또는 1,3,6-8"></label>
-      </div>
-      ${hsSwitchHtml()}
-      <p class="t-help">과목을 바꿔도 코인이 걸린 도전은 하루 1번이에요. 역사 문제는 4지선다, O/X, 빈칸 세 가지가 섞여 나오고, 위 단원 스위치를 켠 단원에서만 나와요. 속담 문제는 완성하기, 뜻 고르기, 상황에 맞는 속담 고르기 세 가지가 섞여 나오고 보기는 4개예요. 속담도 교재처럼 하루 4개씩 25일차예요.</p>
-      <div class="row2">
-        <label class="t-field" for="cCount">하루 문제 수${sel("cCount",[[10,"10문제"],[20,"20문제"],[30,"30문제"],[0,"범위 안 모든 문제"]],c.count)}</label>
-        <label class="t-field" for="cReview">오답 우선 (지난 범위 포함)${sel("cReview",[[100,"최대 (전부 오답이어도)"],[50,"절반까지"],[30,"30%까지"],[0,"없음"]],reviewPct())}</label>
-        <label class="t-field" for="cType">맞춤법 문제 유형${sel("cType",[["둘다","고르기 + 빈칸"],["고르기","바른 말·뜻 고르기만"],["빈칸","문장 빈칸만"]],c.type)}</label>
-        <label class="t-field" for="cRandom">출제 방식${sel("cRandom",[["0","범위 안에서"],["1","범위 없이 전체에서 무작위"]],c.random?1:0)}</label>
-      </div>
-      <div class="row2">
-        <label class="t-field" for="cTimer">맞춤법 문제당 제한 시간${sel("cTimer",[[0,"없음"],[10,"10초"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"]],+c.timer||0)}</label>
-        <label class="t-field" for="cSTimer">속담 문제당 제한 시간${sel("cSTimer",[[0,"없음"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"],[90,"90초"]],+c.sTimer||0)}</label>
-        ${HSS.length?`<label class="t-field" for="cHTimer">역사 문제당 제한 시간${sel("cHTimer",[[0,"없음"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"],[90,"90초"]],c.hTimer==null?30:+c.hTimer||0)}</label>`:""}
-        <label class="t-field" for="cFastB">번개 보너스 (코인, 0이면 끔)<input type="number" id="cFastB" min="0" step="1" value="${esc(+c.fastBonus||0)}"></label>
-        <label class="t-field" for="cFastS">번개 기준${sel("cFastS",[[3,"3초 안에 맞히면"],[5,"5초 안에 맞히면"],[7,"7초 안에 맞히면"],[10,"10초 안에 맞히면"]],+c.fastSec||5)}</label>
-      </div>
-      <p class="t-help">시간이 지나면 틀린 것으로 처리하고 정답을 보여 줘요. 새로고침해도 시간은 처음부터 다시 시작되지 않아요. 학생마다 시간을 늘리려면 아래 학생 명단에서 '수정·리셋'을 눌러요.</p>
-      <p class="t-help">오답 우선: 학생마다 가장 최근에 틀린 문제(지금 범위 밖 지난 범위도 포함, 고른 과목 안에서)를 오늘의 도전 맨 앞에 내요. 오래전에 틀린 문제부터 나오고, 다시 맞히면 빠져요. 문장 예시는 지난번과 다른 것으로 바꿔 내요.</p>
-      <label class="t-field" for="cNote">학생에게 보여 줄 안내 문구<input type="text" id="cNote" maxlength="80" value="${esc(c.note)}" placeholder="예: 이번 주는 5~7일차예요."></label>
-    </div>
-    <div class="t-sec"><h3>코인과 은행</h3>
-      <div class="row2">
-        <label class="t-field" for="cPer">맞힌 문제당 코인<input type="number" id="cPer" min="0" step="1" value="${esc(c.coinPer)}"></label>
-        <label class="t-field" for="cBonus">만점 보너스 코인<input type="number" id="cBonus" min="0" step="1" value="${esc(c.bonus)}"></label>
-        <label class="t-field" for="cPass">기준 점수 (점, 0이면 끄기)<input type="number" id="cPass" min="0" max="100" step="5" inputmode="numeric" value="${esc(+c.passPct||0)}"></label>
-        <label class="t-field" for="cRate">은행 금리 (1주일 이율 %)<input type="number" id="cRate" min="0" max="50" step="0.05" value="${esc(c.rate)}"></label>
-      </div>
-      <p class="t-help">오늘의 도전 점수(맞힌 문제 ÷ 문제 수 × 100)가 기준 점수보다 낮으면 그날은 코인(번개·만점 보너스 포함)을 주지 않아요. 달리기 티켓은 그대로 받아요.</p>
-      <p class="t-help">한국은행 기준금리는 연 3.00%예요(2026년 10월 22일 동결, 다음 결정 11월 26일). 바뀌면 숫자만 고쳐 저장하세요.</p>
-    </div>
-    <div class="t-sec"><h3>주식 수수료</h3>
-      <div class="row2">
-        <label class="t-field" for="cFeeRate">수수료율 (%, 0~10)<input type="number" id="cFeeRate" min="0" max="10" step="0.1" inputmode="decimal" value="${esc(+c.feeRate||0)}"></label>
-        <label class="t-field" for="cFeeMin">최소 수수료 (코인)<input type="number" id="cFeeMin" min="0" step="0.5" inputmode="decimal" value="${esc(c.feeMin??1)}"></label>
-      </div>
-      <div class="row2">
-        <label class="t-field" for="cShortDays">단기 매매 기준${sel("cShortDays",[[0,"쓰지 않기"],[1,"산 날 바로 팔면"],[2,"산 날부터 2일 안"],[3,"산 날부터 3일 안"],[5,"산 날부터 5일 안"],[7,"산 날부터 7일 안"]],Math.round(+c.shortDays||0))}</label>
-        <label class="t-field" for="cShortRate">단기 매매 추가 수수료 (%, 0~10)<input type="number" id="cShortRate" min="0" max="10" step="0.1" inputmode="decimal" value="${esc(+c.shortRate||0)}"></label>
-      </div>
-      <p class="t-help">사고팔 때마다 거래 금액의 수수료율만큼 내요(최소 수수료보다 적으면 최소 수수료). 단기 매매 기준 안에 팔면 추가 수수료를 더 내요. 수수료율을 0으로 두면 수수료가 없어요. 걷힌 수수료는 '반 기금'에 모여요.</p>
-    </div>
-    <div class="t-sec"><h3>급식 완식 보상</h3>
-      <div class="row2">
-        <label class="t-field" for="cMealOn">급식 완식 보드${sel("cMealOn",[["1","켜기"],["0","끄기"]],c.mealOn===false?0:1)}</label>
-        <label class="t-field" for="cMealLink">보상 코인${sel("cMealLink",[["1",`칭찬 카드 1개 가격과 같게${cardItem()?` (지금 ${fmt(cardItem().price)}코인)`:""}`],["0","직접 정하기"]],c.mealLink===false?0:1)}</label>
-        <label class="t-field" for="cMealCoins">직접 정할 때 코인<input type="number" id="cMealCoins" min="0" step="1" value="${esc(+c.mealCoins||0)}"></label>
-      </div>
-      <div class="row2">
-        <label class="t-field" for="cMealFrom">누를 수 있는 시작 시각<input type="time" id="cMealFrom" value="${esc(c.mealFrom||"12:30")}"></label>
-        <label class="t-field" for="cMealTo">끝 시각<input type="time" id="cMealTo" value="${esc(c.mealTo||"13:40")}"></label>
-        <label class="t-field" for="cMealSeen">친구 '봤어요' 표시${sel("cMealSeen",[["1","쓰기"],["0","안 쓰기"]],c.mealSeen===false?0:1)}</label>
-      </div>
-      <p class="t-help">평일에만 누를 수 있고 하루에 한 번이에요. 누르면 코인이 바로 들어가요. 학생 화면 '오늘의 퀴즈' 아래 보드에서 '선생님께 확인 요청'이 들어온 학생을 보고, 사실이 아니면 '보상 취소'를 누르면 코인을 돌려받아요.</p>
-    </div>
-    <div class="t-sec"><h3>우리 반 순위표</h3>
-      <div class="row2">
-        <label class="t-field" for="cClass">반 이름<input type="text" id="cClass" maxlength="20" value="${esc(c.className)}"></label>
-        <label class="t-field" for="cBoard">순위 보여 주기${sel("cBoard",[["상위5","상위 5명"],["상위10","상위 10명"],["전체","전체"],["숨김","숨김 (합계만)"]],c.board)}</label>
-        <label class="t-field" for="cBName">순위표 이름${sel("cBName",[["이름","이름"],["번호","번호만"]],c.boardName)}</label>
-      </div>
-    </div>
-    <div class="apply-bar"><button type="button" class="primary" id="cSave">설정 저장</button><p class="msg" id="cMsg" role="status">${esc(tMsgTxt)}</p></div>
+        </fieldset><label class="t-field" for="cRange"><span class="tf-l">맞춤법 범위 <small>일차</small></span><input type="text" id="cRange" value="${esc(c.range)}" placeholder="예: 1-5 또는 1,3,6-8"></label><label class="t-field" for="cSRange"><span class="tf-l">속담 범위 <small>일차</small></span><input type="text" id="cSRange" value="${esc(c.sRange||"1-25")}" placeholder="예: 1-5 또는 1,3,6-8"></label>`,"")+hsSwitchHtml()+
+      tSub("몇 문제를 어떻게",`<label class="t-field" for="cCount">하루 문제 수${sel("cCount",[[10,"10문제"],[20,"20문제"],[30,"30문제"],[0,"범위 안 모든 문제"]],c.count)}</label><label class="t-field" for="cReview"><span class="tf-l">오답 우선 <small>지난 범위 포함</small></span>${sel("cReview",[[100,"최대 (전부 오답이어도)"],[50,"절반까지"],[30,"30%까지"],[0,"없음"]],reviewPct())}</label><label class="t-field" for="cType">맞춤법 문제 유형${sel("cType",[["둘다","고르기 + 빈칸"],["고르기","바른 말·뜻 고르기만"],["빈칸","문장 빈칸만"]],c.type)}</label><label class="t-field" for="cRandom">출제 방식${sel("cRandom",[["0","범위 안에서"],["1","범위 없이 전체에서 무작위"]],c.random?1:0)}</label>`,"오답 우선: 학생마다 가장 최근에 틀린 문제(지난 범위 포함, 고른 과목 안)를 맨 앞에 내요. 다시 맞히면 빠져요.")+
+      tSub("문제당 제한 시간",`<label class="t-field" for="cTimer">맞춤법${sel("cTimer",[[0,"없음"],[10,"10초"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"]],+c.timer||0)}</label><label class="t-field" for="cSTimer">속담${sel("cSTimer",[[0,"없음"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"],[90,"90초"]],+c.sTimer||0)}</label>${HSS.length?`<label class="t-field" for="cHTimer">역사${sel("cHTimer",[[0,"없음"],[15,"15초"],[20,"20초"],[30,"30초"],[45,"45초"],[60,"60초"],[90,"90초"]],c.hTimer==null?30:+c.hTimer||0)}</label>`:""}`,"시간이 지나면 틀린 것으로 처리해요. 학생마다 시간을 늘리려면 학생 명단의 '수정·리셋'을 눌러요.")+
+      tSub("번개 보너스",`<label class="t-field" for="cFastB"><span class="tf-l">번개 보너스 <small>코인 · 0이면 끔</small></span><input type="number" id="cFastB" min="0" step="1" value="${esc(+c.fastBonus||0)}"></label><label class="t-field" for="cFastS">번개 기준${sel("cFastS",[[3,"3초 안에 맞히면"],[5,"5초 안에 맞히면"],[7,"7초 안에 맞히면"],[10,"10초 안에 맞히면"]],+c.fastSec||5)}</label>`,"제한 시간이 있을 때만, 정해진 초 안에 맞히면 더 줘요.")+
+      tSub("안내",`<label class="t-field" for="cNote"><span class="tf-l">학생에게 보여 줄 안내 문구 <small>퀴즈 화면 맨 위</small></span><input type="text" id="cNote" maxlength="80" value="${esc(c.note)}" placeholder="예: 이번 주는 5~7일차예요."></label>`,"",'wide'))}
+    ${tGrp("coin","🪙","퀴즈 코인 · 은행",tSumCoin(),
+      tSub("오늘의 도전 코인",`<label class="t-field" for="cPer">맞힌 문제당<input type="number" id="cPer" min="0" step="1" value="${esc(c.coinPer)}"></label><label class="t-field" for="cBonus">만점 보너스<input type="number" id="cBonus" min="0" step="1" value="${esc(c.bonus)}"></label><label class="t-field" for="cPass"><span class="tf-l">기준 점수 <small>점 · 0이면 끔</small></span><input type="number" id="cPass" min="0" max="100" step="5" inputmode="numeric" value="${esc(+c.passPct||0)}"></label>`,"점수(맞힌 문제 ÷ 문제 수 × 100)가 기준 점수보다 낮으면 그날 코인(번개·만점 포함)이 없어요. 달리기 티켓은 그대로예요.")+
+      tSub("은행",`<label class="t-field" for="cRate"><span class="tf-l">은행 금리 <small>1주일 이율 %</small></span><input type="number" id="cRate" min="0" max="50" step="0.05" value="${esc(c.rate)}"></label>`,"매주 월요일 이자. 한국은행 기준금리(연 3.00%, 2026년 10월 22일 동결)를 1주일 이율로 써요."))}
+    ${tGrp("stock","📈","주식 수수료",tSumStock(),
+      tSub("사고팔 때",`<label class="t-field" for="cFeeRate"><span class="tf-l">수수료율 <small>% · 0~10</small></span><input type="number" id="cFeeRate" min="0" max="10" step="0.1" inputmode="decimal" value="${esc(+c.feeRate||0)}"></label><label class="t-field" for="cFeeMin"><span class="tf-l">최소 수수료 <small>코인</small></span><input type="number" id="cFeeMin" min="0" step="0.5" inputmode="decimal" value="${esc(c.feeMin??1)}"></label>`,"거래 금액 × 수수료율 (최소 수수료보다 적으면 최소 수수료). 0%면 수수료 없음.")+
+      tSub("단기 매매",`<label class="t-field" for="cShortDays">단기 매매 기준${sel("cShortDays",[[0,"쓰지 않기"],[1,"산 날 바로 팔면"],[2,"산 날부터 2일 안"],[3,"산 날부터 3일 안"],[5,"산 날부터 5일 안"],[7,"산 날부터 7일 안"]],Math.round(+c.shortDays||0))}</label><label class="t-field" for="cShortRate"><span class="tf-l">추가 수수료 <small>% · 0~10</small></span><input type="number" id="cShortRate" min="0" max="10" step="0.1" inputmode="decimal" value="${esc(+c.shortRate||0)}"></label>`,"기준 안에 팔면 추가 수수료를 더 내요. 걷힌 수수료는 '반 기금'에 모여요."))}
+    ${tGrp("meal","🍚","급식 완식 보상",tSumMeal(),
+      tSub("보상",`<label class="t-field" for="cMealOn">급식 완식 보드${sel("cMealOn",[["1","켜기"],["0","끄기"]],c.mealOn===false?0:1)}</label><label class="t-field" for="cMealLink">보상 코인${sel("cMealLink",[["1",`칭찬 카드 1개 가격과 같게${cardItem()?` (지금 ${fmt(cardItem().price)}코인)`:""}`],["0","직접 정하기"]],c.mealLink===false?0:1)}</label><label class="t-field" for="cMealCoins">직접 정할 때<input type="number" id="cMealCoins" min="0" step="1" value="${esc(+c.mealCoins||0)}"></label>`,"")+
+      tSub("누를 수 있는 때",`<label class="t-field" for="cMealFrom">시작 시각<input type="time" id="cMealFrom" value="${esc(c.mealFrom||"12:30")}"></label><label class="t-field" for="cMealTo">끝 시각<input type="time" id="cMealTo" value="${esc(c.mealTo||"13:40")}"></label><label class="t-field" for="cMealSeen">친구 '봤어요'${sel("cMealSeen",[["1","쓰기"],["0","안 쓰기"]],c.mealSeen===false?0:1)}</label>`,"평일, 하루 한 번. '선생님께 확인 요청'이 들어온 학생은 퀴즈 탭 아래 보드에서 보고, 사실이 아니면 '보상 취소'를 눌러요."))}
+    ${tGrp("board","🏆","우리 반 순위표",tSumBoard(),
+      tSub("",`<label class="t-field" for="cClass">반 이름<input type="text" id="cClass" maxlength="20" value="${esc(c.className)}"></label><label class="t-field" for="cBoard">순위 보여 주기${sel("cBoard",[["상위5","상위 5명"],["상위10","상위 10명"],["전체","전체"],["숨김","숨김 (합계만)"]],c.board)}</label><label class="t-field" for="cBName">순위표 이름${sel("cBName",[["이름","이름"],["번호","번호만"]],c.boardName)}</label>`,""))}
+    ${tGrp("site","🏷️","사이트 이름",tSumSite(),
+      tSub("",`<label class="t-field" for="cSite">사이트 이름<input type="text" id="cSite" maxlength="20" value="${esc(c.siteName||"CLASS LAB")}"></label><label class="t-field" for="cTag">반 표시<input type="text" id="cTag" maxlength="12" value="${esc(c.classTag||"")}" placeholder="비우면 자동 (${esc(autoTag()||"예: 5-1")})"></label><label class="t-field" for="cTagline">제목 위 문구<input type="text" id="cTagline" maxlength="40" value="${esc(c.tagline||"")}" placeholder="예: 우리 반 실험실"></label>`,"화면 맨 위 제목과 브라우저 탭 이름이 바뀌어요. 사이트 이름의 마지막 낱말은 파란색이에요."))}
+    <div class="apply-bar t-save" id="cBar"><button type="button" class="primary" id="cSave">설정 저장</button><p class="msg" id="cMsg" role="status">${esc(tMsgTxt)}</p></div>
   </article>
 
-  <article class="card">
-    <h3>상점 품목</h3>
+  <article class="card" id="tShopCard">
+    <h3>🛍️ 상점 품목</h3>
     <div class="shop-edit" id="tShop">${TSHOP.map((it,i)=>`<div class="shop-row">
       <label class="t-field" for="ts-name-${i}">품목 이름<input type="text" id="ts-name-${i}" maxlength="30" value="${esc(it.name)}"></label>
       <label class="t-field" for="ts-price-${i}">가격(코인)<input type="number" id="ts-price-${i}" min="0" step="1" value="${esc(it.price)}"></label>
@@ -1523,15 +1495,15 @@ function renderTeacher(){
     <p class="msg" id="tShopMsg" role="status"></p>
   </article>
 
-  <article class="card">
-    <h3>건네줄 물건 (${pend.length})</h3>
+  <article class="card" id="tGiveCard">
+    <h3>🎁 건네줄 물건 (${pend.length})</h3>
     ${pend.length?`<ul class="receipts">${pend.map(p=>`<li><span class="rinfo"><b>${esc(p.who)} · ${esc(p.name)}</b><small>${whenKST(p.t)} · ${fmt(p.price)}코인</small></span><span class="rcode">${esc(p.code)}</span><button type="button" class="ghost" data-give="${esc(p.k)}|${esc(p.id)}">건네줬어요</button></li>`).join("")}</ul>`:`<p class="empty">아직 건네줄 물건이 없어요.</p>`}
   </article>
   ${bagReqCardHtml()}
   ${bagClassCardHtml()}
 
-  <article class="card">
-    <h3>학생 (${studs.length}명)</h3>
+  <article class="card" id="tStudCard">
+    <h3>👥 학생 (${studs.length}명)</h3>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>학번</th><th>이름</th><th>지갑</th><th>은행</th><th>주식</th><th>퀴즈</th><th>오늘</th><th></th></tr></thead><tbody>
     ${studs.map(([k,s])=>`<tr class="${k===selKey?"picked":""}"><td>${esc(k)}</td><td>${esc(s.name)}${timeX(s)!==1?` <small class="tx">${timeX(s)?`⏱×${timeX(s)}`:"⏱없음"}</small>`:""}</td><td>${fmt(s.wallet)}</td><td>${fmt(s.bank)}</td><td>${fmt(valueOf(s))}</td><td>${+s.qCount||0}회</td><td>${s.quiz&&s.quiz.date===today()?(s.quiz.state==="완료"?`${s.quiz.right}/${s.quiz.total}`:"푸는 중"):"-"}</td><td><button type="button" class="ghost" data-pick="${esc(k)}" aria-expanded="${k===selKey}">${k===selKey?"접기 ▲":"수정·리셋"}</button></td></tr>${k===selKey?`<tr class="edit-row"><td colspan="8">${editHtml(k,s)}</td></tr>`:""}`).join("")||`<tr><td colspan="8" class="empty">아직 들어온 학생이 없어요.</td></tr>`}
     </tbody></table></div>
@@ -1547,7 +1519,8 @@ function renderTeacher(){
   </article>
   ${fundTeacherHtml()}
   <article class="card"><h3>주가</h3><p class="t-help">지금 시세: ${esc(MARKET.label||"정보 없음")}. 구글 Apps Script(CLASS LAB 주가 갱신)가 평일 장중 10분마다 네이버 시세를 가져와 Firebase에 넣어요. GitHub도 예비로 시세 파일을 올려요. 둘 중 더 새 시세를 써요. 선생님 컴퓨터가 꺼져 있어도 돌아가요.</p></article>`;
-  tMsgTxt="";
+  tGrpBind($("#view-teacher"));tNavBind($("#view-teacher"));tDirtyBind($("#tSetCard"),$("#cBar"),$("#cMsg"));
+  $("#tSetCard").addEventListener("input",()=>{tMsgTxt=""});$("#tSetCard").addEventListener("change",()=>{tMsgTxt=""});   // '저장했어요'는 다음에 고칠 때까지 남겨요
   $("#cSave").onclick=()=>{
     const v={feeRate:r2(clampN($("#cFeeRate").value,0,10)),feeMin:r2(clampN($("#cFeeMin").value,0,1e6)),shortDays:+$("#cShortDays").value||0,shortRate:r2(clampN($("#cShortRate").value,0,10)),...subjSave(),sRange:$("#cSRange").value.trim()||"1-25",sTimer:+$("#cSTimer").value||0,range:$("#cRange").value.trim()||"1-25",count:+$("#cCount").value,reviewPct:+$("#cReview").value,type:$("#cType").value,random:$("#cRandom").value==="1",note:$("#cNote").value.trim().slice(0,80),timer:+$("#cTimer").value||0,fastBonus:Math.max(0,Math.round(+$("#cFastB").value||0)),fastSec:+$("#cFastS").value||5,
       coinPer:Math.max(0,Math.round(+$("#cPer").value||0)),bonus:Math.max(0,Math.round(+$("#cBonus").value||0)),passPct:Math.max(0,Math.min(100,Math.round(+$("#cPass").value||0))),rate:Math.max(0,Math.min(50,r2(+$("#cRate").value||0))),

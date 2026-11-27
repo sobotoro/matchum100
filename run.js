@@ -14,7 +14,7 @@
    race/state         {rid, st lobby|run|end|off, seed, at 출발 시각(서버 ms), paid}   ← 선생님만
    race/p/학번         {rid, n 이름, x 위치, y, s 비틀, q 문제 푸는 중, pen 기록에 더할 벌점(예전 방식, 지금은 0), pw 문 앞에서 멈춘 벌점 초, ok 정답 수, done, tm 도착 시간}  ← 학생 자기 것만
    ========================================================= */
-const RUN_V="20261127f";
+const RUN_V="20261127g";
 const RUN_ATLAS_KEYS=["idle1","idle2","idle3","idle4","walk1","walk2","walk3","walk4","walk5","walk6","walk7","walk8","walk9","walk10","run1","run2","run3","run4","run5","run6","run7","run8","run9","run10","jump1","jump2","jump3","jump4","jump5","jump6","jump7","hurt1","hurt2","hurt3","hurt4","hurt5","hurt6","hurt7","hurt8","hurt9","hurt10","hurt11","hurt12","stop1","stop2","stop3","stop4","stop5","stop6","stop7","stop8","stop9","stop10","stop11"];
 const RUN_DEF={runOpen:true,runMax:3,runQuizT:1,runPerfT:1,runLock:true,runFrom:"09:00",runTo:"12:10",runCoin:2,runCoinMax:5,runGate:120,runPen:3,runPrize:"10,8,6,4,2",runLen:1000,runDiff:"normal",runSound:true,runBoardEp:0,runHill:3,runFork:250,runAuto:true,runAutoT:"08:45,12:45,15:00,18:00",runAutoLead:10,runAutoMin:5};
 let RACE={},RUN_OFF=0,runLoading=null,runStateSig="",runTMsg="";
@@ -158,7 +158,10 @@ function renderRun(){
   const v=$("#view-run");if(!v)return;
   if(role==="teacher"){
     const w=$("#runTWrap");
-    if(w&&window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){w.innerHTML=runTeacherHtml();runTeacherBind();runBoardDraw();RunGame.refresh();return}
+    if(w&&window.RunGame&&RunGame.mounted&&v.querySelector(".rg-game")){
+      const bar=$("#runBar"),rb=$("#runRaceBox");   // 저장 안 한 설정이 있으면 대결 칸만 새로 그려요
+      if(bar&&bar.classList.contains("dirty")&&rb){rb.innerHTML=runRaceBoxHtml();runTeacherBind();runBoardDraw();RunGame.refresh();return}
+      w.innerHTML=runTeacherHtml();runTeacherBind();runBoardDraw();RunGame.refresh();return}
     v.innerHTML=`<div id="runTWrap">${runTeacherHtml()}</div>${runBoardCard()}
     <article class="card run-card">
       <div class="t-head"><h2>학생 화면으로 연습해 보기 · 대결 보기</h2><span class="rstate">미리보기</span></div>
@@ -194,7 +197,10 @@ function runRaceLive(){
       if(!inLobby)runPop(`🏁 <b>${esc(rs.auto.hm)} 달리기 대결</b> 대기실이 열렸어요! ${rs.auto.min}명 이상 모이면 출발해요. <a href="#run">참가하러 가기 →</a>`,9000)}
   }else if(runAutoSeen===null&&RACE)runAutoSeen="";
   if(role==="student"){if(changed&&window.RunGame&&RunGame.mounted)RunGame.refresh();const b=$("#view-run .rstate");if(b)b.textContent=`🎫 오늘 남은 판 ${runLeft()} / ${runCfg().max}`}
-  if(role==="teacher"&&current==="run"){if(changed)rerender();else runTeacherLive()}
+  if(role==="teacher"&&current==="run"){
+    if(!changed)runTeacherLive();
+    else{const bar=$("#runBar"),rb=$("#runRaceBox");   // 저장 안 한 설정이 있으면 대결 칸만
+      if(bar&&bar.classList.contains("dirty")&&rb){rb.innerHTML=runRaceBoxHtml();runTeacherBind();if(window.RunGame&&RunGame.mounted)RunGame.refresh()}else rerender()}}
 }
 
 /* ---------- 혼자 연습 전광판 ----------
@@ -255,6 +261,25 @@ function runLiveHtml(){
     </tbody></table>${s.st==="end"&&RACE.state.paid?`<p class="t-status">보상을 지갑에 넣었어요.</p>`:""}`;
 }
 function runTeacherLive(){const el=$("#runLive");if(el)el.innerHTML=runLiveHtml()}
+const runDiffName=d=>({easy:"쉬움",normal:"보통",hard:"어려움",crazy:"아주 어려움"})[d]||d;
+function runSumTime(c){return `${c.lockOn?`잠금 ${esc(c.from)}~${esc(c.to)}`:"잠금 없음"} · 하루 ${c.max}판 · 퀴즈 끝내면 ${c.quizT}장${c.perfT?` · 만점 +${c.perfT}장`:""}`}
+function runSumSolo(c){return `${runDiffName(c.diff)} · 퀴즈 문 ${c.gateEvery}m마다 · 코인 한 판 ${c.coin} / 하루 ${c.coinMax}`}
+function runSumRace(c){return `${c.len}m · 벌점 ${c.pen?c.pen+"초":"없음"} · 보상 ${c.prize.filter(Boolean).join("·")||"없음"}`}
+function runSumCourse(c){return `언덕 ${["평평","완만","보통","가파름","아주 가파름"][c.hill]} · 갈림길 ${c.fork?(c.fork===120?"자주":"가끔"):"없음"}`}
+function runSumAuto(c){const nx=runAutoNext();return c.auto.on?`${c.auto.times.map(t=>runAutoSkip(t)?`<s>${esc(t)}</s>`:esc(t)).join(", ")} · ${c.auto.lead}분 전 · ${c.auto.min}명 이상${nx?` · 다음 ${nx.day} ${esc(nx.hm)}`:""}`:"꺼짐"}
+function runRaceBoxHtml(){
+  const c=runCfg(),s=runRaceState(),st=s?s.st:"off",n=s?runPlayers(s.rid).length:0;
+  return `<h3 class="run-h">🏁 친구들과 대결 (대결방)</h3>
+    <p class="t-help">대결방만 열고 닫아요. 닫아도 혼자 연습은 그대로 할 수 있어요.${c.open?"":" 지금은 달리기 탭이 숨겨져 있어서, 대결을 열면 탭도 함께 보이게 돼요."}</p>
+    <div class="actions">
+      ${st==="off"||st==="end"?`<button type="button" class="primary" id="runOpenRace">대결 열기</button>`:""}
+      ${st==="lobby"?`<button type="button" class="primary" id="runGo" ${n?"":"disabled"}>출발! (${n}명)</button>`:""}
+      ${st==="run"?`<button type="button" class="primary" id="runFinish">대결 마치고 1~5등 보상 주기</button>`:""}
+      ${st!=="off"?`<button type="button" class="ghost" id="runWatch">👀 대결 화면 보기</button>`:""}
+      ${st!=="off"?`<button type="button" class="ghost" id="runClose">${st==="end"?"결과 닫기":"대결 닫기 (보상 없음)"}</button>`:""}
+    </div>
+    <div id="runLive">${runLiveHtml()}</div>
+`}
 function runTeacherHtml(){
   const c=runCfg(),s=runRaceState(),st=s?s.st:"off",n=s?runPlayers(s.rid).length:0;
   const ck=(id,v,l)=>`<label class="t-check"><input type="checkbox" id="${id}" ${v?"checked":""}> ${l}</label>`;
@@ -267,48 +292,27 @@ function runTeacherHtml(){
       <p>${c.open?"학생 메뉴에 <b>달리기</b> 탭이 보여요. 혼자 연습과 대결 모두 할 수 있어요.":"학생 메뉴에서 <b>달리기</b> 탭이 숨겨져 있어요. 학생은 게임을 아예 볼 수 없어요."}</p>
       <button type="button" class="${c.open?"ghost":"primary"}" id="runTabTg">${c.open?"달리기 탭 숨기기":"달리기 탭 보이기"}</button>
     </div>
-    <h3 class="run-h">🏁 친구들과 대결 (대결방)</h3>
-    <p class="t-help">대결방만 열고 닫아요. 닫아도 혼자 연습은 그대로 할 수 있어요.${c.open?"":" 지금은 달리기 탭이 숨겨져 있어서, 대결을 열면 탭도 함께 보이게 돼요."}</p>
-    <div class="actions">
-      ${st==="off"||st==="end"?`<button type="button" class="primary" id="runOpenRace">대결 열기</button>`:""}
-      ${st==="lobby"?`<button type="button" class="primary" id="runGo" ${n?"":"disabled"}>출발! (${n}명)</button>`:""}
-      ${st==="run"?`<button type="button" class="primary" id="runFinish">대결 마치고 1~5등 보상 주기</button>`:""}
-      ${st!=="off"?`<button type="button" class="ghost" id="runWatch">👀 대결 화면 보기</button>`:""}
-      ${st!=="off"?`<button type="button" class="ghost" id="runClose">${st==="end"?"결과 닫기":"대결 닫기 (보상 없음)"}</button>`:""}
-    </div>
-    <div id="runLive">${runLiveHtml()}</div>
+    <div id="runRaceBox">${runRaceBoxHtml()}</div>
     <h3 class="run-h">⚙️ 설정</h3>
-    <div class="run-set">
-      ${ck("runSoundIn",c.sound,"게임 소리 켜기 (끄면 반 전체가 조용해요)")}
-      ${ck("runLockIn",c.lockOn,"수업 시간에는 잠금 (평일)")}
-      <label class="t-field">잠금 시작<input type="time" id="runFromIn" value="${esc(c.from)}"></label>
-      <label class="t-field">잠금 끝<input type="time" id="runToIn" value="${esc(c.to)}"></label>
-      <label class="t-field">하루 최대 판수${opt("runMaxIn",c.max,[[1,"1판"],[2,"2판"],[3,"3판"],[4,"4판"],[5,"5판"]])}</label>
-      <label class="t-field">퀴즈를 끝내면 티켓${opt("runQuizTIn",c.quizT,[[1,"1장"],[2,"2장"],[3,"3장"]])}</label>
-      <label class="t-field">만점이면 티켓 더${opt("runPerfTIn",c.perfT,[[0,"없음"],[1,"1장"],[2,"2장"]])}</label>
-      <label class="t-field">혼자 연습 한 판 최대 코인 <small>(먹은 코인만큼 받아요)</small><input type="number" inputmode="decimal" min="0" step="any" id="runCoinIn" value="${c.coin}"></label>
-      <label class="t-field">혼자 연습 하루 최대 코인<input type="number" inputmode="decimal" min="0" step="any" id="runCoinMaxIn" value="${c.coinMax}"></label>
-      <label class="t-field">혼자 연습 난이도${opt("runDiffIn",c.diff,[["easy","쉬움 (예전과 같아요)"],["normal","보통"],["hard","어려움"],["crazy","아주 어려움"]])}</label>
-      <label class="t-field">언덕 (혼자 연습·대결)${opt("runHillIn",c.hill,[[0,"평평"],[1,"완만 (약 10°)"],[2,"보통 (약 14°)"],[3,"가파름 (약 19°)"],[4,"아주 가파름 (약 24°)"]])}</label>
-      <label class="t-field">갈림길 (혼자 연습·대결)${opt("runForkIn",c.fork,[[0,"없음"],[250,"가끔 (250m마다)"],[120,"자주 (120m마다)"]])}</label>
-      <label class="t-field">퀴즈 문 간격 (혼자 연습)${opt("runGateIn",c.gateEvery,[[80,"80m마다"],[120,"120m마다"],[200,"200m마다"]])}</label>
-      <label class="t-field">대결 오답 벌점 <small>(문 앞에서 멈추는 시간)</small>${opt("runPenIn",c.pen,[[0,"없음"],[2,"2초"],[3,"3초"],[5,"5초"]])}</label>
-      <label class="t-field">대결 거리${opt("runLenIn",c.len,[[500,"500m (약 1분)"],[800,"800m"],[1000,"1000m (약 1분 40초)"],[1500,"1500m"],[2000,"2000m (약 3분)"]])}</label>
-      <div class="run-wide run-auto"><h4>⏰ 자동 대결 (평일만)</h4>
-        ${ck("runAutoIn",c.auto.on,"정해진 시각에 대결 대기실을 저절로 열고 출발시켜요")}
-        <label class="t-field">출발 시각 <small>(쉼표로 구분)</small><input type="text" id="runAutoTIn" value="${esc(c.auto.times.join(", "))}" placeholder="08:45, 12:45, 15:00, 18:00"></label>
-        <label class="t-field">대기실 여는 때${opt("runAutoLeadIn",c.auto.lead,[[10,"출발 10분 전"],[5,"출발 5분 전"],[3,"출발 3분 전"]])}</label>
-        <label class="t-field">출발에 필요한 인원${opt("runAutoMinIn",c.auto.min,[[2,"2명 이상"],[3,"3명 이상"],[4,"4명 이상"],[5,"5명 이상"],[6,"6명 이상"],[8,"8명 이상"],[10,"10명 이상"]])}</label>
-        <p class="t-help">평일에만 열려요. 수업 시간 잠금에 걸린 시각은 건너뛰어요${c.lockOn?` (지금: ${esc(c.from)}~${esc(c.to)}${c.auto.times.filter(runAutoSkip).length?` → ${c.auto.times.filter(runAutoSkip).map(esc).join(", ")} 건너뜀`:""})`:""}. 출발 시각에 인원이 모자라면 그 대결은 쉬어요. 출발하면 모두 들어오거나 시간이 다 되면 저절로 마치고 1~5등 보상을 넣어요. 그 시각에 선생님이 연 대결이 있으면 자동 대결은 건너뛰어요. 대기실은 구글 Apps Script "CLASS LAB 주가 갱신"이 1분마다 확인해서 열어요.</p>
-      </div>
-      <label class="t-field run-wide">대결 1~5등 보상 (코인)<span class="run-prize">${c.prize.map((p,i)=>`<input type="number" inputmode="decimal" min="0" step="any" id="runPz${i}" value="${p}" aria-label="${i+1}등 코인">`).join("")}</span></label>
-    </div>
-    <div class="actions"><button type="button" class="primary" id="runSave">설정 저장</button></div>
-    <p class="msg" id="runMsg" role="status">${esc(runTMsg)}</p>
+    ${tGrp("r-time","🕘","이용 시간 · 티켓",runSumTime(c),
+      tSub("수업 시간 잠금",`${ck("runLockIn",c.lockOn,"수업 시간에는 잠금 (평일)")}<label class="t-field">잠금 시작<input type="time" id="runFromIn" value="${esc(c.from)}"></label><label class="t-field">잠금 끝<input type="time" id="runToIn" value="${esc(c.to)}"></label>`,"평일 이 시간에는 혼자 연습을 쉬어요. 자동 대결도 이 시간은 건너뛰어요.")+
+      tSub("티켓",`<label class="t-field">하루 최대 판수${opt("runMaxIn",c.max,[[1,"1판"],[2,"2판"],[3,"3판"],[4,"4판"],[5,"5판"]])}</label><label class="t-field">퀴즈를 끝내면 티켓${opt("runQuizTIn",c.quizT,[[1,"1장"],[2,"2장"],[3,"3장"]])}</label><label class="t-field">만점이면 티켓 더${opt("runPerfTIn",c.perfT,[[0,"없음"],[1,"1장"],[2,"2장"]])}</label>`,"오늘의 퀴즈를 끝내면 티켓이 생겨요. 한 판에 1장."))}
+    ${tGrp("r-solo","🏃","혼자 연습",runSumSolo(c),
+      tSub("",`<label class="t-field">난이도${opt("runDiffIn",c.diff,[["easy","쉬움 (예전과 같아요)"],["normal","보통"],["hard","어려움"],["crazy","아주 어려움"]])}</label><label class="t-field">퀴즈 문 간격${opt("runGateIn",c.gateEvery,[[80,"80m마다"],[120,"120m마다"],[200,"200m마다"]])}</label><label class="t-field"><span class="tf-l">한 판 최대 코인 <small>먹은 만큼</small></span><input type="number" inputmode="decimal" min="0" step="any" id="runCoinIn" value="${c.coin}"></label><label class="t-field">하루 최대 코인<input type="number" inputmode="decimal" min="0" step="any" id="runCoinMaxIn" value="${c.coinMax}"></label>`,"먹은 코인만큼 받아요(한 판·하루 최대까지)."))}
+    ${tGrp("r-race","🏁","대결",runSumRace(c),
+      tSub("",`<label class="t-field">거리${opt("runLenIn",c.len,[[500,"500m (약 1분)"],[800,"800m"],[1000,"1000m (약 1분 40초)"],[1500,"1500m"],[2000,"2000m (약 3분)"]])}</label><label class="t-field"><span class="tf-l">오답 벌점 <small>문 앞에서 멈춤</small></span>${opt("runPenIn",c.pen,[[0,"없음"],[2,"2초"],[3,"3초"],[5,"5초"]])}</label>`,"")+tSub("",`<label class="t-field run-wide"><span class="tf-l">1~5등 보상 <small>코인</small></span><span class="run-prize">${c.prize.map((p,i)=>`<input type="number" inputmode="decimal" min="0" step="any" id="runPz${i}" value="${p}" aria-label="${i+1}등 코인">`).join("")}</span></label>`,"선생님 대결은 '대결 마치고 1~5등 보상 주기'를 누르면, 자동 대결은 끝나면 저절로 들어가요.",'wide'))}
+    ${tGrp("r-course","⛰️","코스 (혼자 연습·대결 같이)",runSumCourse(c),
+      tSub("",`<label class="t-field">언덕${opt("runHillIn",c.hill,[[0,"평평"],[1,"완만 (약 10°)"],[2,"보통 (약 14°)"],[3,"가파름 (약 19°)"],[4,"아주 가파름 (약 24°)"]])}</label><label class="t-field">갈림길${opt("runForkIn",c.fork,[[0,"없음"],[250,"가끔 (250m마다)"],[120,"자주 (120m마다)"]])}</label>`,"갈림길: 2단 점프로 다리에 오르면 윗길(틈·슬라임), 아니면 아랫길(슬라임 2마리)."))}
+    ${tGrp("r-auto","⏰","자동 대결 (평일)",runSumAuto(c),
+      tSub("",`${ck("runAutoIn",c.auto.on,"정해진 시각에 대결 대기실을 저절로 열고 출발시켜요")}`,"",'wide')+tSub("",`<label class="t-field"><span class="tf-l">출발 시각 <small>쉼표로 구분</small></span><input type="text" id="runAutoTIn" value="${esc(c.auto.times.join(", "))}" placeholder="08:45, 12:45, 15:00, 18:00"></label><label class="t-field">대기실 여는 때${opt("runAutoLeadIn",c.auto.lead,[[10,"출발 10분 전"],[5,"출발 5분 전"],[3,"출발 3분 전"]])}</label><label class="t-field">출발에 필요한 인원${opt("runAutoMinIn",c.auto.min,[[2,"2명 이상"],[3,"3명 이상"],[4,"4명 이상"],[5,"5명 이상"],[6,"6명 이상"],[8,"8명 이상"],[10,"10명 이상"]])}</label>`,`평일에만 열려요. 수업 시간 잠금에 걸린 시각은 건너뛰어요${c.lockOn?` (지금: ${esc(c.from)}~${esc(c.to)}${c.auto.times.filter(runAutoSkip).length?` → ${c.auto.times.filter(runAutoSkip).map(esc).join(", ")} 건너뜀`:""})`:""}. 출발 시각에 인원이 모자라면 그 대결은 쉬어요. 출발하면 모두 들어오거나 시간이 다 되면 저절로 마치고 1~5등 보상을 넣어요. 그 시각에 선생님이 연 대결이 있으면 자동 대결은 건너뛰어요. 대기실은 구글 Apps Script "CLASS LAB 주가 갱신"이 1분마다 확인해서 열어요.`))}
+    ${tGrp("r-sound","🔊","게임 소리",c.sound?"켜짐 (학생마다 🔊·♪로 끄고 켜요)":"꺼짐 (반 전체 조용)",
+      tSub("",`${ck("runSoundIn",c.sound,"게임 소리 켜기 (끄면 반 전체가 조용해요)")}`,"",'wide'))}
+    <div class="apply-bar t-save" id="runBar"><button type="button" class="primary" id="runSave">설정 저장</button><p class="msg" id="runMsg" role="status">${esc(runTMsg)}</p></div>
   </article>`;
 }
 function runTeacherBind(){
   const m=$("#runMsg");if(!m)return;
+  if(typeof tGrpBind==="function"){tGrpBind($("#runCard"));tDirtyBind($("#runCard"),$("#runBar"),m)}
   const say=t=>{runTMsg=t;m.textContent=t};
   $("#runSave").onclick=()=>{runTMsg="";
     const v={runSound:$("#runSoundIn").checked,runLock:$("#runLockIn").checked,runFrom:$("#runFromIn").value||"09:00",runTo:$("#runToIn").value||"12:10",
